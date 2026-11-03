@@ -1,0 +1,2195 @@
+'use client';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  ArrowUpRight,
+  ArrowRight,
+  LayoutDashboard,
+  Clock,
+  CalendarDays,
+  Megaphone,
+  Code2,
+  Plug,
+  History,
+  Settings,
+  HelpCircle,
+  ChevronsUpDown,
+  Plus,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  ExternalLink,
+  Globe,
+  Instagram,
+  Facebook,
+  Bell,
+  Copy,
+  LogOut,
+  Menu,
+  X,
+  Sun,
+  CloudSun,
+  Store,
+  ArrowDownToLine,
+  RefreshCw,
+  AlertCircle,
+  Send,
+  CreditCard,
+} from 'lucide-react';
+import { Button } from './ui/button';
+import { Widget, type WidgetType } from './widget';
+import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
+import {
+  defaultSchedule,
+  formatIntervals,
+  getStatus,
+  scheduleSchema,
+  type Schedule,
+  type Plan,
+} from '@/lib/domain';
+import { demoSchedule } from '@/lib/demo';
+import { importGoogleHours } from '@/lib/google-import';
+type Location = {
+  id: string;
+  organizationId: string;
+  draft: Schedule;
+  draftVersion: number;
+  publishedVersion: number;
+  onboardingStep: number;
+};
+type Job = {
+  id: string;
+  destination: string;
+  status: string;
+  attempts: number;
+  error: string | null;
+  createdAt: string;
+};
+type Detail = {
+  location: Location;
+  plan: Plan;
+  role: string;
+  connection: { status: string; remoteId: string | null } | null;
+  history: { id: string; message: string; createdAt: string }[];
+  jobs: Job[];
+  notifications: { id: string; message: string; readAt: string | null }[];
+  googleConfigured: boolean;
+  billingConfigured: boolean;
+};
+const navigation = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'hours', label: 'Opening hours', icon: Clock },
+  { id: 'special', label: 'Special hours', icon: CalendarDays },
+  { id: 'announcements', label: 'Announcements', icon: Megaphone },
+  { id: 'widgets', label: 'Website widgets', icon: Code2 },
+  { id: 'integrations', label: 'Integrations', icon: Plug },
+  { id: 'activity', label: 'Activity', icon: History },
+];
+const titles: Record<string, [string, string]> = {
+  overview: [
+    'Your business, in sync.',
+    'A clear picture of your hours. A little more peace of mind.',
+  ],
+  hours: [
+    'Make time for your customers.',
+    'Set your usual week. We’ll take care of the time zones.',
+  ],
+  special: [
+    'For the not-so-regular days.',
+    'Holiday hours, early closings, and everything in between.',
+  ],
+  announcements: ['Keep everyone in the know.', 'A timely update can make someone’s day.'],
+  widgets: [
+    'Your hours. Your website.',
+    'Beautiful little widgets that always tell the latest story.',
+  ],
+  integrations: ['One update. More places.', 'Connect the places your customers already look.'],
+  activity: [
+    'A little history. Full clarity.',
+    'See what changed, when it happened, and where it landed.',
+  ],
+  settings: ['Make yourself at home.', 'Your business details, account, and preferences.'],
+  billing: ['A plan for your next chapter.', 'Start simple. Grow when you’re ready.'],
+  notifications: ['Your updates, at a glance.', 'The things that need your attention.'],
+  help: ['A little help goes a long way.', 'Straightforward answers to get you up and running.'],
+};
+async function request(path: string, body: unknown) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Could not complete request');
+  return result;
+}
+function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    d?.showModal();
+    return () => d?.close();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      onCancel={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <button className="modal-close icon-button" aria-label="Close dialog" onClick={onClose}>
+        <X size={20} />
+      </button>
+      {children}
+    </dialog>
+  );
+}
+export function Dashboard({
+  demo = false,
+  initialLocations = [],
+  email = '',
+  now: initialNow,
+}: {
+  demo?: boolean;
+  initialLocations?: Location[];
+  email?: string;
+  now: string;
+}) {
+  const router = useRouter();
+  const [locations, setLocations] = useState<Location[]>(initialLocations),
+    [selected, setSelected] = useState(initialLocations[0]?.id || ''),
+    [draft, setDraft] = useState<Schedule>(
+      demo ? demoSchedule : initialLocations[0]?.draft || defaultSchedule(),
+    ),
+    [saved, setSaved] = useState<Schedule>(
+      demo ? demoSchedule : initialLocations[0]?.draft || defaultSchedule(),
+    ),
+    [published, setPublished] = useState<Schedule>(demoSchedule),
+    [version, setVersion] = useState(initialLocations[0]?.draftVersion || 1),
+    [pubVersion, setPubVersion] = useState(demo ? 1 : initialLocations[0]?.publishedVersion || 0),
+    [detail, setDetail] = useState<Detail | null>(null),
+    [tab, setTab] = useState('overview'),
+    [modal, setModal] = useState(''),
+    [busy, setBusy] = useState(false),
+    [toast, setToast] = useState(''),
+    [error, setError] = useState(''),
+    [mobile, setMobile] = useState(false),
+    [now, setNow] = useState(initialNow),
+    [onboarding, setOnboarding] = useState(
+      !demo && (!initialLocations.length || initialLocations[0].onboardingStep < 6),
+    ),
+    [step, setStep] = useState(initialLocations[0]?.onboardingStep || 1),
+    [widgetType, setWidgetType] = useState<WidgetType>('hours'),
+    [platform, setPlatform] = useState('Custom HTML'),
+    [origin, setOrigin] = useState(''),
+    [googleLocations, setGoogleLocations] = useState<
+      {
+        name: string;
+        title: string;
+        regularHours?: {
+          periods?: {
+            openDay: string;
+            openTime: { hours?: number; minutes?: number };
+            closeDay: string;
+            closeTime: { hours?: number; minutes?: number };
+          }[];
+        };
+        specialHours?: {
+          specialHourPeriods?: {
+            startDate: { year: number; month: number; day: number };
+            endDate?: { year: number; month: number; day: number };
+            closed?: boolean;
+            openTime?: { hours?: number; minutes?: number };
+            closeTime?: { hours?: number; minutes?: number };
+          }[];
+        };
+      }[]
+    >([]),
+    [remote, setRemote] = useState(''),
+    [demoHistory, setDemoHistory] = useState([
+      {
+        id: 'example',
+        message: 'Example: published winter opening hours to website widgets',
+        createdAt: initialNow,
+      },
+    ]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved),
+    plan = demo ? 'pro' : detail?.plan || 'free';
+  let status;
+  try {
+    status = getStatus(draft, new Date(now));
+  } catch {
+    status = getStatus(saved, new Date(now));
+  }
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1),
+    readonly = !demo && detail?.role === 'viewer';
+  async function refresh(id = selected) {
+    if (demo) return;
+    const res = await fetch(`/api/manage?id=${id}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    setDetail(data);
+    setDraft(data.location.draft);
+    setSaved(data.location.draft);
+    setVersion(data.location.draftVersion);
+    setPubVersion(data.location.publishedVersion);
+    return data as Detail;
+  }
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    if (!demo && !initialLocations.length)
+      setDraft((value) => ({
+        ...value,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }));
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('tab') && titles[query.get('tab')!]) setTab(query.get('tab')!);
+    if (query.get('error')) setError(query.get('error')!);
+    if (demo) {
+      try {
+        const stored = localStorage.getItem('opensync-demo-v1');
+        if (stored) {
+          const parsed = JSON.parse(stored),
+            valid = scheduleSchema.parse(parsed.draft);
+          setDraft(valid);
+          setSaved(valid);
+          setPublished(scheduleSchema.parse(parsed.published));
+          setPubVersion(parsed.version || 1);
+          setDemoHistory(parsed.history || []);
+        }
+      } catch {
+        localStorage.removeItem('opensync-demo-v1');
+      }
+    }
+  }, [demo, initialLocations.length]);
+  useEffect(() => {
+    if (selected && !demo) {
+      let cancelled = false;
+      fetch(`/api/manage?id=${selected}`, { cache: 'no-store' })
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error);
+          if (!cancelled) {
+            setDetail(data);
+            setDraft(data.location.draft);
+            setSaved(data.location.draft);
+            setVersion(data.location.draftVersion);
+            setPubVersion(data.location.publishedVersion);
+            setStep(data.location.onboardingStep);
+            setOnboarding(data.location.onboardingStep < 6);
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e.message);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [selected, demo]);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date().toISOString()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+  function notify(message: string) {
+    setToast(message);
+    setError('');
+  }
+  function persistDemo(d: Schedule, p = published, v = pubVersion, h = demoHistory) {
+    localStorage.setItem(
+      'opensync-demo-v1',
+      JSON.stringify({ draft: d, published: p, version: v, history: h }),
+    );
+  }
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save(d = draft, nextStep = step) {
+    const result = scheduleSchema.safeParse(d);
+    if (!result.success) throw new Error(result.error.issues.map((x) => x.message).join('. '));
+    if (demo) {
+      persistDemo(d);
+      setSaved(structuredClone(d));
+      setVersion((v) => v + 1);
+      return version + 1;
+    }
+    const resultSave = await request('/api/manage', {
+      op: 'save',
+      id: selected,
+      draft: d,
+      version,
+      step: nextStep,
+    });
+    setSaved(d);
+    setVersion(resultSave.location.draftVersion);
+    setStep(nextStep);
+    return resultSave.location.draftVersion as number;
+  }
+  async function publish() {
+    await act(async () => {
+      const v = dirty ? await save() : version;
+      if (demo) {
+        const history = [
+          {
+            id: crypto.randomUUID(),
+            message: `Published demo revision ${pubVersion + 1} to the local preview`,
+            createdAt: new Date().toISOString(),
+          },
+          ...demoHistory,
+        ];
+        setPublished(structuredClone(draft));
+        setPubVersion(pubVersion + 1);
+        setDemoHistory(history);
+        persistDemo(draft, draft, pubVersion + 1, history);
+      } else {
+        const key = sessionStorage.getItem(`publish-${selected}-${v}`) || crypto.randomUUID();
+        sessionStorage.setItem(`publish-${selected}-${v}`, key);
+        await request('/api/manage', { op: 'publish', id: selected, version: v, key });
+        await refresh();
+        sessionStorage.removeItem(`publish-${selected}-${v}`);
+      }
+      setModal('');
+      setOnboarding(false);
+      notify(
+        demo
+          ? 'Demo published. Your local widget preview is up to date.'
+          : 'Published to website widgets. Check Activity for destination outcomes.',
+      );
+    });
+  }
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify('Copied to clipboard');
+    } catch {
+      setError('Clipboard unavailable. Select the code and copy it manually.');
+    }
+  }
+  function switchTab(next: string) {
+    setTab(next);
+    setMobile(false);
+  }
+  const snippet = `<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="${widgetType}"></div>\n<script src="${origin}/embed.js" defer></script>`;
+  async function connect() {
+    if (demo) {
+      notify('Demo only. Create an account to connect a real business.');
+      return;
+    }
+    await act(async () => {
+      const result = await request('/api/google/connect', { id: selected });
+      window.location.href = result.url;
+    });
+  }
+  async function billing(tier: string, portal = false) {
+    if (demo) {
+      notify('Billing is disabled in the demo. No payment will be taken.');
+      return;
+    }
+    await act(async () => {
+      const result = await request('/api/billing', { id: selected, plan: tier, portal });
+      window.location.href = result.url;
+    });
+  }
+  const destinations = [
+    {
+      label: 'Google Business Profile',
+      description: demo
+        ? 'Not connected in demo'
+        : detail?.connection?.status === 'connected'
+          ? 'Hours synchronization enabled'
+          : 'Connect your business on Google',
+      icon: Globe,
+      status: detail?.connection?.status === 'connected' ? 'Connected' : 'Not connected',
+      color: 'blue',
+    },
+    {
+      label: 'Website banner',
+      description: 'Timely announcements, right on your site',
+      icon: Megaphone,
+      status: pubVersion ? 'Published endpoint' : 'Not published',
+      color: 'violet',
+    },
+    {
+      label: 'Opening-hours widget',
+      description: 'Your schedule, always within reach',
+      icon: Clock,
+      status: pubVersion ? 'Published endpoint' : 'Not published',
+      color: 'orange',
+    },
+    {
+      label: 'Live status badge',
+      description: 'Open or closed. Clear at a glance.',
+      icon: Code2,
+      status: pubVersion ? 'Published endpoint' : 'Not published',
+      color: 'green',
+    },
+  ];
+  const upcoming = draft.exceptions
+    .filter((e) => e.end >= status.date)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const history = demo ? demoHistory : detail?.history || [];
+  const goPublish = (value: Schedule) => {
+    setDraft(value);
+    setModal('publish');
+  };
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
+        <Link href="/" className="brand">
+          <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
+        </Link>
+        <div className="workspace-selector">
+          <div className="business-avatar">{draft.name.charAt(0)}</div>
+          <div>
+            <strong>{draft.name}</strong>
+            <span>{demo ? 'Example business' : 'Your workspace'}</span>
+          </div>
+          <ChevronsUpDown size={14} />
+          {!demo && (
+            <select
+              aria-label="Switch business location"
+              value={selected}
+              onChange={(e) => {
+                if (!dirty || confirm('Discard unsaved changes and switch location?'))
+                  setSelected(e.target.value);
+              }}
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.draft.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="nav-label">WORKSPACE</div>
+        <nav>
+          {navigation.map((item) => (
+            <button
+              key={item.id}
+              aria-label={item.label}
+              className={tab === item.id ? 'active' : ''}
+              onClick={() => switchTab(item.id)}
+            >
+              <item.icon size={18} />
+              {item.label}
+              {item.id === 'integrations' && <span className="nav-count">4</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="plan-card">
+            <div>
+              <span className="plan-spark">✧</span>
+              <strong>A little more possibility.</strong>
+            </div>
+            <p>Scheduling, Google sync, and more time for what matters.</p>
+            <button onClick={() => switchTab('billing')}>
+              Explore Pro <ArrowUpRight size={15} />
+            </button>
+          </div>
+          <nav>
+            <button
+              className={tab === 'settings' ? 'active' : ''}
+              onClick={() => switchTab('settings')}
+            >
+              <Settings size={18} />
+              Settings
+            </button>
+            <button className={tab === 'help' ? 'active' : ''} onClick={() => switchTab('help')}>
+              <HelpCircle size={18} />
+              Help & resources <ArrowUpRight size={13} />
+            </button>
+          </nav>
+          <button className="account-button" onClick={() => switchTab('settings')}>
+            <div className="account-avatar">
+              {demo ? 'JD' : (email || 'You').slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <strong>{demo ? 'Jamie Davis' : email || 'Your account'}</strong>
+              <small>{demo ? 'Demo workspace' : `${planLabel} plan`}</small>
+            </div>
+            <ChevronsUpDown size={14} />
+          </button>
+        </div>
+      </aside>
+      <div className="app-content">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <button
+              className="icon-button mobile-menu"
+              aria-label="Open navigation"
+              onClick={() => setMobile(!mobile)}
+            >
+              <Menu size={21} />
+            </button>
+            <Store size={15} />
+            <span>{draft.name}</span>
+            <ChevronRight size={13} />
+            <strong>
+              {onboarding
+                ? 'Getting started'
+                : navigation.find((x) => x.id === tab)?.label || titles[tab]?.[0]}
+            </strong>
+          </div>
+          <div className="topbar-right">
+            <span className="local-clock">
+              {new Intl.DateTimeFormat('en-CA', {
+                timeZone: saved.timezone,
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+              }).format(new Date(now))}
+            </span>
+            <button
+              className="icon-button notification-bell"
+              aria-label="Notifications"
+              onClick={() => switchTab('notifications')}
+            >
+              <Bell size={19} />
+              {detail?.notifications.some((n) => !n.readAt) && <i />}
+            </button>
+            <button
+              className="mini-avatar"
+              onClick={() => switchTab('settings')}
+              aria-label="Account settings"
+            >
+              {demo ? 'JD' : (email || 'Y').slice(0, 1).toUpperCase()}
+            </button>
+          </div>
+        </header>
+        {demo && (
+          <div className="demo-ribbon">
+            <span>
+              <span className="demo-pill">DEMO</span> Take a look around. Changes stay in this
+              browser.
+            </span>
+            <Link href="/signup">
+              Make it yours <ArrowRight size={14} />
+            </Link>
+          </div>
+        )}
+        <main className="dashboard-main" id="main-content">
+          {error && (
+            <div className="error-banner" role="alert">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+              <button aria-label="Dismiss error" onClick={() => setError('')}>
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {onboarding ? (
+            <>
+              <div className="page-heading">
+                <div>
+                  <span className="eyebrow">A FRESH START</span>
+                  <h1>Let’s get your business in sync.</h1>
+                  <p>Just the essentials. You can fine-tune everything later.</p>
+                </div>
+                <span className="pill">Step {step} of 6</span>
+              </div>
+              <div className="onboarding-progress">
+                {[
+                  'Welcome',
+                  'Your business',
+                  'Opening hours',
+                  'Google',
+                  'Your website',
+                  'Ready to go',
+                ].map((label, i) => (
+                  <div key={label} className={i + 1 <= step ? 'done' : ''}>
+                    <span>{i + 1 < step ? <Check size={14} /> : i + 1}</span>
+                    <small>{label}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="onboarding-body">
+                {step === 1 ? (
+                  <div className="card welcome-card">
+                    <span className="welcome-art">
+                      <Store size={48} />
+                    </span>
+                    <h2>More time for what you opened for.</h2>
+                    <p>
+                      Add your business, set your hours, and bring your website up to date. Google
+                      and website installation can wait until you’re ready.
+                    </p>
+                    <Button
+                      onClick={() => {
+                        setStep(2);
+                      }}
+                    >
+                      Let’s get started <ArrowRight size={16} />
+                    </Button>
+                  </div>
+                ) : step === 2 ? (
+                  <div className="card padded">
+                    <h2>Tell us about your business.</h2>
+                    <BusinessFields draft={draft} onChange={setDraft} />
+                    <div className="modal-actions">
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          act(async () => {
+                            if (!selected) {
+                              const created = await request('/api/manage', {
+                                op: 'create',
+                                name: draft.name,
+                                timezone: draft.timezone,
+                              });
+                              const data = await request('/api/manage', {
+                                op: 'save',
+                                id: created.location.id,
+                                draft,
+                                version: created.location.draftVersion,
+                                step: 3,
+                              });
+                              setLocations([...locations, data.location]);
+                              setSelected(data.location.id);
+                              setVersion(data.location.draftVersion);
+                              setSaved(draft);
+                            } else await save(draft, 3);
+                            setStep(3);
+                          })
+                        }
+                      >
+                        Save & continue <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                ) : step === 3 ? (
+                  <>
+                    <WeeklyEditor draft={draft} onChange={setDraft} />
+                    <div className="modal-actions">
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          act(async () => {
+                            await save(draft, 4);
+                            setStep(4);
+                          })
+                        }
+                      >
+                        Save hours & continue <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </>
+                ) : step === 4 ? (
+                  <div className="card padded">
+                    <div className="provider-icon blue">
+                      <Globe />
+                    </div>
+                    <h2>Meet your customers on Google.</h2>
+                    <p className="muted">
+                      Google Business Profile sync requires Pro, approved API access, and your
+                      authorization. You can connect later.
+                    </p>
+                    <div className="notice">
+                      {detail?.googleConfigured
+                        ? 'Google integration is configured. Upgrade to Pro to connect.'
+                        : 'Google integration is not configured yet. Your website features will still work.'}
+                    </div>
+                    {detail?.googleConfigured && plan !== 'free' && (
+                      <Button onClick={connect} disabled={busy}>
+                        Connect Google
+                      </Button>
+                    )}
+                    <div className="modal-actions">
+                      <Button
+                        onClick={() =>
+                          act(async () => {
+                            await save(draft, 5);
+                            setStep(5);
+                          })
+                        }
+                        disabled={busy}
+                      >
+                        Continue to website <ArrowRight size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                ) : step === 5 ? (
+                  <div className="two-columns">
+                    <div className="card padded">
+                      <h2>A small addition. Always up to date.</h2>
+                      <p className="muted">
+                        Copy this code into an HTML block on your website. The widget becomes
+                        available after you publish.
+                      </p>
+                      <select
+                        aria-label="Widget type"
+                        value={widgetType}
+                        onChange={(e) => setWidgetType(e.target.value as WidgetType)}
+                      >
+                        <option value="hours">Opening hours</option>
+                        <option value="banner">Announcement banner</option>
+                        <option value="status">Status badge</option>
+                      </select>
+                      <pre className="code-block">{snippet}</pre>
+                      <Button variant="outline" onClick={() => copy(snippet)}>
+                        <Copy size={16} />
+                        Copy embed code
+                      </Button>
+                      <div className="modal-actions">
+                        <Button onClick={() => setStep(6)}>
+                          Continue <ArrowRight size={16} />
+                        </Button>
+                      </div>
+                    </div>
+                    <Widget schedule={draft} type={widgetType} now={now} />
+                  </div>
+                ) : (
+                  <div className="card welcome-card">
+                    <span className="welcome-art">
+                      <CheckCircle2 size={48} />
+                    </span>
+                    <h2>You’re ready for your first update.</h2>
+                    <p>
+                      Publish your hours to activate your public website widgets. Google is optional
+                      and will only receive updates after connection.
+                    </p>
+                    <Button onClick={() => setModal('publish')}>
+                      Review & publish <ArrowRight size={16} />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">
+                    {tab === 'overview'
+                      ? `${new Intl.DateTimeFormat('en-CA', { weekday: 'long', timeZone: saved.timezone }).format(new Date(now)).toUpperCase()} · YOUR WORKSPACE`
+                      : 'YOUR WORKSPACE'}
+                  </div>
+                  <h1>{titles[tab]?.[0]}</h1>
+                  <p>{titles[tab]?.[1]}</p>
+                </div>
+                {['overview', 'hours', 'special', 'announcements', 'widgets', 'settings'].includes(
+                  tab,
+                ) && (
+                  <div className="heading-actions">
+                    {dirty && (
+                      <Button
+                        variant="outline"
+                        disabled={busy || readonly}
+                        onClick={() =>
+                          act(async () => {
+                            await save();
+                            notify('Draft saved. Publish when you’re ready.');
+                          })
+                        }
+                      >
+                        Save draft
+                      </Button>
+                    )}
+                    <Button disabled={busy || readonly} onClick={() => setModal('publish')}>
+                      <Send size={16} />
+                      Publish changes
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {dirty && (
+                <div className="draft-notice">
+                  <span className="status-dot orange" />
+                  You have unpublished draft changes.
+                  <span>Your website still shows the last published version.</span>
+                </div>
+              )}
+              {tab === 'overview' && (
+                <>
+                  <div className="overview-grid">
+                    <section className="status-card">
+                      <div className="status-card-top">
+                        <span className="eyebrow">RIGHT NOW AT {draft.name.toUpperCase()}</span>
+                        <span className="live-pill">
+                          <span className="status-dot green" />
+                          Live schedule
+                        </span>
+                      </div>
+                      <div className="status-main">
+                        <div>
+                          <div className="big-status">
+                            <span className={`status-orb ${status.open ? '' : 'closed'}`} />
+                            {status.open ? 'You’re open.' : 'You’re closed.'}
+                          </div>
+                          <p>
+                            {status.nextLabel}
+                            {dirty ? ' · Draft preview' : ''}
+                          </p>
+                        </div>
+                        <div className="sun-illustration">
+                          <Sun size={65} strokeWidth={1.2} />
+                          <div />
+                        </div>
+                      </div>
+                      <div className="status-card-bottom">
+                        <div>
+                          <span>TODAY’S HOURS</span>
+                          <strong>{formatIntervals(status.today)}</strong>
+                        </div>
+                        <Button variant="outline" onClick={() => setModal('Change today’s hours')}>
+                          Update hours <ArrowRight size={16} />
+                        </Button>
+                      </div>
+                    </section>
+                    <section className="snapshot-card">
+                      <span className="eyebrow">LOOKING GOOD</span>
+                      <div className="snapshot-icon">
+                        <CheckCircle2 size={25} />
+                      </div>
+                      <h3>{pubVersion ? 'Your website is up to date.' : 'Ready when you are.'}</h3>
+                      <p>
+                        {pubVersion
+                          ? `Published revision ${pubVersion} is available to your widgets. Installation on your website has not been verified.`
+                          : 'Set your opening hours and publish your first update to bring your widgets to life.'}
+                      </p>
+                      <button className="text-link" onClick={() => switchTab('widgets')}>
+                        {pubVersion ? 'View your widgets' : 'Set up your widgets'}{' '}
+                        <ArrowUpRight size={14} />
+                      </button>
+                    </section>
+                  </div>
+                  <section className="quick-section">
+                    <div className="section-heading">
+                      <h3>A quick change?</h3>
+                      <span>Big updates. Small effort.</span>
+                    </div>
+                    <div className="quick-actions">
+                      {[
+                        { label: 'Close early', icon: Clock },
+                        { label: 'Open late', icon: CloudSun },
+                        { label: 'Closed today', icon: Store },
+                        { label: 'Add special hours', icon: CalendarDays },
+                        { label: 'Post announcement', icon: Megaphone },
+                      ].map((a) => (
+                        <button key={a.label} onClick={() => setModal(a.label)} disabled={readonly}>
+                          <a.icon size={20} />
+                          <span>{a.label}</span>
+                          <Plus size={14} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  <div className="lower-grid">
+                    <section className="card">
+                      <div className="card-heading">
+                        <div>
+                          <h3>Connected destinations</h3>
+                          <p>Keep every first impression in sync.</p>
+                        </div>
+                        <button className="text-link" onClick={() => switchTab('integrations')}>
+                          Manage <ArrowUpRight size={14} />
+                        </button>
+                      </div>
+                      <div className="destination-list">
+                        {destinations.map((d, i) => (
+                          <button
+                            key={d.label}
+                            onClick={() => switchTab(i ? 'widgets' : 'integrations')}
+                            className="destination-row"
+                          >
+                            <span className={`provider-icon ${d.color}`}>
+                              <d.icon size={20} />
+                            </span>
+                            <span className="destination-info">
+                              <strong>{d.label}</strong>
+                              <small>{d.description}</small>
+                            </span>
+                            <span
+                              className={`destination-status ${i && pubVersion ? 'success' : ''}`}
+                            >
+                              {i && pubVersion ? (
+                                <Check size={13} />
+                              ) : (
+                                <span className="status-dot gray" />
+                              )}
+                              {d.status}
+                            </span>
+                            <ChevronRight size={15} />
+                          </button>
+                        ))}
+                      </div>
+                      <button className="coming-row" onClick={() => switchTab('integrations')}>
+                        <span className="social-symbols">
+                          <Instagram size={16} />
+                          <Facebook size={16} />
+                        </span>
+                        <span>Even more places to connect.</span>
+                        <span className="pill">Coming soon</span>
+                      </button>
+                    </section>
+                    <section className="card upcoming-card">
+                      <div className="card-heading">
+                        <div>
+                          <h3>On the horizon</h3>
+                          <p>A heads-up for the days ahead.</p>
+                        </div>
+                        <CalendarDays size={18} />
+                      </div>
+                      {upcoming.length ? (
+                        upcoming.slice(0, 3).map((e) => (
+                          <div className="upcoming-item" key={e.id}>
+                            <div className="date-tile">
+                              <span>
+                                {new Intl.DateTimeFormat('en', {
+                                  month: 'short',
+                                  timeZone: 'UTC',
+                                }).format(new Date(e.start))}
+                              </span>
+                              <strong>{e.start.slice(8)}</strong>
+                            </div>
+                            <div>
+                              <strong>{e.label || 'Special hours'}</strong>
+                              <p>{formatIntervals(e.intervals)}</p>
+                              <small>Special hours · {e.start}</small>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="empty-state small">
+                          <CalendarDays size={28} />
+                          <h4>Nothing unusual ahead.</h4>
+                          <p>Your regular hours have it covered.</p>
+                        </div>
+                      )}
+                      <button
+                        className="add-upcoming"
+                        onClick={() => setModal('Add special hours')}
+                      >
+                        <Plus size={16} />
+                        Add a special day
+                      </button>
+                    </section>
+                  </div>
+                  {status.announcement && (
+                    <div className="active-announcement">
+                      <span className="provider-icon violet">
+                        <Megaphone size={20} />
+                      </span>
+                      <div>
+                        <span className="eyebrow">
+                          ON YOUR WEBSITE · {dirty ? 'DRAFT PREVIEW' : 'CURRENT SCHEDULE'}
+                        </span>
+                        <strong>{status.announcement.title || status.announcement.message}</strong>
+                        <p>{status.announcement.message}</p>
+                      </div>
+                      <button className="text-link" onClick={() => switchTab('announcements')}>
+                        View announcement <ArrowUpRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                  <section className="card activity-preview">
+                    <div className="card-heading">
+                      <h3>Recently in your workspace</h3>
+                      <button className="text-link" onClick={() => switchTab('activity')}>
+                        View all activity <ArrowRight size={14} />
+                      </button>
+                    </div>
+                    {history.length ? (
+                      history.slice(0, 3).map((h) => (
+                        <div className="activity-row" key={h.id}>
+                          <span className="activity-check">
+                            <Check size={15} />
+                          </span>
+                          <span>{h.message}</span>
+                          <time>{new Date(h.createdAt).toLocaleDateString('en-CA')}</time>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state small">
+                        <p>Your first update starts the story.</p>
+                      </div>
+                    )}
+                  </section>
+                  <div className="dashboard-signoff">
+                    <span className="brand-mini">o</span>One less thing on your mind.
+                  </div>
+                </>
+              )}
+              {tab === 'hours' && <WeeklyEditor draft={draft} onChange={setDraft} />}
+              {tab === 'special' && (
+                <section className="card">
+                  <div className="card-heading">
+                    <div>
+                      <h3>Special hours</h3>
+                      <p>These take priority over your regular hours for the selected dates.</p>
+                    </div>
+                    <Button size="sm" onClick={() => setModal('Add special hours')}>
+                      <Plus size={16} />
+                      Add special hours
+                    </Button>
+                  </div>
+                  {draft.exceptions.length ? (
+                    draft.exceptions.map((e) => (
+                      <div className="list-row" key={e.id}>
+                        <span className="provider-icon orange">
+                          <CalendarDays size={20} />
+                        </span>
+                        <div className="grow">
+                          <strong>{e.label || 'Special hours'}</strong>
+                          <p>
+                            {e.start}
+                            {e.start !== e.end ? ` → ${e.end}` : ''} ·{' '}
+                            {formatIntervals(e.intervals)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setModal(`exception:${e.id}`)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm('Remove this special-hours exception from your draft?'))
+                              setDraft({
+                                ...draft,
+                                exceptions: draft.exceptions.filter((x) => x.id !== e.id),
+                              });
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      <CalendarDays size={36} />
+                      <h3>A regular week, for now.</h3>
+                      <p>Add a holiday closure or a one-off change.</p>
+                    </div>
+                  )}
+                </section>
+              )}
+              {tab === 'announcements' && (
+                <div className="two-columns">
+                  <section className="card">
+                    <div className="card-heading">
+                      <h3>Your announcements</h3>
+                      <Button size="sm" onClick={() => setModal('Post announcement')}>
+                        <Plus size={15} />
+                        New
+                      </Button>
+                    </div>
+                    {draft.announcements.length ? (
+                      draft.announcements.map((a) => (
+                        <div className="announcement-item" key={a.id}>
+                          <div className="section-heading">
+                            <span className="pill">
+                              {!a.enabled
+                                ? 'Disabled'
+                                : a.end && Date.parse(a.end) <= Date.parse(now)
+                                  ? 'Expired'
+                                  : Date.parse(a.start) > Date.parse(now)
+                                    ? 'Scheduled'
+                                    : 'Active'}
+                            </span>
+                            <label className="check-label">
+                              <input
+                                type="checkbox"
+                                checked={a.enabled}
+                                onChange={(e) =>
+                                  setDraft({
+                                    ...draft,
+                                    announcements: draft.announcements.map((x) =>
+                                      x.id === a.id ? { ...x, enabled: e.target.checked } : x,
+                                    ),
+                                  })
+                                }
+                              />
+                              Enabled
+                            </label>
+                          </div>
+                          <h3>{a.title || 'Announcement'}</h3>
+                          <p>{a.message}</p>
+                          <small className="muted">
+                            Starts{' '}
+                            {new Date(a.start).toLocaleString('en-CA', {
+                              timeZone: draft.timezone,
+                            })}
+                            {a.end
+                              ? ` · Expires ${new Date(a.end).toLocaleString('en-CA', { timeZone: draft.timezone })}`
+                              : ''}
+                          </small>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setModal(`announcement:${a.id}`)}
+                          >
+                            Edit announcement
+                          </Button>
+                          <button
+                            className="text-link danger"
+                            onClick={() => {
+                              if (confirm('Remove this announcement from your draft?'))
+                                setDraft({
+                                  ...draft,
+                                  announcements: draft.announcements.filter((x) => x.id !== a.id),
+                                });
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        <Megaphone size={32} />
+                        <h3>Something to share?</h3>
+                        <p>Your customers will see your latest active announcement here.</p>
+                      </div>
+                    )}
+                  </section>
+                  <div className="preview-panel">
+                    <span className="eyebrow">LIVE DRAFT PREVIEW</span>
+                    <Widget schedule={draft} type="banner" now={now} />
+                    {!status.announcement && (
+                      <p className="muted">No active banner at the moment.</p>
+                    )}
+                    <small>
+                      Expired banners automatically disappear. No browser or manual reset needed.
+                    </small>
+                  </div>
+                </div>
+              )}
+              {tab === 'widgets' && (
+                <div className="two-columns widget-config">
+                  <div>
+                    <section className="card padded">
+                      <h3>A perfect fit for your website.</h3>
+                      <p className="muted">One small snippet. Every published update.</p>
+                      <div className="segmented">
+                        {(['hours', 'banner', 'status'] as WidgetType[]).map((t) => (
+                          <button
+                            key={t}
+                            className={widgetType === t ? 'selected' : ''}
+                            onClick={() => setWidgetType(t)}
+                          >
+                            {t === 'hours' ? 'Hours' : t === 'banner' ? 'Banner' : 'Status'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="form-grid">
+                        <label>
+                          Accent colour
+                          <input
+                            type="color"
+                            value={draft.widget.accent}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: { ...draft.widget, accent: e.target.value },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Appearance
+                          <select
+                            value={draft.widget.theme}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: {
+                                  ...draft.widget,
+                                  theme: e.target.value as 'light' | 'dark',
+                                },
+                              })
+                            }
+                          >
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                          </select>
+                        </label>
+                        <label>
+                          Typography
+                          <select
+                            value={draft.widget.font}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: {
+                                  ...draft.widget,
+                                  font: e.target.value as 'system' | 'serif',
+                                },
+                              })
+                            }
+                          >
+                            <option value="system">Modern sans</option>
+                            <option value="serif">Classic serif</option>
+                          </select>
+                        </label>
+                        <label>
+                          Corner radius
+                          <input
+                            type="range"
+                            min={0}
+                            max={32}
+                            value={draft.widget.radius}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: { ...draft.widget, radius: Number(e.target.value) },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Alignment
+                          <select
+                            value={draft.widget.alignment}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: {
+                                  ...draft.widget,
+                                  alignment: e.target.value as 'left' | 'center',
+                                },
+                              })
+                            }
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Centre</option>
+                          </select>
+                        </label>
+                        <label>
+                          Layout
+                          <select
+                            value={draft.widget.compact ? 'compact' : 'full'}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: { ...draft.widget, compact: e.target.value === 'compact' },
+                              })
+                            }
+                          >
+                            <option value="full">Full</option>
+                            <option value="compact">Compact</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="check-label">
+                        <input
+                          type="checkbox"
+                          checked={draft.widget.showName}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              widget: { ...draft.widget, showName: e.target.checked },
+                            })
+                          }
+                        />
+                        Show business name
+                      </label>
+                      {plan === 'free' && (
+                        <p className="notice">
+                          Custom branding requires Pro. All three standard widgets are included in
+                          Free.
+                        </p>
+                      )}
+                    </section>
+                    <section className="card padded installation">
+                      <h3>Make it part of your website.</h3>
+                      <label>
+                        Website platform
+                        <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+                          {['Custom HTML', 'WordPress', 'Wix', 'Squarespace', 'Shopify'].map(
+                            (p) => (
+                              <option key={p}>{p}</option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <p className="muted">
+                        {platform === 'WordPress'
+                          ? 'Add a Custom HTML block to a page or widget area.'
+                          : platform === 'Wix'
+                            ? 'Use Embed Code → Embed HTML. Some plans restrict custom scripts; use the iframe alternative below.'
+                            : platform === 'Squarespace'
+                              ? 'Add a Code block with HTML enabled (plan-dependent).'
+                              : platform === 'Shopify'
+                                ? 'Add a Custom Liquid section in your theme editor.'
+                                : 'Paste this snippet where you want the widget to appear.'}
+                      </p>
+                      <pre className="code-block">{snippet}</pre>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          demo
+                            ? notify(
+                                'Demo snippets are examples. Create a business to get your working location ID.',
+                              )
+                            : copy(snippet)
+                        }
+                      >
+                        <Copy size={16} />
+                        Copy embed code
+                      </Button>
+                      <details>
+                        <summary>Iframe alternative & strict website policies</summary>
+                        <pre className="code-block">{`<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=${widgetType}" title="Business hours" style="width:100%;height:590px;border:0" loading="lazy"></iframe>`}</pre>
+                        <p className="muted">
+                          Allow {origin} in your site’s frame-src and script-src policies. For a top
+                          banner, install above your header. For floating placement, put the embed
+                          container in your site’s fixed-position element.
+                        </p>
+                      </details>
+                      {!demo && pubVersion > 0 && (
+                        <a
+                          className="text-link"
+                          href={`/embed/${selected}?type=${widgetType}`}
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          Test published widget <ExternalLink size={14} />
+                        </a>
+                      )}
+                      <small className="muted">
+                        Published endpoint availability does not verify installation on another
+                        website.
+                      </small>
+                    </section>
+                  </div>
+                  <div className="preview-panel sticky">
+                    <span className="eyebrow">YOUR WIDGET · DRAFT PREVIEW</span>
+                    <div className="browser-preview">
+                      <div className="browser-chrome">
+                        <i />
+                        <i />
+                        <i />
+                        <span>yourwebsite.com</span>
+                      </div>
+                      <div className="preview-body">
+                        <Widget schedule={draft} type={widgetType} now={now} />
+                        {widgetType === 'banner' && !status.announcement && (
+                          <p className="muted">
+                            Add an active announcement to preview your banner.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <small>
+                      Preview updates as you edit. Your live website updates when you publish.
+                    </small>
+                    {demo && (
+                      <details className="published-demo">
+                        <summary>View last published demo</summary>
+                        <Widget schedule={published} type={widgetType} now={now} />
+                      </details>
+                    )}
+                  </div>
+                </div>
+              )}
+              {tab === 'integrations' && (
+                <>
+                  <div className="integration-grid">
+                    <section className="card padded">
+                      <div className="section-heading">
+                        <span className="google-g">G</span>
+                        <span className="pill">Pro</span>
+                      </div>
+                      <h2>Google Business Profile</h2>
+                      <p className="muted">
+                        Keep regular and special hours consistent on Google Search and Maps.
+                      </p>
+                      <div className="notice">
+                        {detail?.connection?.status === 'connected'
+                          ? 'Connected. Only regular and special hours are managed. Google public visibility can take longer.'
+                          : detail?.googleConfigured
+                            ? 'Ready to connect with your Google account.'
+                            : 'Setup required: Google credentials and approved Business Profile API access.'}
+                      </div>
+                      <Button
+                        disabled={busy || (!demo && !detail?.googleConfigured)}
+                        onClick={connect}
+                      >
+                        {detail?.connection ? 'Reconnect Google' : 'Connect Google'}
+                        <ArrowUpRight size={16} />
+                      </Button>
+                      {detail?.connection && (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              act(async () => {
+                                const r = await fetch(`/api/google/locations?id=${selected}`);
+                                const data = await r.json();
+                                if (!r.ok) throw new Error(data.error);
+                                setGoogleLocations(data.locations);
+                              })
+                            }
+                          >
+                            Choose / compare location
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              if (confirm('Disconnect Google and revoke this authorization?'))
+                                void act(async () => {
+                                  await request('/api/manage', { op: 'disconnect', id: selected });
+                                  await refresh();
+                                  notify('Google disconnected');
+                                });
+                            }}
+                          >
+                            Disconnect
+                          </Button>
+                        </>
+                      )}
+                      {googleLocations.length > 0 && (
+                        <div className="google-selection">
+                          <label>
+                            Google business location
+                            <select value={remote} onChange={(e) => setRemote(e.target.value)}>
+                              <option value="">Select a location</option>
+                              {googleLocations.map((l) => (
+                                <option key={l.name} value={l.name}>
+                                  {l.title}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <Button
+                            disabled={!remote || busy}
+                            onClick={() =>
+                              act(async () => {
+                                await request('/api/google/locations', {
+                                  id: selected,
+                                  remoteId: remote,
+                                });
+                                await refresh();
+                                notify(
+                                  'Google location connected. Review hours before publishing.',
+                                );
+                              })
+                            }
+                          >
+                            Manage hours for this location
+                          </Button>
+                          <details>
+                            <summary>Compare Google’s hours</summary>
+                            <pre className="code-block">
+                              {JSON.stringify(
+                                googleLocations.find((l) => l.name === remote),
+                                null,
+                                2,
+                              )}
+                            </pre>
+                            <p>
+                              Local hours are shown in Opening hours. Import replaces the local
+                              weekly schedule and special hours in your draft only.
+                            </p>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const g = googleLocations.find((l) => l.name === remote);
+                                if (
+                                  !g ||
+                                  !confirm(
+                                    'Replace your draft weekly and special hours with the hours from this Google location?',
+                                  )
+                                )
+                                  return;
+                                let next: Schedule;
+                                try {
+                                  next = importGoogleHours(g, draft);
+                                } catch {
+                                  setError(
+                                    'Google hours cannot be represented safely. Review and enter them manually.',
+                                  );
+                                  return;
+                                }
+                                setDraft(next);
+                                switchTab('hours');
+                                notify('Imported to draft. Review and publish when ready.');
+                              }}
+                            >
+                              Confirm import to draft
+                            </Button>
+                          </details>
+                        </div>
+                      )}
+                      <a
+                        className="text-link"
+                        href="https://business.google.com/"
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        Manage manually on Google <ExternalLink size={14} />
+                      </a>
+                    </section>
+                    <section className="card padded">
+                      <span className="provider-icon violet">
+                        <Code2 size={24} />
+                      </span>
+                      <h2>Your website</h2>
+                      <p className="muted">
+                        Your hours, status, and announcements. Three small additions that make a big
+                        difference.
+                      </p>
+                      <div className="notice subtle">
+                        {pubVersion
+                          ? `Revision ${pubVersion} published. Copy an embed snippet to install.`
+                          : 'No published hours yet. Publish your first update to activate your widgets.'}
+                      </div>
+                      <Button variant="outline" onClick={() => switchTab('widgets')}>
+                        Configure website widgets <ArrowRight size={16} />
+                      </Button>
+                    </section>
+                    {[
+                      { name: 'Instagram', id: 'instagram', icon: Instagram },
+                      { name: 'Facebook', id: 'facebook', icon: Facebook },
+                    ].map((s) => (
+                      <section className="card padded social-card" key={s.id}>
+                        <div className="section-heading">
+                          <s.icon size={28} />
+                          <span className="pill">Coming soon · Premium</span>
+                        </div>
+                        <h2>{s.name}</h2>
+                        <p className="muted">
+                          Thoughtful, branded updates for your followers. No social posting is
+                          available yet.
+                        </p>
+                        <div className="social-preview">
+                          <span>{draft.name}</span>
+                          <strong>
+                            A little change
+                            <br />
+                            to our hours.
+                          </strong>
+                          <small>Example graphic · not posted</small>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            act(async () => {
+                              if (demo) {
+                                notify(
+                                  'Demo only. Create an account to join the notification list.',
+                                );
+                                return;
+                              }
+                              await request('/api/manage', { op: 'interest', feature: s.id });
+                              notify('You’re on the list. Your interest has been saved.');
+                            })
+                          }
+                        >
+                          Notify me when available <Bell size={15} />
+                        </Button>
+                      </section>
+                    ))}
+                  </div>
+                </>
+              )}
+              {tab === 'activity' && (
+                <>
+                  <section className="card">
+                    <div className="card-heading">
+                      <h3>Publication outcomes</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          act(async () => {
+                            await refresh();
+                            notify('Activity refreshed');
+                          })
+                        }
+                      >
+                        <RefreshCw size={14} />
+                        Refresh
+                      </Button>
+                    </div>
+                    {detail?.jobs.length ? (
+                      detail.jobs.map((j) => (
+                        <div className="list-row" key={j.id}>
+                          <span
+                            className={`provider-icon ${j.status === 'failed' ? 'orange' : 'green'}`}
+                          >
+                            {j.status === 'failed' ? (
+                              <AlertCircle size={18} />
+                            ) : (
+                              <Check size={18} />
+                            )}
+                          </span>
+                          <div className="grow">
+                            <strong>
+                              {j.destination === 'google'
+                                ? 'Google Business Profile'
+                                : 'Website widgets'}
+                            </strong>
+                            <p>
+                              {j.status === 'accepted'
+                                ? 'Request accepted. Public Google visibility not confirmed.'
+                                : j.status}
+                              {j.error ? ` · ${j.error}` : ''}
+                            </p>
+                            <small>
+                              {j.attempts} attempts · {new Date(j.createdAt).toLocaleString()}
+                            </small>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state small">
+                        <p>
+                          {demo
+                            ? 'Demo publications update the local preview only.'
+                            : 'Your publication results will appear here.'}
+                        </p>
+                      </div>
+                    )}
+                  </section>
+                  <section className="card activity-full">
+                    <div className="card-heading">
+                      <h3>Workspace activity</h3>
+                    </div>
+                    {history.map((h) => (
+                      <div className="activity-row" key={h.id}>
+                        <History size={16} />
+                        <span>{h.message}</span>
+                        <time>{new Date(h.createdAt).toLocaleString()}</time>
+                      </div>
+                    ))}
+                    {!history.length && <div className="empty-state small">No activity yet.</div>}
+                  </section>
+                </>
+              )}
+              {tab === 'notifications' && (
+                <section className="card">
+                  <div className="card-heading">
+                    <h3>Notifications</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        act(async () => {
+                          if (!demo) {
+                            await request('/api/manage', { op: 'read', id: selected });
+                            await refresh();
+                          }
+                          notify('All caught up');
+                        })
+                      }
+                    >
+                      Mark all as read
+                    </Button>
+                  </div>
+                  {detail?.notifications.length ? (
+                    detail.notifications.map((n) => (
+                      <div className="list-row" key={n.id}>
+                        <Bell size={18} />
+                        <p>{n.message}</p>
+                        <span className="pill">{n.readAt ? 'Read' : 'New'}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      <CheckCircle2 size={34} />
+                      <h3>All quiet here.</h3>
+                      <p>We’ll flag sync issues and subscription updates here.</p>
+                    </div>
+                  )}
+                </section>
+              )}
+              {tab === 'billing' && (
+                <>
+                  <div className="notice">
+                    {demo
+                      ? 'Demo billing is disabled. Prices shown in Canadian dollars.'
+                      : detail?.billingConfigured
+                        ? `Your organization is on the ${planLabel} plan. Changes take effect after Stripe confirms your subscription.`
+                        : 'Billing setup required. Stripe credentials and CAD price IDs must be configured before checkout is available.'}
+                  </div>
+                  <div className="pricing-grid">
+                    {[
+                      {
+                        id: 'free',
+                        name: 'Free',
+                        price: 0,
+                        copy: 'The everyday essentials.',
+                        features: [
+                          '1 business location',
+                          'Weekly & special hours',
+                          'All 3 website widgets',
+                          'Basic announcements',
+                        ],
+                      },
+                      {
+                        id: 'pro',
+                        name: 'Pro',
+                        price: 9,
+                        copy: 'A little more peace of mind.',
+                        features: [
+                          'Everything in Free',
+                          'Google sync when configured',
+                          'Scheduled announcements & expiry',
+                          'Custom widget branding',
+                        ],
+                      },
+                      {
+                        id: 'business',
+                        name: 'Business',
+                        price: 19,
+                        copy: 'Room for your next chapter.',
+                        features: [
+                          'Everything in Pro',
+                          'Multiple locations',
+                          'Staff roles & access',
+                          'Shared organization billing',
+                        ],
+                      },
+                    ].map((p) => (
+                      <div
+                        className={`card price-card ${p.id === 'pro' ? 'featured' : ''}`}
+                        key={p.id}
+                      >
+                        <span className="eyebrow">{p.name}</span>
+                        <h2>
+                          ${p.price}
+                          <small>CAD / month</small>
+                        </h2>
+                        <p>{p.copy}</p>
+                        <ul>
+                          {p.features.map((f) => (
+                            <li key={f}>
+                              <Check size={15} />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                        <Button
+                          variant={p.id === 'pro' ? 'default' : 'outline'}
+                          disabled={
+                            p.id === 'free' || (!demo && !detail?.billingConfigured) || busy
+                          }
+                          onClick={() => billing(p.id)}
+                        >
+                          {plan === p.id ? 'Manage plan' : `Choose ${p.name}`}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  {!demo && detail?.billingConfigured && (
+                    <Button variant="outline" onClick={() => billing(plan, true)}>
+                      <CreditCard size={16} />
+                      Open billing portal
+                    </Button>
+                  )}
+                  <p className="muted">
+                    Your data stays yours if your plan changes. Export is always available.
+                  </p>
+                </>
+              )}
+              {tab === 'settings' && (
+                <div className="settings-grid">
+                  <section className="card padded">
+                    <h3>Business profile</h3>
+                    <BusinessFields draft={draft} onChange={setDraft} />
+                    <div className="modal-actions">
+                      <Button
+                        disabled={busy || readonly}
+                        onClick={() =>
+                          act(async () => {
+                            await save();
+                            notify('Business profile saved to draft. Publish to update widgets.');
+                          })
+                        }
+                      >
+                        Save business details
+                      </Button>
+                    </div>
+                  </section>
+                  <div>
+                    <section className="card padded">
+                      <h3>Your account</h3>
+                      <p className="muted">{demo ? 'Jamie Davis · Demo account' : email}</p>
+                      <Button variant="outline" onClick={() => switchTab('billing')}>
+                        Manage {planLabel} plan <ArrowUpRight size={15} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          if (demo) {
+                            router.push('/login');
+                            return;
+                          }
+                          void act(async () => {
+                            await request('/auth', { op: 'logout' });
+                            router.push('/login');
+                            router.refresh();
+                          });
+                        }}
+                      >
+                        <LogOut size={15} />
+                        Sign out
+                      </Button>
+                      <hr />
+                      <h4>Your data, always yours.</h4>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (demo) {
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(
+                              new Blob(
+                                [JSON.stringify({ demo: true, draft, published }, null, 2)],
+                                { type: 'application/json' },
+                              ),
+                            );
+                            a.download = 'opensync-demo.json';
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                          } else {
+                            const a = document.createElement('a');
+                            a.href = '/api/export';
+                            a.download = 'opensync-export.json';
+                            a.click();
+                          }
+                        }}
+                      >
+                        <ArrowDownToLine size={15} />
+                        Export data
+                      </Button>
+                      {demo ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm('Reset this browser’s demo changes?')) {
+                              localStorage.removeItem('opensync-demo-v1');
+                              window.location.reload();
+                            }
+                          }}
+                        >
+                          Reset demo
+                        </Button>
+                      ) : (
+                        <Button variant="destructive" onClick={() => setModal('delete')}>
+                          Delete account
+                        </Button>
+                      )}
+                    </section>
+                    <section className="card padded">
+                      <h3>More places. One workspace.</h3>
+                      <p className="muted">
+                        Add locations with independent hours and time zones. Requires Business.
+                      </p>
+                      <Button variant="outline" onClick={() => setModal('location')}>
+                        <Plus size={15} />
+                        Add a location
+                      </Button>
+                      <Button variant="ghost" onClick={() => setModal('team')}>
+                        Add a staff member
+                      </Button>
+                    </section>
+                  </div>
+                </div>
+              )}
+              {tab === 'help' && (
+                <section className="card padded help-card">
+                  <h2>Small steps. Everything in sync.</h2>
+                  {[
+                    [
+                      'How do I update today’s hours?',
+                      'Choose Close early, Open late, or Closed today on Overview. Edit the times, review affected destinations, and publish. This creates an exception without changing your usual week.',
+                    ],
+                    [
+                      'How do I install a widget?',
+                      'Open Website widgets, choose a type, and copy the embed snippet into an HTML block on your website. Publish your first revision before testing. Published updates appear within about 45 seconds.',
+                    ],
+                    [
+                      'Why hasn’t Google changed yet?',
+                      'Google needs approved API access, a connected location, and an eligible subscription. The worker retries transient errors. “Accepted” means Google accepted the request; it does not confirm that Search or Maps has refreshed.',
+                    ],
+                    [
+                      'What happens when an announcement expires?',
+                      'The public endpoint calculates active announcements on every request. The banner disappears after its expiry even if you close your browser. The previous active announcement may show if its own active period still applies.',
+                    ],
+                    [
+                      'Can I leave the service?',
+                      'Yes. Export your data in Settings at any time. Cancel a paid subscription through the billing portal before deleting your account.',
+                    ],
+                  ].map(([q, a]) => (
+                    <details key={q}>
+                      <summary>{q}</summary>
+                      <p>{a}</p>
+                    </details>
+                  ))}
+                  <h3>Need a hand?</h3>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget,
+                        message = String(new FormData(form).get('message'));
+                      void act(async () => {
+                        if (demo) {
+                          notify('Demo only. Sign in to submit a support request.');
+                          return;
+                        }
+                        await request('/api/manage', { op: 'support', message });
+                        form.reset();
+                        notify('Your support request has been saved.');
+                      });
+                    }}
+                  >
+                    <label>
+                      What can we help with?
+                      <textarea
+                        name="message"
+                        minLength={10}
+                        maxLength={3000}
+                        required
+                        placeholder="Tell us what’s happening…"
+                      />
+                    </label>
+                    <Button disabled={busy}>
+                      Send support request <ArrowRight size={16} />
+                    </Button>
+                  </form>
+                </section>
+              )}
+            </>
+          )}
+        </main>
+        <footer className="app-footer">
+          <span>© {new Date(now).getFullYear()} OpenSync</span>
+          <div>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <button onClick={() => switchTab('help')}>Need a hand?</button>
+          </div>
+        </footer>
+      </div>
+      {toast && (
+        <div className="toast" role="status">
+          <CheckCircle2 size={18} />
+          {toast}
+        </div>
+      )}
+      {modal && (
+        <Modal
+          onClose={() => {
+            if (!busy) setModal('');
+          }}
+        >
+          {[
+            'Close early',
+            'Open late',
+            'Closed today',
+            'Add special hours',
+            'Change today’s hours',
+          ].includes(modal) || modal.startsWith('exception:') ? (
+            <ExceptionForm
+              draft={draft}
+              kind={modal.startsWith('exception:') ? 'Edit special hours' : modal}
+              existing={draft.exceptions.find((e) => `exception:${e.id}` === modal)}
+              onSubmit={goPublish}
+              onCancel={() => setModal('')}
+            />
+          ) : modal === 'Post announcement' || modal.startsWith('announcement:') ? (
+            <AnnouncementForm
+              draft={draft}
+              existing={draft.announcements.find((a) => `announcement:${a.id}` === modal)}
+              onSubmit={goPublish}
+              onCancel={() => setModal('')}
+            />
+          ) : modal === 'publish' ? (
+            <>
+              <div className="modal-icon">
+                <Send size={24} />
+              </div>
+              <h2>Ready to share the update?</h2>
+              <p className="muted">
+                Publish a new version of {draft.name}’s hours and announcements.
+              </p>
+              <div className="publish-summary">
+                <div>
+                  <Clock size={18} />
+                  <span>Today</span>
+                  <strong>{formatIntervals(status.today)}</strong>
+                </div>
+                <div>
+                  <CalendarDays size={18} />
+                  <span>Special-hour periods</span>
+                  <strong>{draft.exceptions.length}</strong>
+                </div>
+                <div>
+                  <Megaphone size={18} />
+                  <span>Enabled announcements</span>
+                  <strong>{draft.announcements.filter((a) => a.enabled).length}</strong>
+                </div>
+              </div>
+              <div className="notice subtle">
+                <strong>Where this update will go</strong>
+                <p>
+                  {demo
+                    ? 'This browser’s demo widget preview only. No external services will be contacted.'
+                    : 'Website hours widget, announcement banner, and status badge.'}
+                </p>
+                {!demo && detail?.connection?.status === 'connected' && plan !== 'free' ? (
+                  <small>
+                    Google regular and special hours will be queued. Announcements stay on your
+                    website. Google visibility is not immediate.
+                  </small>
+                ) : (
+                  <small>Google is not included in this publication.</small>
+                )}
+              </div>
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="modal-actions">
+                <Button variant="outline" disabled={busy} onClick={() => setModal('')}>
+                  Keep editing
+                </Button>
+                <Button disabled={busy} onClick={publish}>
+                  {busy ? 'Publishing…' : 'Publish changes'}
+                  <ArrowRight size={16} />
+                </Button>
+              </div>
+            </>
+          ) : modal === 'location' ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const data = new FormData(e.currentTarget);
+                void act(async () => {
+                  if (demo) {
+                    notify('Multiple real locations are available on Business.');
+                    setModal('');
+                    return;
+                  }
+                  const result = await request('/api/manage', {
+                    op: 'create',
+                    name: data.get('name'),
+                    timezone: data.get('timezone'),
+                    sourceLocationId: selected,
+                  });
+                  setLocations([...locations, result.location]);
+                  setSelected(result.location.id);
+                  setOnboarding(true);
+                  setModal('');
+                });
+              }}
+            >
+              <h2>A new place to call yours.</h2>
+              <label>
+                Business name
+                <input name="name" required maxLength={100} />
+              </label>
+              <label>
+                Time zone
+                <input name="timezone" required defaultValue={draft.timezone} />
+              </label>
+              {error && <p className="form-error">{error}</p>}
+              <Button disabled={busy}>Add location</Button>
+            </form>
+          ) : modal === 'team' ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const data = new FormData(e.currentTarget);
+                void act(async () => {
+                  if (demo) {
+                    notify('Staff access requires a real Business account.');
+                    setModal('');
+                    return;
+                  }
+                  await request('/api/manage', {
+                    op: 'team',
+                    id: selected,
+                    email: data.get('email'),
+                    role: data.get('role'),
+                  });
+                  notify('Staff access saved');
+                  setModal('');
+                });
+              }}
+            >
+              <h2>A helping hand.</h2>
+              <p className="muted">
+                The staff member must first sign up and verify their email. Business owners can
+                grant access here.
+              </p>
+              <label>
+                Staff email
+                <input name="email" type="email" required />
+              </label>
+              <label>
+                Role
+                <select name="role">
+                  <option value="editor">Editor — update and publish</option>
+                  <option value="viewer">Viewer — read only</option>
+                  <option value="admin">Admin — manage locations</option>
+                </select>
+              </label>
+              {error && <p className="form-error">{error}</p>}
+              <Button disabled={busy}>Grant access</Button>
+            </form>
+          ) : modal === 'delete' ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const confirmation = new FormData(e.currentTarget).get('confirmation');
+                void act(async () => {
+                  await request('/api/manage', { op: 'delete', confirmation });
+                  await request('/auth', { op: 'logout' });
+                  router.push('/');
+                  router.refresh();
+                });
+              }}
+            >
+              <h2>Delete your account?</h2>
+              <p>
+                Your owned organizations, locations, publications, and embeds will be permanently
+                removed. Export your data first. Active subscriptions must be cancelled before
+                deletion.
+              </p>
+              <label>
+                Type DELETE to confirm
+                <input name="confirmation" pattern="DELETE" required />
+              </label>
+              {error && <p className="form-error">{error}</p>}
+              <Button variant="destructive" disabled={busy}>
+                Permanently delete account
+              </Button>
+            </form>
+          ) : null}
+        </Modal>
+      )}
+    </div>
+  );
+}
