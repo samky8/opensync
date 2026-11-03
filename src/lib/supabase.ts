@@ -32,11 +32,16 @@ export async function requireUser() {
   if (!authConfigured()) throw new Error('Supabase setup required');
   const authorization = (await headers()).get('authorization');
   const token = bearerToken(authorization);
-  const client = authorization !== null
-    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-    : await supabase();
+  const client =
+    authorization !== null
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            auth: { persistSession: false, autoRefreshToken: false },
+          },
+        )
+      : await supabase();
   const {
     data: { user },
     error,

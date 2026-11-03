@@ -1,0 +1,6 @@
+// Public configuration only. Never put a service-role key or Stripe secret here.
+// The $()/ separator prevents xcconfig treating https:// as a comment.
+OPENSYNC_API_URL = https:/$()/YOUR-OPENSYNC-DOMAIN
+SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co
+SUPABASE_ANON_KEY = YOUR-PUBLIC-ANON-KEY
+#include? "Local.xcconfig"

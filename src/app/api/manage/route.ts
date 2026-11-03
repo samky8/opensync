@@ -121,15 +121,19 @@ export async function POST(req: Request) {
           .from(t.subscriptions)
           .where(eq(t.subscriptions.organizationId, m.organizationId));
         if (sub && ['active', 'trialing', 'past_due'].includes(sub.status)) {
-          if (body.cancelSubscriptions !== true) throw new Error(
-            'Please cancel your subscription in the billing portal before deleting your account',
-          );
+          if (body.cancelSubscriptions !== true)
+            throw new Error(
+              'Please cancel your subscription in the billing portal before deleting your account',
+            );
           if (!sub.subscriptionId) throw new Error('Subscription cancellation setup required');
           const { stripe } = await import('@/lib/stripe');
           const provider = stripe();
           const current = await provider.subscriptions.retrieve(sub.subscriptionId);
-          if (current.status !== 'canceled') await provider.subscriptions.cancel(sub.subscriptionId);
-          await db().update(t.subscriptions).set({ status: 'canceled', plan: 'free' })
+          if (current.status !== 'canceled')
+            await provider.subscriptions.cancel(sub.subscriptionId);
+          await db()
+            .update(t.subscriptions)
+            .set({ status: 'canceled', plan: 'free' })
             .where(eq(t.subscriptions.organizationId, m.organizationId));
         }
         const locs = await db()

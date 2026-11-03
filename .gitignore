@@ -22,3 +22,11 @@ service-account*.json
 .npmrc
 .netrc
 *.log
+ios/Config/Local.xcconfig
+ios/build/
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.xcarchive/

@@ -183,3 +183,7 @@ There is no deployed URL or connected production service included in this worksp
 | `tests/`, `e2e/`                                           | Domain, SQL, provider-contract and browser tests            |
 
 See [architecture and operational limits](docs/ARCHITECTURE.md) before extending the app.
+# Native iOS companion
+
+The SwiftUI iPhone/iPad project is in [`ios/`](ios/README.md). It reuses the existing backend and accounts. The native source, App Store configuration, signing scripts, and macOS test workflow are included; a signed IPA still requires Xcode, live service configuration, and an Apple Developer account. See the iOS README for the exact validation status and build instructions.
+
