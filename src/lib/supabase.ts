@@ -3,17 +3,18 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies, headers } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 import { bearerToken } from './mobile-auth';
+import { supabasePublishableKey } from './supabase-config';
 export const authConfigured = () =>
   !!(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    supabasePublishableKey() &&
     process.env.DATABASE_URL
   );
 export async function supabase() {
   const jar = await cookies();
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabasePublishableKey()!,
     {
       cookies: {
         getAll: () => jar.getAll(),
@@ -36,7 +37,7 @@ export async function requireUser() {
     authorization !== null
       ? createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          supabasePublishableKey()!,
           {
             auth: { persistSession: false, autoRefreshToken: false },
           },

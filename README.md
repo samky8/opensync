@@ -43,8 +43,8 @@ See [launch readiness](docs/LAUNCH-CHECKLIST.md) for verification and remaining 
 ## Supabase setup
 
 1. Create a **dedicated** Supabase project. Use the project's PostgreSQL connection string, preferably the transaction pooler for Vercel. The driver uses `prepare: false` for pooler compatibility. Require TLS in the production connection string, using the connection details supplied by Supabase.
-2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and server-only `DATABASE_URL`. This server connection must be permitted to run the migrations and application SQL. It is privileged; it must never be exposed to a browser.
-3. Set server-only `SUPABASE_SERVICE_ROLE_KEY` for account deletion. The normal app does not use it to authenticate users.
+2. Set `NEXT_PUBLIC_SUPABASE_URL` (the project base URL without `/rest/v1/`), `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_...`), and server-only `DATABASE_URL` (a PostgreSQL connection string). This server connection must be permitted to run the migrations and application SQL. It is privileged; it must never be exposed to a browser.
+3. Set server-only `SUPABASE_SECRET_KEY` (`sb_secret_...`) for account deletion. The normal app does not use it to authenticate users. Get both keys from Supabase Settings > API Keys. The old `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` variable names remain fallbacks during migration; the new names take precedence. Set the new variables in Vercel and redeploy when switching keys.
 4. Run `npm run db:migrate`. The migration runner uses a transaction/advisory lock and records completed filenames. Use the same command for later deployments. Back up before applying schema changes.
 5. In Authentication, enable email/password and **confirm email**. Configure a production SMTP provider, delivery limits, and password policy (at least 12 characters). The default Supabase mail service is unsuitable for a public production launch.
 6. Set Supabase Site URL to your application origin. Add the exact allowed redirects:

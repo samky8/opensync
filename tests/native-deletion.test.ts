@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_APP_URL = 'https://opensync.example';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
+  delete process.env.SUPABASE_SECRET_KEY;
   mocks.rows = [
     [{ organizationId: 'owned-org' }],
     [{ subscriptionId: 'sub_owned', status: 'active' }],
@@ -45,6 +46,12 @@ beforeEach(() => {
   mocks.deleteUser.mockResolvedValue({ error: null });
 });
 describe('explicit cancel-and-delete for native accounts', () => {
+  it('supports account deletion with only the new secret key', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_SECRET_KEY = 'sb_secret_test';
+    expect((await remove(true)).status).toBe(200);
+    expect(mocks.deleteUser).toHaveBeenCalledWith('account-owner');
+  });
   it('preserves the existing web requirement without explicit cancellation consent', async () => {
     expect((await remove(false)).status).toBe(400);
     expect(mocks.cancel).not.toHaveBeenCalled();

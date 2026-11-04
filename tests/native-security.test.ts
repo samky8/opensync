@@ -26,12 +26,19 @@ beforeEach(() => {
   mocks.authorization = null;
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test';
+  delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   process.env.DATABASE_URL = 'postgres://unused';
   process.env.NEXT_PUBLIC_APP_URL = 'https://opensync.example';
   mocks.cookieUser.mockResolvedValue({ data: { user: { id: 'cookie-user' } }, error: null });
   mocks.nativeUser.mockResolvedValue({ data: { user: { id: 'native-user' } }, error: null });
 });
 describe('native authentication and browser CSRF isolation', () => {
+  it('uses the publishable key without a legacy anon key', async () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+    expect((await requireUser()).id).toBe('cookie-user');
+    expect(mocks.cookieClient.mock.calls[0][1]).toBe('sb_publishable_test');
+  });
   it('validates native tokens with Supabase rather than trusting token claims', async () => {
     mocks.authorization = 'Bearer test-token';
     expect((await requireUser()).id).toBe('native-user');

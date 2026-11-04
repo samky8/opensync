@@ -109,7 +109,8 @@ export async function POST(req: Request) {
     }
     if (op === 'delete') {
       if (body.confirmation !== 'DELETE') throw new Error('Type DELETE for confirmation');
-      if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
+      const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!secretKey)
         throw new Error('Account deletion setup required');
       const owned = await db()
         .select()
@@ -142,12 +143,10 @@ export async function POST(req: Request) {
           .where(eq(t.locations.organizationId, m.organizationId));
         for (const l of locs) await googleDisconnect(l.id);
       }
-      if (!process.env.SUPABASE_SERVICE_ROLE_KEY)
-        throw new Error('Account deletion setup required');
       const { createClient } = await import('@supabase/supabase-js');
       const admin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        secretKey,
         { auth: { persistSession: false } },
       );
       const { error } = await admin.auth.admin.deleteUser(user.id);
