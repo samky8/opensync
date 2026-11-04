@@ -2,15 +2,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
 export function AuthForm({
   mode,
-  configured,
   google,
 }: {
   mode: 'login' | 'signup' | 'reset' | 'update';
-  configured: boolean;
   google: boolean;
 }) {
   const router = useRouter();
@@ -88,15 +86,6 @@ export function AuthForm({
                 ? 'Sign in to keep your customers in the know.'
                 : 'Use a strong password with at least 12 characters.'}
           </p>
-          {!configured && (
-            <div className="notice">
-              Account setup required. Add your Supabase and database credentials to enable real
-              accounts.{' '}
-              <Link href="/demo">
-                Explore the demo <ArrowUpRight size={14} />
-              </Link>
-            </div>
-          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -142,7 +131,7 @@ export function AuthForm({
                 {message}
               </p>
             )}
-            <Button disabled={!configured || busy} className="full">
+            <Button disabled={busy} className="full">
               {busy
                 ? 'Please wait…'
                 : mode === 'signup'
@@ -155,7 +144,7 @@ export function AuthForm({
               <ArrowRight size={17} />
             </Button>
           </form>
-          {google && configured && (
+          {google && (
             <Button
               className="full"
               variant="outline"
