@@ -118,7 +118,7 @@ export function checkOrigin(req: Request, allowBearer = false) {
 export function apiError(e: unknown) {
   const message = e instanceof Error ? e.message : 'Request failed';
   const safe =
-    /setup required|sign in|access denied|not found|requires|overlap|changed|Publish|Invalid|Too many|confirmation|cancel|owner|configured|Google|Stripe|date|limit|Select|Pro|Business|expiry|scheduled|subscription|Refresh|version|connection/i.test(
+    /setup required|sign in|access denied|not found|requires|overlap|changed|Publish|Invalid|Too many|confirmation|cancel|owner|configured|Google|Meta|Stripe|date|limit|Select|Pro|Business|expiry|scheduled|subscription|Refresh|version|connection/i.test(
       message,
     );
   if (!safe)

@@ -48,7 +48,7 @@
 
 ## Product scope still to extend
 
-- Social publishing remains deliberately **coming soon**, with a persisted interest list.
+- Social posts and stories can be exported or published directly through Meta once migration 004, app credentials and provider permissions are configured. Complete the live verification in [Meta setup](META-SETUP.md); social scheduling is not implemented.
 - Application email notifications have no delivery provider/worker yet. Supabase auth email is separate. Notifications currently appear in-app.
 - Full application dark mode is not implemented; widget dark styling is implemented.
 - General delayed publication of arbitrary draft revisions is not implemented. Published future special dates and timed announcements are supported and resolve without owner/browser activity.

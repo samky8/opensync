@@ -116,7 +116,7 @@ export default function Home() {
               [
                 '02',
                 'Connect your little corner of the web.',
-                'Add a beautiful widget to your website. Connect Google when API access and your plan are ready.',
+                'Add a beautiful widget to your website, then create posts and stories for your social accounts.',
               ],
               [
                 '03',
@@ -156,8 +156,8 @@ export default function Home() {
                 },
                 {
                   icon: Globe,
-                  title: 'Google, when you’re ready.',
-                  copy: 'Real Business Profile integration on Pro. Requires Google API approval and a connected account. No pretend syncing.',
+                  title: 'An update worth sharing.',
+                  copy: 'Turn your hours and announcements into posts or stories. Publish to connected Facebook Pages and eligible Instagram accounts, or download your image.',
                 },
                 {
                   icon: Megaphone,
@@ -194,6 +194,7 @@ export default function Home() {
                   'Weekly & special hours',
                   'All three website widgets',
                   'Basic announcements',
+                  'Social post & story creator',
                 ],
               },
               {
@@ -202,7 +203,6 @@ export default function Home() {
                 description: 'More time for what matters.',
                 features: [
                   'Everything in Free',
-                  'Google sync when configured',
                   'Scheduled updates & expiry',
                   'Custom widget branding',
                 ],
@@ -254,7 +254,7 @@ export default function Home() {
             ],
             [
               'Does it automatically update Google Maps?',
-              'With Pro, approved Google Business Profile API access, and a connected business location, OpenSync can submit regular and special hours to Google. Google controls how quickly accepted updates appear publicly.',
+              'Automatic Google Business Profile updates are paused for now. Website widgets and the social post and story creator work independently.',
             ],
             [
               'Do I need Google to use OpenSync?',
@@ -266,7 +266,7 @@ export default function Home() {
             ],
             [
               'Are Instagram and Facebook included?',
-              'Social publishing is coming soon and is not currently available. You can register your interest from your account.',
+              'Create square posts and vertical stories using your hours or a custom announcement. When Meta is configured, connect a Facebook Page and its linked Instagram professional account to publish directly. Instagram stories require a Business account. Downloads are also available.',
             ],
           ].map(([q, a]) => (
             <details key={q}>

@@ -10,6 +10,52 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { Schedule } from '@/lib/domain';
 const created = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
+export const socialOauth = pgTable('social_oauth', {
+  stateHash: text('state_hash').primaryKey(),
+  locationId: uuid('location_id')
+    .notNull()
+    .references(() => locations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+export const socialAccounts = pgTable(
+  'social_accounts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => locations.id, { onDelete: 'cascade' }),
+    pageId: text('page_id').notNull(),
+    name: text().notNull(),
+    instagramId: text('instagram_id'),
+    instagramName: text('instagram_name'),
+    instagramType: text('instagram_type'),
+    encryptedToken: text('encrypted_token').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('social_accounts_location_id_page_id_key').on(t.locationId, t.pageId)],
+);
+export const socialPublications = pgTable('social_publications', {
+  id: uuid().primaryKey(),
+  locationId: uuid('location_id')
+    .notNull()
+    .references(() => locations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').references(() => socialAccounts.id, { onDelete: 'set null' }),
+  accountName: text('account_name').notNull(),
+  platform: text().notNull(),
+  format: text().notNull(),
+  caption: text().notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  image: text(),
+  mediaKey: text('media_key').notNull().unique(),
+  mediaExpiresAt: timestamp('media_expires_at', { withTimezone: true }).notNull(),
+  status: text().notNull(),
+  containerId: text('container_id'),
+  remoteId: text('remote_id'),
+  error: text(),
+  createdAt: created(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 export const organizations = pgTable('organizations', {
   id: uuid().primaryKey().defaultRandom(),
   name: text().notNull(),

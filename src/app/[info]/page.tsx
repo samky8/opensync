@@ -33,7 +33,22 @@ export default async function Page({ params }: { params: Promise<{ info: string 
             domain to frame-src and script-src if your site uses a restrictive content security
             policy.
           </p>
-          <h2>Google needs attention?</h2>
+          <h2>Google sync is paused</h2>
+          <p>
+            Automatic Google delivery is currently paused. Website widgets continue to work. Queued
+            Google updates need an active scheduler before they can be delivered.
+          </p>
+          <h2>Create a social post or story</h2>
+          <p>
+            Open Social studio in your dashboard. Choose Instagram or Facebook and a post or story,
+            add your announcement or import draft hours, then connect Meta and select a destination.
+            Review the image and caption before choosing Publish now. Facebook Pages and linked
+            Instagram professional accounts are supported; Instagram stories require a Business
+            account. If direct publishing needs setup, you can still download the image and copy the
+            caption. Drafts can be saved on this browser. Pending publications can be continued from
+            Social studio; unconfirmed outcomes should be checked in the destination app.
+          </p>
+          <h2>Google connection</h2>
           <p>
             Connection requires approved Business Profile API access, configured credentials, a
             selected location, and an eligible plan. In Activity, “accepted” means Google accepted
@@ -68,12 +83,24 @@ export default async function Page({ params }: { params: Promise<{ info: string 
             business-hours changes when you connect a profile. Hosting providers process request
             metadata for operation and abuse prevention.
           </p>
+          <p>
+            For direct social publishing, Meta receives the image and caption you approve. OpenSync
+            stores encrypted Page tokens, connected account identifiers, and publication results.
+            Upload links expire after 24 hours; expired image data is purged when another social
+            publication is created.
+          </p>
           <h2>Your choices</h2>
           <p>
             Export business data from Settings. Disconnect Google to revoke its token. Delete your
             account to remove owned organizations and publications after cancelling active
             subscriptions. Regulatory and payment records held by providers may have separate
             retention requirements.
+          </p>
+          <p>
+            Disconnect a Meta account in Social studio to remove its stored token for that location.
+            Remove OpenSync from Facebook Business Integrations to revoke Meta access completely.
+            Existing posts remain on Meta; delete them in Instagram or Facebook. Account deletion
+            removes locally stored social tokens, uploads, and history for owned businesses.
           </p>
           <h2>Cookies and demo storage</h2>
           <p>
@@ -103,8 +130,9 @@ export default async function Page({ params }: { params: Promise<{ info: string 
           <h2>External destinations</h2>
           <p>
             Google and other providers have separate terms and approval requirements. An accepted
-            API request does not guarantee immediate public display. Social media publishing is not
-            currently available.
+            API request does not guarantee immediate public display. Direct social publishing
+            requires eligible accounts and authorized Meta access. A network interruption can leave
+            the outcome unconfirmed; review the destination account before posting again.
           </p>
           <h2>Subscriptions and cancellation</h2>
           <p>

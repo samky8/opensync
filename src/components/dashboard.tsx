@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Widget, type WidgetType } from './widget';
+import { SocialComposer } from './social-composer';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
 import {
   defaultSchedule,
@@ -58,6 +59,7 @@ type Location = {
   publishedVersion: number;
   onboardingStep: number;
 };
+const emptyLocations: Location[] = [];
 type Job = {
   id: string;
   destination: string;
@@ -83,6 +85,7 @@ const navigation = [
   { id: 'special', label: 'Special hours', icon: CalendarDays },
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
   { id: 'widgets', label: 'Website widgets', icon: Code2 },
+  { id: 'social', label: 'Social studio', icon: Instagram },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'activity', label: 'Activity', icon: History },
 ];
@@ -103,6 +106,10 @@ const titles: Record<string, [string, string]> = {
   widgets: [
     'Your hours. Your website.',
     'Beautiful little widgets that always tell the latest story.',
+  ],
+  social: [
+    'A little update. Ready to share.',
+    'Create posts and stories for Instagram and Facebook.',
   ],
   integrations: ['One update. More places.', 'Connect the places your customers already look.'],
   activity: [
@@ -149,7 +156,7 @@ function Modal({ children, onClose }: { children: ReactNode; onClose: () => void
 }
 export function Dashboard({
   demo = false,
-  initialLocations = [],
+  initialLocations = emptyLocations,
   email = '',
   now: initialNow,
 }: {
@@ -247,6 +254,8 @@ export function Dashboard({
       }));
     const query = new URLSearchParams(window.location.search);
     if (query.get('tab') && titles[query.get('tab')!]) setTab(query.get('tab')!);
+    if (!demo && initialLocations.some((item) => item.id === query.get('location')))
+      setSelected(query.get('location')!);
     if (query.get('error')) setError(query.get('error')!);
     if (demo) {
       try {
@@ -264,7 +273,7 @@ export function Dashboard({
         localStorage.removeItem('opensync-demo-v1');
       }
     }
-  }, [demo, initialLocations.length]);
+  }, [demo, initialLocations]);
   useEffect(() => {
     if (selected && !demo) {
       let cancelled = false;
@@ -415,11 +424,7 @@ export function Dashboard({
   const destinations = [
     {
       label: 'Google Business Profile',
-      description: demo
-        ? 'Not connected in demo'
-        : detail?.connection?.status === 'connected'
-          ? 'Hours synchronization enabled'
-          : 'Connect your business on Google',
+      description: demo ? 'Not connected in demo' : 'Automatic Google sync paused',
       icon: Globe,
       status: detail?.connection?.status === 'connected' ? 'Connected' : 'Not connected',
       color: 'blue',
@@ -505,7 +510,7 @@ export function Dashboard({
               <span className="plan-spark">✧</span>
               <strong>A little more possibility.</strong>
             </div>
-            <p>Scheduling, Google sync, and more time for what matters.</p>
+            <p>Scheduled announcements, custom widgets, and more time for what matters.</p>
             <button onClick={() => switchTab('billing')}>
               Explore Pro <ArrowUpRight size={15} />
             </button>
@@ -705,8 +710,8 @@ export function Dashboard({
                     </div>
                     <h2>Meet your customers on Google.</h2>
                     <p className="muted">
-                      Google Business Profile sync requires Pro, approved API access, and your
-                      authorization. You can connect later.
+                      Automatic Google sync is paused. Connecting a profile requires Pro, approved
+                      API access, and your authorization. You can connect later.
                     </p>
                     <div className="notice">
                       {detail?.googleConfigured
@@ -937,13 +942,13 @@ export function Dashboard({
                           </button>
                         ))}
                       </div>
-                      <button className="coming-row" onClick={() => switchTab('integrations')}>
+                      <button className="coming-row" onClick={() => switchTab('social')}>
                         <span className="social-symbols">
                           <Instagram size={16} />
                           <Facebook size={16} />
                         </span>
-                        <span>Even more places to connect.</span>
-                        <span className="pill">Coming soon</span>
+                        <span>Create a post or story.</span>
+                        <span className="pill">Social studio</span>
                       </button>
                     </section>
                     <section className="card upcoming-card">
@@ -1421,11 +1426,12 @@ export function Dashboard({
                       </div>
                       <h2>Google Business Profile</h2>
                       <p className="muted">
-                        Keep regular and special hours consistent on Google Search and Maps.
+                        Automatic Google updates are paused. You can still manage your website
+                        widgets and create social content.
                       </p>
                       <div className="notice">
                         {detail?.connection?.status === 'connected'
-                          ? 'Connected. Only regular and special hours are managed. Google public visibility can take longer.'
+                          ? 'Account connected. Automatic sync is paused; queued hours will not be delivered until a scheduler is enabled.'
                           : detail?.googleConfigured
                             ? 'Ready to connect with your Google account.'
                             : 'Setup required: Google credentials and approved Business Profile API access.'}
@@ -1567,50 +1573,32 @@ export function Dashboard({
                         Configure website widgets <ArrowRight size={16} />
                       </Button>
                     </section>
-                    {[
-                      { name: 'Instagram', id: 'instagram', icon: Instagram },
-                      { name: 'Facebook', id: 'facebook', icon: Facebook },
-                    ].map((s) => (
-                      <section className="card padded social-card" key={s.id}>
-                        <div className="section-heading">
-                          <s.icon size={28} />
-                          <span className="pill">Coming soon · Premium</span>
-                        </div>
-                        <h2>{s.name}</h2>
-                        <p className="muted">
-                          Thoughtful, branded updates for your followers. No social posting is
-                          available yet.
-                        </p>
-                        <div className="social-preview">
-                          <span>{draft.name}</span>
-                          <strong>
-                            A little change
-                            <br />
-                            to our hours.
-                          </strong>
-                          <small>Example graphic · not posted</small>
-                        </div>
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            act(async () => {
-                              if (demo) {
-                                notify(
-                                  'Demo only. Create an account to join the notification list.',
-                                );
-                                return;
-                              }
-                              await request('/api/manage', { op: 'interest', feature: s.id });
-                              notify('You’re on the list. Your interest has been saved.');
-                            })
-                          }
-                        >
-                          Notify me when available <Bell size={15} />
-                        </Button>
-                      </section>
-                    ))}
+                    <section className="card padded social-card">
+                      <div className="section-heading">
+                        <Instagram size={28} />
+                        <Facebook size={28} />
+                        <span className="pill">Ready to create</span>
+                      </div>
+                      <h2>Posts &amp; stories</h2>
+                      <p className="muted">
+                        Turn your hours or a custom announcement into an Instagram or Facebook
+                        image. Publish to a connected account or download it to share yourself.
+                      </p>
+                      <Button variant="outline" onClick={() => switchTab('social')}>
+                        Open social studio <ArrowRight size={16} />
+                      </Button>
+                    </section>
                   </div>
                 </>
+              )}
+              {tab === 'social' && (
+                <SocialComposer
+                  key={selected || 'demo'}
+                  schedule={draft}
+                  locationId={demo ? 'demo' : selected}
+                  demo={demo}
+                  readonly={readonly}
+                />
               )}
               {tab === 'activity' && (
                 <>
@@ -1753,7 +1741,7 @@ export function Dashboard({
                         copy: 'A little more peace of mind.',
                         features: [
                           'Everything in Free',
-                          'Google sync when configured',
+                          'Google sync paused for now',
                           'Scheduled announcements & expiry',
                           'Custom widget branding',
                         ],

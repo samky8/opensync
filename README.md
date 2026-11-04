@@ -35,7 +35,7 @@ Fill `.env.local` before running migrations. Never commit it. The app has no fab
 - Public hours, status, and announcement widgets; responsive script/iframe snippets; multi-widget loading; safe text rendering; periodic refresh; automatic script-embed resizing and collapse of expired banners.
 - Google OAuth state checks, encrypted tokens, refresh, account/location pagination, location selection, import confirmation, hours-only update masks, durable destination jobs, bounded retry/backoff, and honest accepted/failed results.
 - Stripe Checkout, Billing Portal, raw-body webhook signatures, event deduplication, current subscription reconciliation, CAD price validation, checkout reuse, and server-side plan enforcement.
-- Activity history, in-app failure/subscription notifications, business settings, export, basic staff access grants, saved social waitlist interest, and saved support requests.
+- Activity history, in-app failure/subscription notifications, business settings, export, basic staff access grants, Instagram/Facebook post and story creation with PNG export, captions, browser-local drafts, and native sharing where supported, and saved support requests.
 - Responsive marketing/help pages, explicit legal templates, metadata, sitemap, social image, PWA manifest/icons, and a network-only offline fallback that never caches private business pages.
 
 See [launch readiness](docs/LAUNCH-CHECKLIST.md) for verification and remaining scope. This is runnable application code, **not an assertion that an unconfigured deployment is ready to accept paying customers**.
@@ -96,7 +96,7 @@ Website activation/expiry is calculated from the published revision and current 
 Google special dates are submitted when a revision is published; Google applies its own scheduled special hours. External jobs remain in PostgreSQL until processed:
 
 - `/api/cron` requires `Authorization: Bearer CRON_SECRET`.
-- `vercel.json` schedules it every minute. Use a Vercel plan that supports this frequency, or an authenticated external scheduler. Do not rely on a once-daily schedule for timely Google delivery.
+- Automatic Google delivery is paused: `vercel.json` currently has no cron schedule. The worker and queued jobs are retained. Restore a minute-level Vercel cron on a supported plan or an authenticated external scheduler to resume delivery.
 - A run processes one job, bounded to fit the 60-second function budget. Increase worker capacity deliberately if backlog grows; monitor queue age.
 - Workers use `FOR UPDATE SKIP LOCKED` and a location lock. They skip superseded revisions, serialize publication against delivery, and retry transient errors at 30, 60, 120… seconds up to six attempts.
 - A process crash rolls back the database transaction so work remains recoverable. Repeating the same hours PATCH is idempotent. Provider-side timing after an ambiguous network failure cannot prove public ordering; inspect/reconcile the latest state if Google reports unexpected data.
@@ -183,7 +183,13 @@ There is no deployed URL or connected production service included in this worksp
 | `tests/`, `e2e/`                                           | Domain, SQL, provider-contract and browser tests            |
 
 See [architecture and operational limits](docs/ARCHITECTURE.md) before extending the app.
+
 # Native iOS companion
 
 The SwiftUI iPhone/iPad project is in [`ios/`](ios/README.md). It reuses the existing backend and accounts. The native source, App Store configuration, signing scripts, and macOS test workflow are included; a signed IPA still requires Xcode, live service configuration, and an Apple Developer account. See the iOS README for the exact validation status and build instructions.
 
+## Social studio
+
+Create Instagram/Facebook posts and stories from hours or custom announcements. Download PNGs and captions, or connect Meta to publish directly to Facebook Pages and linked Instagram professional accounts (Business accounts for Instagram stories). Review the exact image and destination before publishing. Requests and provider outcomes are saved, with duplicate protection and explicit unconfirmed results after ambiguous failures. No cron is required. Browser drafts stay local; direct publishing uploads are retained temporarily on the server.
+
+Apply migration 004 and configure the Meta app before enabling connections. See [Meta setup and publishing recovery](docs/META-SETUP.md) for credentials, permissions, callback URLs, account requirements and live verification. Social scheduling is not included.
