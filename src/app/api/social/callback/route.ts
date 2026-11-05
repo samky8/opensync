@@ -38,8 +38,13 @@ export async function GET(req: Request) {
       .returning();
     if (!pending) throw new Error('Invalid Meta authorization');
     await locationAccess(pending.locationId, true);
-    const token = await exchangeMeta(code);
-    const pages = await metaPages(token.access_token);
+    console.info('[Meta OAuth] Starting token exchange');
+const token = await exchangeMeta(code);
+
+console.info('[Meta OAuth] Token exchange succeeded');
+const pages = await metaPages(token.access_token);
+
+console.info('[Meta OAuth] Eligible Pages:', pages.length);
     if (!pages.length) throw new Error('No eligible Meta Pages');
     await db().transaction(async (tx) => {
       for (const page of pages) {
