@@ -12,6 +12,7 @@ import {
   type Schedule,
 } from '@/lib/domain';
 import { Button } from './ui/button';
+import { ProBadge } from './ui/pro-badge';
 export function Periods({
   value,
   onChange,
@@ -465,11 +466,17 @@ export function AnnouncementForm({
       </label>
       <div className="form-grid">
         <label>
-          Start <span>blank = now</span>
+          Start{' '}
+          <span>
+            blank = now · scheduling <ProBadge />
+          </span>
           <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
         </label>
         <label>
-          Expiry <span>optional · Pro</span>
+          Expiry{' '}
+          <span>
+            optional <ProBadge />
+          </span>
           <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
         </label>
         <label>

@@ -3,7 +3,7 @@ test('demo changes persist, publish, and render in the widget preview', async ({
   page,
 }, testInfo) => {
   await page.goto('/demo');
-  await expect(page.getByRole('heading', { name: 'Your business, in sync.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.screenshot({
     path: `test-results/overview-${testInfo.project.name}.png`,
     fullPage: true,
@@ -39,7 +39,7 @@ test('all navigation screens work without placeholder actions', async ({ page },
     'Opening hours',
     'Special hours',
     'Announcements',
-    'Integrations',
+    'Connections',
     'Activity',
     'Settings',
   ]) {

@@ -53,7 +53,7 @@ function adapt(value: object): object {
 }
 beforeAll(async () => {
   process.env.NEXT_PUBLIC_APP_URL = 'https://opensync.example';
-  process.env.META_APP_ID = 'app';
+  process.env.META_APP_ID = '123';
   process.env.META_APP_SECRET = 'secret';
   process.env.TOKEN_ENCRYPTION_KEY = 'aa'.repeat(32);
   await pg.exec(

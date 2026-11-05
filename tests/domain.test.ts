@@ -8,6 +8,7 @@ import {
   validateEntitlements,
   localDate,
   replaceException,
+  resetWidgetToDefaults,
 } from '../src/lib/domain';
 describe('business-local schedules', () => {
   it('does not invent a closing at the edge of the lookup window', () => {
@@ -179,5 +180,19 @@ describe('entitlements and retries', () => {
       next = structuredClone(original);
     next.widget.accent = '#000000';
     expect(() => validateEntitlements(next, original, 'free')).toThrow(/requires Pro/);
+  });
+  it('lets downgraded accounts restore Free defaults without changing business data', () => {
+    const previous = defaultSchedule('Keep my business');
+    previous.widget.accent = '#123456';
+    previous.widget.theme = 'dark';
+    previous.widget.placement = 'floating';
+    previous.widget.dismissible = false;
+    const reset = resetWidgetToDefaults(previous);
+    expect(reset.widget).toEqual(defaultSchedule().widget);
+    expect({ ...reset, widget: previous.widget }).toEqual(previous);
+    expect(previous.widget.accent).toBe('#123456');
+    expect(() => validateEntitlements(reset, previous, 'free')).not.toThrow();
+    const partial = { ...previous, widget: { ...previous.widget, accent: '#4f46e5' } };
+    expect(() => validateEntitlements(partial, previous, 'free')).toThrow(/requires Pro/);
   });
 });

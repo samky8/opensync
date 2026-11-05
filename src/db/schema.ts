@@ -146,6 +146,14 @@ export const subscriptions = pgTable('subscriptions', {
   status: text().notNull().default('inactive'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+export const proTrials = pgTable('pro_trials', {
+  organizationId: uuid('organization_id')
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  claimedBy: uuid('claimed_by').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+});
 export const activity = pgTable('activity', {
   id: uuid().primaryKey().defaultRandom(),
   locationId: uuid('location_id')

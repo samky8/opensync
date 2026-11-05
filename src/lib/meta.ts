@@ -1,25 +1,9 @@
 import 'server-only';
 import { createHmac, createHash } from 'node:crypto';
-import { appUrl } from './server';
+import { metaConfigured, metaRedirect, metaVersion } from './meta-config';
+export { metaConfigured, metaRedirect, metaVersion, metaScopes } from './meta-config';
 
-export const metaVersion = () => process.env.META_GRAPH_VERSION || 'v25.0';
-export const metaConfigured = () =>
-  !!(
-    process.env.META_APP_ID &&
-    process.env.META_APP_SECRET &&
-    /^[a-f\d]{64}$/i.test(process.env.TOKEN_ENCRYPTION_KEY || '') &&
-    /^v\d+\.\d+$/.test(metaVersion()) &&
-    appUrl().startsWith('https://')
-  );
-export const metaRedirect = () => `${appUrl()}/api/social/callback`;
 export const stateHash = (state: string) => createHash('sha256').update(state).digest('hex');
-export const metaScopes = [
-  'pages_show_list',
-  'pages_read_engagement',
-  'pages_manage_posts',
-  'instagram_basic',
-  'instagram_content_publish',
-];
 export function assertMeta() {
   if (!metaConfigured())
     throw new Error(

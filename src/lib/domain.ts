@@ -308,11 +308,19 @@ export function validateEntitlements(
   now = new Date(),
 ) {
   if (plan !== 'free') return;
-  if (canonical(next.widget) !== canonical(previous.widget))
-    throw new Error('Widget customization requires Pro. Your existing design is preserved.');
+  if (
+    canonical(next.widget) !== canonical(previous.widget) &&
+    canonical(next.widget) !== canonical(defaultSchedule().widget)
+  )
+    throw new Error(
+      'Widget customization requires Pro. Reset to Free defaults to save and publish.',
+    );
   for (const a of next.announcements) {
     const old = previous.announcements.find((x) => x.id === a.id);
     if (canonical(a) !== canonical(old) && (a.end || Date.parse(a.start) > now.getTime() + 60000))
       throw new Error('Scheduled announcements and automatic expiry require Pro.');
   }
+}
+export function resetWidgetToDefaults(schedule: Schedule): Schedule {
+  return { ...schedule, widget: defaultSchedule().widget };
 }

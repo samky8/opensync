@@ -27,6 +27,10 @@ Fill `.env.local` before running migrations. Never commit it. The app has no fab
 
 ## What is implemented
 
+- One-click, no-card 14-day Pro trials for workspace owners. Each workspace can claim once; expiry is enforced by server entitlement checks without a scheduled job. Trials never create a Stripe subscription or automatic charge, and active paid plans take precedence. The dashboard and billing page show the claim, welcome popup and expiry date. `/demo` previews the animation without creating a real trial.
+
+Before deploying the trial feature, run `npm run db:migrate` against the intended environment to apply `005_pro_trials.sql`. The trial table is server-only (RLS enabled and direct client grants revoked). Existing paid subscriptions are not modified.
+
 - Email/password registration, verification, sign-in, reset, logout, optional Google sign-in, cookie sessions, protected account routes, and account deletion.
 - Resumable six-step onboarding; clean new accounts; independent locations and time zones.
 - Weekly hours with split shifts, overnight periods, copy controls, overlap validation, one-time/date-range exceptions, and quick changes. Editing a day inside an exception splits the surrounding range safely.

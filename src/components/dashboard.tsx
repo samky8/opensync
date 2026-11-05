@@ -19,6 +19,7 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   ExternalLink,
   Globe,
   Instagram,
@@ -36,13 +37,18 @@ import {
   AlertCircle,
   Send,
   CreditCard,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { ProBadge } from './ui/pro-badge';
 import { Widget, type WidgetType } from './widget';
 import { SocialComposer } from './social-composer';
+import { ProTrialCard } from './pro-trial';
+import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
 import {
   defaultSchedule,
+  resetWidgetToDefaults,
   formatIntervals,
   getStatus,
   scheduleSchema,
@@ -70,6 +76,8 @@ type Job = {
 };
 type Detail = {
   location: Location;
+  published: Schedule | null;
+  trial: ProTrial;
   plan: Plan;
   role: string;
   connection: { status: string; remoteId: string | null } | null;
@@ -86,40 +94,22 @@ const navigation = [
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
   { id: 'widgets', label: 'Website widgets', icon: Code2 },
   { id: 'social', label: 'Social studio', icon: Instagram },
-  { id: 'integrations', label: 'Integrations', icon: Plug },
+  { id: 'integrations', label: 'Connections', icon: Plug },
   { id: 'activity', label: 'Activity', icon: History },
 ];
 const titles: Record<string, [string, string]> = {
-  overview: [
-    'Your business, in sync.',
-    'A clear picture of your hours. A little more peace of mind.',
-  ],
-  hours: [
-    'Make time for your customers.',
-    'Set your usual week. We’ll take care of the time zones.',
-  ],
-  special: [
-    'For the not-so-regular days.',
-    'Holiday hours, early closings, and everything in between.',
-  ],
-  announcements: ['Keep everyone in the know.', 'A timely update can make someone’s day.'],
-  widgets: [
-    'Your hours. Your website.',
-    'Beautiful little widgets that always tell the latest story.',
-  ],
-  social: [
-    'A little update. Ready to share.',
-    'Create posts and stories for Instagram and Facebook.',
-  ],
-  integrations: ['One update. More places.', 'Connect the places your customers already look.'],
-  activity: [
-    'A little history. Full clarity.',
-    'See what changed, when it happened, and where it landed.',
-  ],
-  settings: ['Make yourself at home.', 'Your business details, account, and preferences.'],
-  billing: ['A plan for your next chapter.', 'Start simple. Grow when you’re ready.'],
-  notifications: ['Your updates, at a glance.', 'The things that need your attention.'],
-  help: ['A little help goes a long way.', 'Straightforward answers to get you up and running.'],
+  overview: ['Overview', 'Manage your hours and updates.'],
+  hours: ['Opening hours', 'Set your regular weekly schedule.'],
+  special: ['Special hours', 'Set holiday hours and one-off closures.'],
+  announcements: ['Announcements', 'Share updates on your website.'],
+  widgets: ['Website widgets', 'Add your hours and updates to your website.'],
+  social: ['Social studio', 'Create posts and stories for Instagram and Facebook.'],
+  integrations: ['Connections', 'Manage your publishing channels.'],
+  activity: ['Activity', 'Check published updates and sync results.'],
+  settings: ['Settings', 'Manage your business and account.'],
+  billing: ['Plans & billing', 'Manage your plan and subscription.'],
+  notifications: ['Notifications', 'Updates that need your attention.'],
+  help: ['Help', 'Find answers or contact support.'],
 };
 async function request(path: string, body: unknown) {
   const response = await fetch(path, {
@@ -184,6 +174,8 @@ export function Dashboard({
     [toast, setToast] = useState(''),
     [error, setError] = useState(''),
     [mobile, setMobile] = useState(false),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [demoTrial, setDemoTrial] = useState<ProTrial>({ status: 'available', endsAt: null }),
     [now, setNow] = useState(initialNow),
     [onboarding, setOnboarding] = useState(
       !demo && (!initialLocations.length || initialLocations[0].onboardingStep < 6),
@@ -224,6 +216,13 @@ export function Dashboard({
       },
     ]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved),
+    widgetPlanError = /widget customization requires Pro|custom branding requires Pro/i.test(error),
+    publishedSchedule = demo ? published : detail?.published,
+    unpublished =
+      (demo || !!detail) &&
+      (!publishedSchedule ||
+        JSON.stringify(scheduleSchema.parse(saved)) !==
+          JSON.stringify(scheduleSchema.parse(publishedSchedule))),
     plan = demo ? 'pro' : detail?.plan || 'free';
   let status;
   try {
@@ -233,20 +232,27 @@ export function Dashboard({
   }
   const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1),
     readonly = !demo && detail?.role === 'viewer';
-  async function refresh(id = selected) {
+  async function refresh(resetDraft = false) {
     if (demo) return;
-    const res = await fetch(`/api/manage?id=${id}`, { cache: 'no-store' });
+    const res = await fetch(`/api/manage?id=${selected}`, { cache: 'no-store' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     setDetail(data);
-    setDraft(data.location.draft);
-    setSaved(data.location.draft);
-    setVersion(data.location.draftVersion);
+    if (resetDraft) {
+      setDraft(data.location.draft);
+      setSaved(data.location.draft);
+      setVersion(data.location.draftVersion);
+    }
     setPubVersion(data.location.publishedVersion);
     return data as Detail;
   }
   useEffect(() => {
     setOrigin(window.location.origin);
+    try {
+      setSidebarCollapsed(localStorage.getItem('opensync-sidebar-collapsed') === 'true');
+    } catch {
+      /* Navigation works without saved preferences. */
+    }
     if (!demo && !initialLocations.length)
       setDraft((value) => ({
         ...value,
@@ -274,6 +280,23 @@ export function Dashboard({
       }
     }
   }, [demo, initialLocations]);
+  useEffect(() => {
+    const onBackOrForward = () => {
+      const next = new URLSearchParams(window.location.search).get('tab') || 'overview';
+      setTab(titles[next] ? next : 'overview');
+      setMobile(false);
+    };
+    window.addEventListener('popstate', onBackOrForward);
+    return () => window.removeEventListener('popstate', onBackOrForward);
+  }, []);
+  useEffect(() => {
+    if (!mobile) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobile(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [mobile]);
   useEffect(() => {
     if (selected && !demo) {
       let cancelled = false;
@@ -304,6 +327,28 @@ export function Dashboard({
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
+    if (
+      demo ||
+      detail?.trial?.status !== 'active' ||
+      !detail.trial.endsAt ||
+      Date.parse(detail.trial.endsAt) > Date.parse(now)
+    )
+      return;
+    let cancelled = false;
+    fetch(`/api/manage?id=${selected}`, { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) setDetail(data);
+      })
+      .catch(() => {
+        /* Server-side entitlements still enforce expiry; retry on the next tick. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, detail?.trial?.status, detail?.trial?.endsAt, now, selected]);
+  useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener('beforeunload', handler);
@@ -317,6 +362,10 @@ export function Dashboard({
   function notify(message: string) {
     setToast(message);
     setError('');
+  }
+  function resetWidget() {
+    setDraft((current) => resetWidgetToDefaults(current));
+    notify('Widget reset to Free defaults. Save or publish to apply.');
   }
   function persistDemo(d: Schedule, p = published, v = pubVersion, h = demoHistory) {
     localStorage.setItem(
@@ -376,7 +425,7 @@ export function Dashboard({
         const key = sessionStorage.getItem(`publish-${selected}-${v}`) || crypto.randomUUID();
         sessionStorage.setItem(`publish-${selected}-${v}`, key);
         await request('/api/manage', { op: 'publish', id: selected, version: v, key });
-        await refresh();
+        await refresh(true);
         sessionStorage.removeItem(`publish-${selected}-${v}`);
       }
       setModal('');
@@ -388,6 +437,17 @@ export function Dashboard({
       );
     });
   }
+  async function publishLater() {
+    await act(async () => {
+      await save(draft, onboarding ? 6 : step);
+      setModal('');
+      if (onboarding) {
+        setOnboarding(false);
+        switchTab('overview');
+      }
+      notify('Draft saved. Publish when you’re ready.');
+    });
+  }
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -397,8 +457,30 @@ export function Dashboard({
     }
   }
   function switchTab(next: string) {
+    if (next !== tab) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', next);
+      window.history.pushState(null, '', url);
+    }
     setTab(next);
     setMobile(false);
+  }
+  async function claimTrial(): Promise<ProTrial> {
+    if (demo) {
+      const trial: ProTrial = {
+        status: 'active',
+        endsAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+      };
+      setDemoTrial(trial);
+      return trial;
+    }
+    const result = await request('/api/trial', { id: selected });
+    setDetail((current) =>
+      current?.location.id === selected
+        ? { ...current, plan: result.plan, trial: result.trial }
+        : current,
+    );
+    return result.trial;
   }
   const snippet = `<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="${widgetType}"></div>\n<script src="${origin}/embed.js" defer></script>`;
   async function connect() {
@@ -431,23 +513,23 @@ export function Dashboard({
     },
     {
       label: 'Website banner',
-      description: 'Timely announcements, right on your site',
+      description: 'Website announcements',
       icon: Megaphone,
-      status: pubVersion ? 'Published endpoint' : 'Not published',
+      status: pubVersion ? 'Published' : 'Not published',
       color: 'violet',
     },
     {
       label: 'Opening-hours widget',
-      description: 'Your schedule, always within reach',
+      description: 'Regular and special hours',
       icon: Clock,
-      status: pubVersion ? 'Published endpoint' : 'Not published',
+      status: pubVersion ? 'Published' : 'Not published',
       color: 'orange',
     },
     {
       label: 'Live status badge',
-      description: 'Open or closed. Clear at a glance.',
+      description: 'Current open or closed status',
       icon: Code2,
-      status: pubVersion ? 'Published endpoint' : 'Not published',
+      status: pubVersion ? 'Published' : 'Not published',
       color: 'green',
     },
   ];
@@ -460,12 +542,45 @@ export function Dashboard({
     setModal('publish');
   };
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
-        <Link href="/" className="brand">
-          <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
+    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <aside
+        id="dashboard-sidebar"
+        aria-label="Sidebar"
+        className={`sidebar ${mobile ? 'mobile-open' : ''}`}
+      >
+        <Link href="/" className="brand" aria-label="OpenSync home">
+          <span className="brand-mark">o</span>
+          <span className="sidebar-brand-name">
+            OpenSync<span className="brand-dot">.</span>
+          </span>
         </Link>
-        <div className="workspace-selector">
+        <button
+          className="sidebar-toggle"
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!sidebarCollapsed}
+          aria-controls="dashboard-sidebar"
+          onClick={() => {
+            const collapsed = !sidebarCollapsed;
+            setSidebarCollapsed(collapsed);
+            try {
+              localStorage.setItem('opensync-sidebar-collapsed', String(collapsed));
+            } catch {
+              /* Optional preference. */
+            }
+          }}
+        >
+          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          <span className="sidebar-text">Collapse menu</span>
+        </button>
+        <button
+          className="sidebar-mobile-close icon-button"
+          aria-label="Close navigation"
+          onClick={() => setMobile(false)}
+        >
+          <X size={20} />
+        </button>
+        <div className="workspace-selector" title={draft.name}>
           <div className="business-avatar">{draft.name.charAt(0)}</div>
           <div>
             <strong>{draft.name}</strong>
@@ -475,6 +590,7 @@ export function Dashboard({
           {!demo && (
             <select
               aria-label="Switch business location"
+              disabled={busy}
               value={selected}
               onChange={(e) => {
                 if (!dirty || confirm('Discard unsaved changes and switch location?'))
@@ -489,46 +605,68 @@ export function Dashboard({
             </select>
           )}
         </div>
-        <div className="nav-label">WORKSPACE</div>
-        <nav>
-          {navigation.map((item) => (
-            <button
-              key={item.id}
-              aria-label={item.label}
-              className={tab === item.id ? 'active' : ''}
-              onClick={() => switchTab(item.id)}
-            >
-              <item.icon size={18} />
-              {item.label}
-              {item.id === 'integrations' && <span className="nav-count">4</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="plan-card">
-            <div>
-              <span className="plan-spark">✧</span>
-              <strong>A little more possibility.</strong>
-            </div>
-            <p>Scheduled announcements, custom widgets, and more time for what matters.</p>
-            <button onClick={() => switchTab('billing')}>
-              Explore Pro <ArrowUpRight size={15} />
-            </button>
+        {[
+          { label: 'Publishing', items: navigation.slice(0, 4) },
+          { label: 'Connections & setup', items: navigation.slice(4) },
+        ].map((group) => (
+          <div className="nav-group" key={group.label}>
+            <div className="nav-label">{group.label}</div>
+            <nav aria-label={group.label}>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  aria-label={item.label}
+                  title={item.label}
+                  aria-current={tab === item.id ? 'page' : undefined}
+                  className={`${tab === item.id ? 'active' : ''} nav-${item.id}`}
+                  onClick={() => switchTab(item.id)}
+                >
+                  <item.icon size={18} />
+                  <span className="sidebar-text">{item.label}</span>
+                </button>
+              ))}
+            </nav>
           </div>
-          <nav>
+        ))}
+        <div className="sidebar-bottom">
+          <nav aria-label="Account">
             <button
+              aria-label="Plans & billing"
+              title="Plans & billing"
+              aria-current={tab === 'billing' ? 'page' : undefined}
+              className={tab === 'billing' ? 'active' : ''}
+              onClick={() => switchTab('billing')}
+            >
+              <CreditCard size={18} />
+              <span className="sidebar-text">Plans & billing</span>
+            </button>
+            <button
+              aria-label="Settings"
+              title="Settings"
+              aria-current={tab === 'settings' ? 'page' : undefined}
               className={tab === 'settings' ? 'active' : ''}
               onClick={() => switchTab('settings')}
             >
               <Settings size={18} />
-              Settings
+              <span className="sidebar-text">Settings</span>
             </button>
-            <button className={tab === 'help' ? 'active' : ''} onClick={() => switchTab('help')}>
+            <button
+              aria-label="Help"
+              title="Help"
+              aria-current={tab === 'help' ? 'page' : undefined}
+              className={tab === 'help' ? 'active' : ''}
+              onClick={() => switchTab('help')}
+            >
               <HelpCircle size={18} />
-              Help & resources <ArrowUpRight size={13} />
+              <span className="sidebar-text">Help</span>
             </button>
           </nav>
-          <button className="account-button" onClick={() => switchTab('settings')}>
+          <button
+            aria-label="Account settings"
+            title="Account settings"
+            className="account-button"
+            onClick={() => switchTab('settings')}
+          >
             <div className="account-avatar">
               {demo ? 'JD' : (email || 'You').slice(0, 2).toUpperCase()}
             </div>
@@ -546,6 +684,8 @@ export function Dashboard({
             <button
               className="icon-button mobile-menu"
               aria-label="Open navigation"
+              aria-expanded={mobile}
+              aria-controls="dashboard-sidebar"
               onClick={() => setMobile(!mobile)}
             >
               <Menu size={21} />
@@ -602,6 +742,17 @@ export function Dashboard({
             <div className="error-banner" role="alert">
               <AlertCircle size={18} />
               <span>{error}</span>
+              {widgetPlanError && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || readonly}
+                  onClick={resetWidget}
+                >
+                  <RotateCcw size={15} />
+                  Reset to Free defaults
+                </Button>
+              )}
               <button aria-label="Dismiss error" onClick={() => setError('')}>
                 <X size={16} />
               </button>
@@ -725,6 +876,17 @@ export function Dashboard({
                     )}
                     <div className="modal-actions">
                       <Button
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() =>
+                          act(async () => {
+                            await save(draft, 5);
+                          })
+                        }
+                      >
+                        Skip for now
+                      </Button>
+                      <Button
                         onClick={() =>
                           act(async () => {
                             await save(draft, 5);
@@ -760,6 +922,9 @@ export function Dashboard({
                         Copy embed code
                       </Button>
                       <div className="modal-actions">
+                        <Button variant="ghost" onClick={() => setStep(6)}>
+                          Skip for now
+                        </Button>
                         <Button onClick={() => setStep(6)}>
                           Continue <ArrowRight size={16} />
                         </Button>
@@ -788,11 +953,6 @@ export function Dashboard({
             <>
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">
-                    {tab === 'overview'
-                      ? `${new Intl.DateTimeFormat('en-CA', { weekday: 'long', timeZone: saved.timezone }).format(new Date(now)).toUpperCase()} · YOUR WORKSPACE`
-                      : 'YOUR WORKSPACE'}
-                  </div>
                   <h1>{titles[tab]?.[0]}</h1>
                   <p>{titles[tab]?.[1]}</p>
                 </div>
@@ -821,12 +981,30 @@ export function Dashboard({
                   </div>
                 )}
               </div>
-              {dirty && (
+              {(dirty || unpublished) && (
                 <div className="draft-notice">
                   <span className="status-dot orange" />
-                  You have unpublished draft changes.
-                  <span>Your website still shows the last published version.</span>
+                  {dirty
+                    ? 'Unsaved changes'
+                    : pubVersion
+                      ? 'Saved draft · not published'
+                      : 'Not published yet'}
+                  <span>
+                    {pubVersion
+                      ? 'Publish to update your website widgets.'
+                      : 'Publish your hours to activate your widgets.'}
+                  </span>
                 </div>
+              )}
+              {['overview', 'billing'].includes(tab) && (demo || detail?.trial) && (
+                <ProTrialCard
+                  key={selected || 'demo'}
+                  trial={demo ? demoTrial : detail!.trial}
+                  canClaim={demo || detail?.role === 'owner'}
+                  demo={demo}
+                  onClaim={claimTrial}
+                  onPlans={() => switchTab('billing')}
+                />
               )}
               {tab === 'overview' && (
                 <>
@@ -836,7 +1014,11 @@ export function Dashboard({
                         <span className="eyebrow">RIGHT NOW AT {draft.name.toUpperCase()}</span>
                         <span className="live-pill">
                           <span className="status-dot green" />
-                          Live schedule
+                          {!demo && !detail
+                            ? 'Loading status'
+                            : dirty || unpublished
+                              ? 'Draft preview'
+                              : 'Published schedule'}
                         </span>
                       </div>
                       <div className="status-main">
@@ -866,15 +1048,15 @@ export function Dashboard({
                       </div>
                     </section>
                     <section className="snapshot-card">
-                      <span className="eyebrow">LOOKING GOOD</span>
+                      <span className="eyebrow">WEBSITE WIDGETS</span>
                       <div className="snapshot-icon">
                         <CheckCircle2 size={25} />
                       </div>
-                      <h3>{pubVersion ? 'Your website is up to date.' : 'Ready when you are.'}</h3>
+                      <h3>{pubVersion ? 'Widgets published' : 'Not published yet'}</h3>
                       <p>
                         {pubVersion
-                          ? `Published revision ${pubVersion} is available to your widgets. Installation on your website has not been verified.`
-                          : 'Set your opening hours and publish your first update to bring your widgets to life.'}
+                          ? 'Published widgets are available. Check that they are installed on your website.'
+                          : 'Publish your hours, then install a widget on your website.'}
                       </p>
                       <button className="text-link" onClick={() => switchTab('widgets')}>
                         {pubVersion ? 'View your widgets' : 'Set up your widgets'}{' '}
@@ -884,8 +1066,7 @@ export function Dashboard({
                   </div>
                   <section className="quick-section">
                     <div className="section-heading">
-                      <h3>A quick change?</h3>
-                      <span>Big updates. Small effort.</span>
+                      <h3>Quick actions</h3>
                     </div>
                     <div className="quick-actions">
                       {[
@@ -907,8 +1088,9 @@ export function Dashboard({
                     <section className="card">
                       <div className="card-heading">
                         <div>
-                          <h3>Connected destinations</h3>
-                          <p>Keep every first impression in sync.</p>
+                          <h3>
+                            <Plug size={18} /> Publishing channels
+                          </h3>
                         </div>
                         <button className="text-link" onClick={() => switchTab('integrations')}>
                           Manage <ArrowUpRight size={14} />
@@ -954,8 +1136,7 @@ export function Dashboard({
                     <section className="card upcoming-card">
                       <div className="card-heading">
                         <div>
-                          <h3>On the horizon</h3>
-                          <p>A heads-up for the days ahead.</p>
+                          <h3>Upcoming special hours</h3>
                         </div>
                         <CalendarDays size={18} />
                       </div>
@@ -981,8 +1162,8 @@ export function Dashboard({
                       ) : (
                         <div className="empty-state small">
                           <CalendarDays size={28} />
-                          <h4>Nothing unusual ahead.</h4>
-                          <p>Your regular hours have it covered.</p>
+                          <h4>No upcoming special hours</h4>
+                          <p>Your regular schedule applies.</p>
                         </div>
                       )}
                       <button
@@ -990,7 +1171,7 @@ export function Dashboard({
                         onClick={() => setModal('Add special hours')}
                       >
                         <Plus size={16} />
-                        Add a special day
+                        Add special hours
                       </button>
                     </section>
                   </div>
@@ -1000,9 +1181,7 @@ export function Dashboard({
                         <Megaphone size={20} />
                       </span>
                       <div>
-                        <span className="eyebrow">
-                          ON YOUR WEBSITE · {dirty ? 'DRAFT PREVIEW' : 'CURRENT SCHEDULE'}
-                        </span>
+                        <span className="eyebrow">ANNOUNCEMENT PREVIEW</span>
                         <strong>{status.announcement.title || status.announcement.message}</strong>
                         <p>{status.announcement.message}</p>
                       </div>
@@ -1013,7 +1192,7 @@ export function Dashboard({
                   )}
                   <section className="card activity-preview">
                     <div className="card-heading">
-                      <h3>Recently in your workspace</h3>
+                      <h3>Recent activity</h3>
                       <button className="text-link" onClick={() => switchTab('activity')}>
                         View all activity <ArrowRight size={14} />
                       </button>
@@ -1030,13 +1209,10 @@ export function Dashboard({
                       ))
                     ) : (
                       <div className="empty-state small">
-                        <p>Your first update starts the story.</p>
+                        <p>No published updates yet.</p>
                       </div>
                     )}
                   </section>
-                  <div className="dashboard-signoff">
-                    <span className="brand-mini">o</span>One less thing on your mind.
-                  </div>
                 </>
               )}
               {tab === 'hours' && <WeeklyEditor draft={draft} onChange={setDraft} />}
@@ -1091,7 +1267,7 @@ export function Dashboard({
                   ) : (
                     <div className="empty-state">
                       <CalendarDays size={36} />
-                      <h3>A regular week, for now.</h3>
+                      <h3>No special hours</h3>
                       <p>Add a holiday closure or a one-off change.</p>
                     </div>
                   )}
@@ -1192,8 +1368,12 @@ export function Dashboard({
                 <div className="two-columns widget-config">
                   <div>
                     <section className="card padded">
-                      <h3>A perfect fit for your website.</h3>
-                      <p className="muted">One small snippet. Every published update.</p>
+                      <h3>
+                        Widget appearance <ProBadge />
+                      </h3>
+                      <p className="muted">
+                        Customise with Pro, or use the included Free defaults.
+                      </p>
                       <div className="segmented">
                         {(['hours', 'banner', 'status'] as WidgetType[]).map((t) => (
                           <button
@@ -1207,7 +1387,9 @@ export function Dashboard({
                       </div>
                       <div className="form-grid">
                         <label>
-                          Accent colour
+                          <span className="pro-field-label">
+                            Accent colour <ProBadge />
+                          </span>
                           <input
                             type="color"
                             value={draft.widget.accent}
@@ -1220,7 +1402,9 @@ export function Dashboard({
                           />
                         </label>
                         <label>
-                          Appearance
+                          <span className="pro-field-label">
+                            Appearance <ProBadge />
+                          </span>
                           <select
                             value={draft.widget.theme}
                             onChange={(e) =>
@@ -1238,7 +1422,9 @@ export function Dashboard({
                           </select>
                         </label>
                         <label>
-                          Typography
+                          <span className="pro-field-label">
+                            Typography <ProBadge />
+                          </span>
                           <select
                             value={draft.widget.font}
                             onChange={(e) =>
@@ -1256,7 +1442,9 @@ export function Dashboard({
                           </select>
                         </label>
                         <label>
-                          Corner radius
+                          <span className="pro-field-label">
+                            Corner radius <ProBadge />
+                          </span>
                           <input
                             type="range"
                             min={0}
@@ -1271,7 +1459,9 @@ export function Dashboard({
                           />
                         </label>
                         <label>
-                          Alignment
+                          <span className="pro-field-label">
+                            Alignment <ProBadge />
+                          </span>
                           <select
                             value={draft.widget.alignment}
                             onChange={(e) =>
@@ -1289,7 +1479,9 @@ export function Dashboard({
                           </select>
                         </label>
                         <label>
-                          Layout
+                          <span className="pro-field-label">
+                            Layout <ProBadge />
+                          </span>
                           <select
                             value={draft.widget.compact ? 'compact' : 'full'}
                             onChange={(e) =>
@@ -1315,8 +1507,18 @@ export function Dashboard({
                             })
                           }
                         />
-                        Show business name
+                        Show business name <ProBadge />
                       </label>
+                      <Button
+                        className="widget-reset"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || readonly}
+                        onClick={resetWidget}
+                      >
+                        <RotateCcw size={15} />
+                        Reset to Free defaults
+                      </Button>
                       {plan === 'free' && (
                         <p className="notice">
                           Custom branding requires Pro. All three standard widgets are included in
@@ -1407,10 +1609,12 @@ export function Dashboard({
                     <small>
                       Preview updates as you edit. Your live website updates when you publish.
                     </small>
-                    {demo && (
+                    {publishedSchedule && (
                       <details className="published-demo">
-                        <summary>View last published demo</summary>
-                        <Widget schedule={published} type={widgetType} now={now} />
+                        <summary>
+                          {demo ? 'View last published demo' : 'View published version'}
+                        </summary>
+                        <Widget schedule={publishedSchedule} type={widgetType} now={now} />
                       </details>
                     )}
                   </div>
@@ -1422,7 +1626,9 @@ export function Dashboard({
                     <section className="card padded">
                       <div className="section-heading">
                         <span className="google-g">G</span>
-                        <span className="pill">Pro</span>
+                        <span className="pill">
+                          <ProBadge /> Pro
+                        </span>
                       </div>
                       <h2>Google Business Profile</h2>
                       <p className="muted">
@@ -1608,6 +1814,7 @@ export function Dashboard({
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={busy}
                         onClick={() =>
                           act(async () => {
                             await refresh();
@@ -1623,12 +1830,14 @@ export function Dashboard({
                       detail.jobs.map((j) => (
                         <div className="list-row" key={j.id}>
                           <span
-                            className={`provider-icon ${j.status === 'failed' ? 'orange' : 'green'}`}
+                            className={`provider-icon ${['failed', 'retry'].includes(j.status) ? 'orange' : ['published', 'accepted'].includes(j.status) ? 'green' : 'blue'}`}
                           >
-                            {j.status === 'failed' ? (
+                            {['failed', 'retry'].includes(j.status) ? (
                               <AlertCircle size={18} />
-                            ) : (
+                            ) : ['published', 'accepted'].includes(j.status) ? (
                               <Check size={18} />
+                            ) : (
+                              <Clock size={18} />
                             )}
                           </span>
                           <div className="grow">
@@ -1640,7 +1849,17 @@ export function Dashboard({
                             <p>
                               {j.status === 'accepted'
                                 ? 'Request accepted. Public Google visibility not confirmed.'
-                                : j.status}
+                                : j.status === 'queued'
+                                  ? 'Waiting to send'
+                                  : j.status === 'retry'
+                                    ? 'Delivery delayed. Will retry automatically.'
+                                    : j.status === 'superseded'
+                                      ? 'Replaced by a newer update'
+                                      : j.status === 'failed'
+                                        ? 'Delivery failed'
+                                        : j.status === 'published'
+                                          ? 'Published'
+                                          : j.status}
                               {j.error ? ` · ${j.error}` : ''}
                             </p>
                             <small>
@@ -1763,7 +1982,9 @@ export function Dashboard({
                         className={`card price-card ${p.id === 'pro' ? 'featured' : ''}`}
                         key={p.id}
                       >
-                        <span className="eyebrow">{p.name}</span>
+                        <span className="eyebrow">
+                          {p.name} {p.id === 'pro' && <ProBadge />}
+                        </span>
                         <h2>
                           ${p.price}
                           <small>CAD / month</small>
@@ -1772,7 +1993,11 @@ export function Dashboard({
                         <ul>
                           {p.features.map((f) => (
                             <li key={f}>
-                              <Check size={15} />
+                              {p.id === 'pro' && f !== 'Everything in Free' ? (
+                                <ProBadge />
+                              ) : (
+                                <Check size={15} />
+                              )}
                               {f}
                             </li>
                           ))}
@@ -1784,7 +2009,11 @@ export function Dashboard({
                           }
                           onClick={() => billing(p.id)}
                         >
-                          {plan === p.id ? 'Manage plan' : `Choose ${p.name}`}
+                          {p.id === 'pro' && detail?.trial?.status === 'active'
+                            ? 'Keep Pro after trial'
+                            : plan === p.id
+                              ? 'Manage plan'
+                              : `Choose ${p.name}`}
                         </Button>
                       </div>
                     ))}
@@ -1844,7 +2073,7 @@ export function Dashboard({
                         Sign out
                       </Button>
                       <hr />
-                      <h4>Your data, always yours.</h4>
+                      <h4>Export your data</h4>
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -1889,7 +2118,7 @@ export function Dashboard({
                       )}
                     </section>
                     <section className="card padded">
-                      <h3>More places. One workspace.</h3>
+                      <h3>Locations & team</h3>
                       <p className="muted">
                         Add locations with independent hours and time zones. Requires Business.
                       </p>
@@ -1906,7 +2135,7 @@ export function Dashboard({
               )}
               {tab === 'help' && (
                 <section className="card padded help-card">
-                  <h2>Small steps. Everything in sync.</h2>
+                  <h2>Common questions</h2>
                   {[
                     [
                       'How do I update today’s hours?',
@@ -2017,7 +2246,7 @@ export function Dashboard({
               <div className="modal-icon">
                 <Send size={24} />
               </div>
-              <h2>Ready to share the update?</h2>
+              <h2>Publish changes?</h2>
               <p className="muted">
                 Publish a new version of {draft.name}’s hours and announcements.
               </p>
@@ -2055,13 +2284,27 @@ export function Dashboard({
                 )}
               </div>
               {error && (
-                <p className="form-error" role="alert">
+                <div className="form-error publish-error" role="alert">
                   {error}
-                </p>
+                  {widgetPlanError && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || readonly}
+                      onClick={resetWidget}
+                    >
+                      <RotateCcw size={15} />
+                      Reset to Free defaults
+                    </Button>
+                  )}
+                </div>
               )}
               <div className="modal-actions">
                 <Button variant="outline" disabled={busy} onClick={() => setModal('')}>
                   Keep editing
+                </Button>
+                <Button variant="outline" disabled={busy || readonly} onClick={publishLater}>
+                  Publish later
                 </Button>
                 <Button disabled={busy} onClick={publish}>
                   {busy ? 'Publishing…' : 'Publish changes'}
@@ -2093,7 +2336,7 @@ export function Dashboard({
                 });
               }}
             >
-              <h2>A new place to call yours.</h2>
+              <h2>Add a location</h2>
               <label>
                 Business name
                 <input name="name" required maxLength={100} />
@@ -2127,7 +2370,7 @@ export function Dashboard({
                 });
               }}
             >
-              <h2>A helping hand.</h2>
+              <h2>Add a staff member</h2>
               <p className="muted">
                 The staff member must first sign up and verify their email. Business owners can
                 grant access here.

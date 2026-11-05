@@ -4,6 +4,7 @@ import { db } from '@/db';
 import * as t from '@/db/schema';
 import { requireUser } from './supabase';
 import type { Plan } from './domain';
+import type { ProTrial } from './trial';
 import { bearerToken } from './mobile-auth';
 export const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 export const googleConfigured = () =>
@@ -41,15 +42,33 @@ export async function planFor(
   org: string,
   executor: Pick<ReturnType<typeof db>, 'select'> = db(),
 ): Promise<Plan> {
+  return (await entitlementsFor(org, executor)).plan;
+}
+export async function entitlementsFor(
+  org: string,
+  executor: Pick<ReturnType<typeof db>, 'select'> = db(),
+): Promise<{ plan: Plan; trial: ProTrial }> {
   if (process.env.NODE_ENV !== 'production' && process.env.DEV_PAID_FEATURES === 'true')
-    return 'business';
+    return { plan: 'business', trial: { status: 'unavailable', endsAt: null } };
   const [s] = await executor
     .select()
     .from(t.subscriptions)
     .where(eq(t.subscriptions.organizationId, org));
-  return s && ['active', 'trialing'].includes(s.status) && ['pro', 'business'].includes(s.plan)
-    ? (s.plan as Plan)
-    : 'free';
+  if (s && ['active', 'trialing'].includes(s.status) && ['pro', 'business'].includes(s.plan))
+    return { plan: s.plan as Plan, trial: { status: 'unavailable', endsAt: null } };
+  const [trial] = await executor
+    .select({ endsAt: t.proTrials.endsAt, active: sql<boolean>`${t.proTrials.endsAt} > now()` })
+    .from(t.proTrials)
+    .where(eq(t.proTrials.organizationId, org));
+  if (trial)
+    return {
+      plan: trial.active ? 'pro' : 'free',
+      trial: { status: trial.active ? 'active' : 'expired', endsAt: trial.endsAt.toISOString() },
+    };
+  return {
+    plan: 'free',
+    trial: { status: s?.subscriptionId ? 'unavailable' : 'available', endsAt: null },
+  };
 }
 export async function dashboardData() {
   const user = await requireUser();
@@ -68,7 +87,7 @@ export async function dashboardData() {
 }
 export async function detail(id: string) {
   const { location, role } = await locationAccess(id);
-  const [history, destinations, connection, notes, plan] = await Promise.all([
+  const [history, destinations, connection, notes, plan, publication] = await Promise.all([
     db()
       .select()
       .from(t.activity)
@@ -91,16 +110,25 @@ export async function detail(id: string) {
       .where(eq(t.notifications.organizationId, location.organizationId))
       .orderBy(desc(t.notifications.createdAt))
       .limit(20),
-    planFor(location.organizationId),
+    entitlementsFor(location.organizationId),
+    db()
+      .select({ snapshot: t.revisions.snapshot })
+      .from(t.revisions)
+      .where(
+        and(eq(t.revisions.locationId, id), eq(t.revisions.version, location.publishedVersion)),
+      )
+      .limit(1),
   ]);
   return {
     location,
+    published: publication[0]?.snapshot ?? null,
     role,
     history,
     jobs: destinations,
     connection: connection[0] || null,
     notifications: notes,
-    plan,
+    plan: plan.plan,
+    trial: plan.trial,
     googleConfigured: googleConfigured(),
     billingConfigured: billingConfigured(),
   };

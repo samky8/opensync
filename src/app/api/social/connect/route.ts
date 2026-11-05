@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { lt } from 'drizzle-orm';
 import { db } from '@/db';
 import { socialOauth } from '@/db/schema';
-import { assertMeta, metaRedirect, metaScopes, metaVersion, stateHash } from '@/lib/meta';
+import { assertMeta, stateHash } from '@/lib/meta';
+import { metaAuthorizationUrl } from '@/lib/meta-config';
 import { apiError, checkOrigin, locationAccess, rateLimit } from '@/lib/server';
 export async function POST(req: Request) {
   try {
@@ -30,16 +31,7 @@ export async function POST(req: Request) {
       path: '/api/social',
       maxAge: 600,
     });
-    const url = new URL(`https://www.facebook.com/${metaVersion()}/dialog/oauth`);
-    url.search = new URLSearchParams({
-      client_id: process.env.META_APP_ID!,
-      redirect_uri: metaRedirect(),
-      response_type: 'code',
-      scope: metaScopes.join(','),
-      auth_type: 'rerequest',
-      state,
-    }).toString();
-    return Response.json({ url: url.toString() });
+    return Response.json({ url: metaAuthorizationUrl(state) });
   } catch (error) {
     return apiError(error);
   }

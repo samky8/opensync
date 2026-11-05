@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "meta:check": "tsx scripts/meta-check.ts",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
