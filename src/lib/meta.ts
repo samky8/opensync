@@ -77,13 +77,13 @@ export async function exchangeMeta(code: string) {
     'oauth/access_token',
     '',
     { ...credentials, redirect_uri: metaRedirect(), code },
-    'GET',
+    'POST',
   );
   return graph<{ access_token: string }>(
     'oauth/access_token',
     '',
     { ...credentials, grant_type: 'fb_exchange_token', fb_exchange_token: short.access_token },
-    'GET',
+    'POST',
   );
 }
 type Page = {

@@ -206,15 +206,27 @@ describe('direct publishing with real PostgreSQL state and mocked Meta', () => {
     await pg.query("update memberships set role='owner' where user_id=$1", [shared.user]);
     expect(shared.graph).not.toHaveBeenCalled();
   });
-  it('rejects corrupt images and non-Business Instagram stories', async () => {
-    expect((await post({ ...payload(), image: 'data:image/jpeg;base64,YWJj' })).status).toBe(400);
-    await pg.query("update social_accounts set instagram_type='MEDIA_CREATOR' where id=$1", [
-      accountId,
-    ]);
-    expect((await post(payload('Instagram', 'story'))).status).toBe(400);
-    await pg.query("update social_accounts set instagram_type='BUSINESS' where id=$1", [accountId]);
-    expect(shared.graph).not.toHaveBeenCalled();
-  });
+  it('rejects corrupt images and Creator Instagram stories', async () => {
+  expect(
+    (await post({ ...payload(), image: 'data:image/jpeg;base64,YWJj' })).status
+  ).toBe(400);
+
+  await pg.query(
+    "update social_accounts set instagram_type='MEDIA_CREATOR' where id=$1",
+    [accountId]
+  );
+
+  expect(
+    (await post(payload('Instagram', 'story'))).status
+  ).toBe(400);
+
+  await pg.query(
+    "update social_accounts set instagram_type='BUSINESS' where id=$1",
+    [accountId]
+  );
+
+  expect(shared.graph).not.toHaveBeenCalled();
+});
   it('serves only valid unexpired image capabilities', async () => {
     const result = await pg.query<{ media_key: string; id: string }>(
       'select media_key,id from social_publications limit 1',
