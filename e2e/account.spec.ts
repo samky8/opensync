@@ -20,7 +20,9 @@ test('verified account creates a location, publishes hours and exposes its publi
   await page.getByRole('button', { name: 'Review & publish' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Publish changes' }).click();
   await expect(page.getByRole('status')).toContainText('Published');
-  const id = await page.locator('select[aria-label="Switch business location"]').inputValue();
+  const id = await page
+    .locator('[data-profile-id][aria-current="true"]')
+    .getAttribute('data-profile-id');
   await page.goto(`/embed/${id}`);
   await expect(page.getByRole('region')).toContainText('Integration Café');
 });

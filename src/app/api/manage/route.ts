@@ -58,14 +58,13 @@ export async function POST(req: Request) {
           await tx.execute(sql`select id from organizations where id=${org} for update`);
           if (!['owner', 'admin'].includes(member.role))
             throw new Error('Only an owner or admin can add locations');
-          if ((await planFor(org, tx)) !== 'business')
-            throw new Error('Multiple locations requires Business');
+          if ((await planFor(org, tx)) === 'free') throw new Error('Multiple profiles require Pro');
           const count = await tx
             .select()
             .from(t.locations)
             .where(eq(t.locations.organizationId, org));
           if (count.length >= Number(process.env.BUSINESS_LOCATION_LIMIT || 10))
-            throw new Error('Business location limit reached');
+            throw new Error('Profile limit reached');
         } else {
           const [o] = await tx.insert(t.organizations).values({ name }).returning();
           org = o.id;
@@ -110,8 +109,7 @@ export async function POST(req: Request) {
     if (op === 'delete') {
       if (body.confirmation !== 'DELETE') throw new Error('Type DELETE for confirmation');
       const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!secretKey)
-        throw new Error('Account deletion setup required');
+      if (!secretKey) throw new Error('Account deletion setup required');
       const owned = await db()
         .select()
         .from(t.memberships)
@@ -144,11 +142,9 @@ export async function POST(req: Request) {
         for (const l of locs) await googleDisconnect(l.id);
       }
       const { createClient } = await import('@supabase/supabase-js');
-      const admin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        secretKey,
-        { auth: { persistSession: false } },
-      );
+      const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, secretKey, {
+        auth: { persistSession: false },
+      });
       const { error } = await admin.auth.admin.deleteUser(user.id);
       if (error) throw new Error('Account deletion failed. Please contact support');
       // The auth.users deletion trigger atomically removes owned organizations and personal records.

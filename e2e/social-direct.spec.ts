@@ -89,7 +89,7 @@ test('direct publishing captures the preview and posts only after confirmation',
           accountName: 'testcafe',
           platform: 'Instagram',
           format: 'post',
-          status: body.op === 'continue' ? 'published' : 'ready',
+          status: body.op === 'continue' && requests.length >= 3 ? 'published' : 'ready',
           remoteId: body.op === 'continue' ? 'remote-123' : null,
           error: null,
           createdAt: new Date().toISOString(),
@@ -98,6 +98,7 @@ test('direct publishing captures the preview and posts only after confirmation',
     });
   });
   await page.goto('/demo');
+  await page.clock.install();
   await page.evaluate(() => {
     document.body.innerHTML =
       '<main class="card padded" style="max-width:650px;margin:24px auto" id="social-test"></main>';
@@ -107,7 +108,7 @@ test('direct publishing captures the preview and posts only after confirmation',
     .getByRole('combobox', { name: 'Publish destination' })
     .selectOption('22222222-2222-4222-8222-222222222222');
   await page.getByRole('button', { name: 'Review & publish', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Confirm social publication' })).toContainText(
+  await expect(page.getByRole('dialog', { name: 'Confirm social publication' })).toContainText(
     'testcafe on Instagram',
   );
   expect(requests).toHaveLength(0);
@@ -118,14 +119,24 @@ test('direct publishing captures the preview and posts only after confirmation',
     path: `test-results/social-confirm-${info.project.name}.png`,
     fullPage: true,
   });
-  await page.getByRole('button', { name: 'Publish now', exact: true }).click();
-  await expect(page.getByText('Provider ID: remote-123')).toBeVisible();
-  expect(requests).toHaveLength(2);
+  await page.getByRole('button', { name: 'Confirm publish', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Publishing...', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue publishing', exact: true })).toHaveCount(
+    0,
+  );
+  await expect.poll(() => requests.length).toBe(2);
+  await page.clock.runFor(61000);
+  await expect(page.getByText('Published', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recent publications' })).toHaveCount(0);
+  expect(requests).toHaveLength(3);
   expect(requests[0]).toMatchObject({
     platform: 'Instagram',
     format: 'post',
     caption: 'Holiday hours: Friday 9–2',
   });
   expect(requests[1]).toMatchObject({ op: 'continue', publicationId: 'publication' });
+  await expect(page.locator('.social-publish-success')).toBeVisible();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

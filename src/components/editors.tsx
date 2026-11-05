@@ -13,6 +13,7 @@ import {
 } from '@/lib/domain';
 import { Button } from './ui/button';
 import { ProBadge } from './ui/pro-badge';
+import { LogoUpload } from './logo-upload';
 export function Periods({
   value,
   onChange,
@@ -67,16 +68,29 @@ export function Periods({
 export function WeeklyEditor({
   draft,
   onChange,
+  onSpecialHours,
 }: {
   draft: Schedule;
   onChange: (s: Schedule) => void;
+  onSpecialHours?: () => void;
 }) {
   return (
-    <div className="card">
+    <div className="card weekly-editor">
       <div className="card-heading">
         <div>
           <h3>Regular opening hours</h3>
-          <p>Your usual week. Special hours take priority.</p>
+          <p>
+            Core opening hours repeat every week.{' '}
+            {onSpecialHours ? (
+              <button type="button" className="text-link" onClick={onSpecialHours}>
+                Special hours
+              </button>
+            ) : (
+              'Special hours'
+            )}{' '}
+            override them for holidays, closures, or other one-off dates. Your core hours resume
+            automatically afterward.
+          </p>
         </div>
         <Clock size={20} />
       </div>
@@ -144,12 +158,14 @@ export function WeeklyEditor({
 export function BusinessFields({
   draft,
   onChange,
+  disabled = false,
 }: {
+  disabled?: boolean;
   draft: Schedule;
   onChange: (s: Schedule) => void;
 }) {
   return (
-    <div className="form-grid">
+    <fieldset className="form-grid business-fields" disabled={disabled}>
       <label>
         Business name
         <input
@@ -224,16 +240,12 @@ export function BusinessFields({
           onChange={(e) => onChange({ ...draft, website: e.target.value })}
         />
       </label>
-      <label>
-        Logo URL <span>optional</span>
-        <input
-          type="url"
-          placeholder="https://…/logo.png"
-          value={draft.logo}
-          onChange={(e) => onChange({ ...draft, logo: e.target.value })}
-        />
-      </label>
-    </div>
+      <LogoUpload
+        value={draft.logo}
+        onChange={(logo) => onChange({ ...draft, logo })}
+        disabled={disabled}
+      />
+    </fieldset>
   );
 }
 export function ExceptionForm({

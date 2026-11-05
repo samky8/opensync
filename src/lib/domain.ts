@@ -24,7 +24,16 @@ export const scheduleSchema = z
     category: z.string().max(80),
     website: safeUrl,
     address: z.string().max(300),
-    logo: safeUrl,
+    logo: z.union([
+      safeUrl,
+      z
+        .string()
+        .max(400000)
+        .regex(
+          /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/,
+          'Choose a valid PNG logo',
+        ),
+    ]),
     timezone: z.string().refine((s) => {
       try {
         Temporal.Now.zonedDateTimeISO(s);

@@ -1,5 +1,23 @@
 import { test, expect } from '@playwright/test';
 
+test('profile dropdown keeps creation below profiles and dismisses with Escape', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/demo');
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: 'Switch business location' }).click();
+  const popup = page.locator('.profile-dropdown');
+  await expect(popup).toBeVisible();
+  const create = popup.getByRole('link', { name: 'Create new profile' });
+  await expect(create).toHaveAttribute('href', '/signup');
+  const list = await popup.locator('.profile-list').boundingBox();
+  const footer = await create.boundingBox();
+  expect(footer!.y).toBeGreaterThanOrEqual(list!.y + list!.height);
+  await page.keyboard.press('Escape');
+  await expect(popup).toBeHidden();
+});
+
 test('sidebar collapses, keeps navigation usable, and remembers the preference', async ({
   page,
 }, testInfo) => {

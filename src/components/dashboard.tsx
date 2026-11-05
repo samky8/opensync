@@ -40,9 +40,11 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { ProfileMenu } from './profile-menu';
 import { ProBadge } from './ui/pro-badge';
 import { Widget, type WidgetType } from './widget';
 import { SocialComposer } from './social-composer';
+import { PublishDestinations } from './publish-destinations';
 import { ProTrialCard } from './pro-trial';
 import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
@@ -106,7 +108,8 @@ const titles: Record<string, [string, string]> = {
   social: ['Social studio', 'Create posts and stories for Instagram and Facebook.'],
   integrations: ['Connections', 'Manage your publishing channels.'],
   activity: ['Activity', 'Check published updates and sync results.'],
-  settings: ['Settings', 'Manage your business and account.'],
+  settings: ['Business settings', 'Manage the selected business profile and team.'],
+  account: ['Account settings', 'Manage your account and personal data.'],
   billing: ['Plans & billing', 'Manage your plan and subscription.'],
   notifications: ['Notifications', 'Updates that need your attention.'],
   help: ['Help', 'Find answers or contact support.'],
@@ -146,11 +149,13 @@ function Modal({ children, onClose }: { children: ReactNode; onClose: () => void
 }
 export function Dashboard({
   demo = false,
+  sourceLocationId,
   initialLocations = emptyLocations,
   email = '',
   now: initialNow,
 }: {
   demo?: boolean;
+  sourceLocationId?: string;
   initialLocations?: Location[];
   email?: string;
   now: string;
@@ -401,6 +406,9 @@ export function Dashboard({
       step: nextStep,
     });
     setSaved(d);
+    setLocations((current) =>
+      current.map((location) => (location.id === selected ? resultSave.location : location)),
+    );
     setVersion(resultSave.location.draftVersion);
     setStep(nextStep);
     return resultSave.location.draftVersion as number;
@@ -580,37 +588,38 @@ export function Dashboard({
         >
           <X size={20} />
         </button>
-        <div className="workspace-selector" title={draft.name}>
-          <div className="business-avatar">{draft.name.charAt(0)}</div>
-          <div>
-            <strong>{draft.name}</strong>
-            <span>{demo ? 'Example business' : 'Your workspace'}</span>
-          </div>
-          <ChevronsUpDown size={14} />
-          {!demo && (
-            <select
-              aria-label="Switch business location"
-              disabled={busy}
-              value={selected}
-              onChange={(e) => {
-                if (!dirty || confirm('Discard unsaved changes and switch location?'))
-                  setSelected(e.target.value);
-              }}
-            >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.draft.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+        <ProfileMenu
+          name={draft.name}
+          logo={draft.logo}
+          locations={locations}
+          selected={selected}
+          paid={plan !== 'free'}
+          disabled={busy}
+          canCreate={demo || detail?.role === 'owner' || detail?.role === 'admin'}
+          demo={demo}
+          onSelect={(id) => {
+            if (
+              id !== selected &&
+              (!dirty || confirm('Discard unsaved changes and switch location?'))
+            ) {
+              setDetail(null);
+              const next = locations.find((location) => location.id === id);
+              if (next) {
+                setDraft(next.draft);
+                setSaved(next.draft);
+              }
+              setSelected(id);
+            }
+          }}
+          onCreate={() => !dirty || confirm('Discard unsaved changes and create a new profile?')}
+        />
         {[
-          { label: 'Publishing', items: navigation.slice(0, 4) },
+          { label: 'Overview', items: navigation.slice(0, 1), hideLabel: true },
+          { label: 'Publishing', items: navigation.slice(1, 4) },
           { label: 'Connections & setup', items: navigation.slice(4) },
         ].map((group) => (
           <div className="nav-group" key={group.label}>
-            <div className="nav-label">{group.label}</div>
+            {!group.hideLabel && <div className="nav-label">{group.label}</div>}
             <nav aria-label={group.label}>
               {group.items.map((item) => (
                 <button
@@ -665,7 +674,7 @@ export function Dashboard({
             aria-label="Account settings"
             title="Account settings"
             className="account-button"
-            onClick={() => switchTab('settings')}
+            onClick={() => switchTab('account')}
           >
             <div className="account-avatar">
               {demo ? 'JD' : (email || 'You').slice(0, 2).toUpperCase()}
@@ -719,7 +728,7 @@ export function Dashboard({
             </button>
             <button
               className="mini-avatar"
-              onClick={() => switchTab('settings')}
+              onClick={() => switchTab('account')}
               aria-label="Account settings"
             >
               {demo ? 'JD' : (email || 'Y').slice(0, 1).toUpperCase()}
@@ -805,7 +814,12 @@ export function Dashboard({
                 ) : step === 2 ? (
                   <div className="card padded">
                     <h2>Tell us about your business.</h2>
-                    <BusinessFields draft={draft} onChange={setDraft} />
+                    <BusinessFields
+                      key={selected}
+                      draft={draft}
+                      onChange={setDraft}
+                      disabled={busy || readonly}
+                    />
                     <div className="modal-actions">
                       <Button
                         disabled={busy}
@@ -814,6 +828,7 @@ export function Dashboard({
                             if (!selected) {
                               const created = await request('/api/manage', {
                                 op: 'create',
+                                sourceLocationId,
                                 name: draft.name,
                                 timezone: draft.timezone,
                               });
@@ -1215,7 +1230,13 @@ export function Dashboard({
                   </section>
                 </>
               )}
-              {tab === 'hours' && <WeeklyEditor draft={draft} onChange={setDraft} />}
+              {tab === 'hours' && (
+                <WeeklyEditor
+                  draft={draft}
+                  onChange={setDraft}
+                  onSpecialHours={() => switchTab('special')}
+                />
+              )}
               {tab === 'special' && (
                 <section className="card">
                   <div className="card-heading">
@@ -1799,6 +1820,7 @@ export function Dashboard({
               )}
               {tab === 'social' && (
                 <SocialComposer
+                  paid={plan !== 'free'}
                   key={selected || 'demo'}
                   schedule={draft}
                   locationId={demo ? 'demo' : selected}
@@ -2033,7 +2055,12 @@ export function Dashboard({
                 <div className="settings-grid">
                   <section className="card padded">
                     <h3>Business profile</h3>
-                    <BusinessFields draft={draft} onChange={setDraft} />
+                    <BusinessFields
+                      key={selected}
+                      draft={draft}
+                      onChange={setDraft}
+                      disabled={busy || readonly}
+                    />
                     <div className="modal-actions">
                       <Button
                         disabled={busy || readonly}
@@ -2048,90 +2075,89 @@ export function Dashboard({
                       </Button>
                     </div>
                   </section>
-                  <div>
-                    <section className="card padded">
-                      <h3>Your account</h3>
-                      <p className="muted">{demo ? 'Jamie Davis · Demo account' : email}</p>
-                      <Button variant="outline" onClick={() => switchTab('billing')}>
-                        Manage {planLabel} plan <ArrowUpRight size={15} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          if (demo) {
-                            router.push('/login');
-                            return;
-                          }
-                          void act(async () => {
-                            await request('/auth', { op: 'logout' });
-                            router.push('/login');
-                            router.refresh();
-                          });
-                        }}
-                      >
-                        <LogOut size={15} />
-                        Sign out
-                      </Button>
-                      <hr />
-                      <h4>Export your data</h4>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (demo) {
-                            const a = document.createElement('a');
-                            a.href = URL.createObjectURL(
-                              new Blob(
-                                [JSON.stringify({ demo: true, draft, published }, null, 2)],
-                                { type: 'application/json' },
-                              ),
-                            );
-                            a.download = 'opensync-demo.json';
-                            a.click();
-                            URL.revokeObjectURL(a.href);
-                          } else {
-                            const a = document.createElement('a');
-                            a.href = '/api/export';
-                            a.download = 'opensync-export.json';
-                            a.click();
-                          }
-                        }}
-                      >
-                        <ArrowDownToLine size={15} />
-                        Export data
-                      </Button>
-                      {demo ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm('Reset this browser’s demo changes?')) {
-                              localStorage.removeItem('opensync-demo-v1');
-                              window.location.reload();
-                            }
-                          }}
-                        >
-                          Reset demo
-                        </Button>
-                      ) : (
-                        <Button variant="destructive" onClick={() => setModal('delete')}>
-                          Delete account
-                        </Button>
-                      )}
-                    </section>
-                    <section className="card padded">
-                      <h3>Locations & team</h3>
-                      <p className="muted">
-                        Add locations with independent hours and time zones. Requires Business.
-                      </p>
-                      <Button variant="outline" onClick={() => setModal('location')}>
-                        <Plus size={15} />
-                        Add a location
-                      </Button>
-                      <Button variant="ghost" onClick={() => setModal('team')}>
-                        Add a staff member
-                      </Button>
-                    </section>
-                  </div>
+                  <section className="card padded">
+                    <h3>Locations & team</h3>
+                    <p className="muted">
+                      Add locations with independent hours and time zones. Requires Pro.
+                    </p>
+                    <Button variant="outline" onClick={() => setModal('location')}>
+                      <Plus size={15} />
+                      Add a location
+                    </Button>
+                    <Button variant="ghost" onClick={() => setModal('team')}>
+                      Add a staff member
+                    </Button>
+                  </section>
                 </div>
+              )}
+              {tab === 'account' && (
+                <section className="card padded">
+                  <h3>Your account</h3>
+                  <p className="muted">{demo ? 'Jamie Davis · Demo account' : email}</p>
+                  <Button variant="outline" onClick={() => switchTab('billing')}>
+                    Manage {planLabel} plan <ArrowUpRight size={15} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      if (demo) {
+                        router.push('/login');
+                        return;
+                      }
+                      void act(async () => {
+                        await request('/auth', { op: 'logout' });
+                        router.push('/login');
+                        router.refresh();
+                      });
+                    }}
+                  >
+                    <LogOut size={15} />
+                    Log out
+                  </Button>
+                  <hr />
+                  <h4>Export your data</h4>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (demo) {
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(
+                          new Blob([JSON.stringify({ demo: true, draft, published }, null, 2)], {
+                            type: 'application/json',
+                          }),
+                        );
+                        a.download = 'opensync-demo.json';
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      } else {
+                        const a = document.createElement('a');
+                        a.href = '/api/export';
+                        a.download = 'opensync-export.json';
+                        a.click();
+                      }
+                    }}
+                  >
+                    <ArrowDownToLine size={15} />
+                    Export data
+                  </Button>
+                  {demo ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm('Reset this browser’s demo changes?')) {
+                          localStorage.removeItem('opensync-demo-v1');
+                          window.location.reload();
+                        }
+                      }}
+                    >
+                      Reset demo
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={() => setModal('delete')}>
+                      Delete account
+                    </Button>
+                  )}
+                </section>
               )}
               {tab === 'help' && (
                 <section className="card padded help-card">
@@ -2155,7 +2181,7 @@ export function Dashboard({
                     ],
                     [
                       'Can I leave the service?',
-                      'Yes. Export your data in Settings at any time. Cancel a paid subscription through the billing portal before deleting your account.',
+                      'Yes. Export your data in Account settings at any time. Cancel a paid subscription through the billing portal before deleting your account.',
                     ],
                   ].map(([q, a]) => (
                     <details key={q}>
@@ -2267,22 +2293,20 @@ export function Dashboard({
                   <strong>{draft.announcements.filter((a) => a.enabled).length}</strong>
                 </div>
               </div>
-              <div className="notice subtle">
-                <strong>Where this update will go</strong>
-                <p>
-                  {demo
-                    ? 'This browser’s demo widget preview only. No external services will be contacted.'
-                    : 'Website hours widget, announcement banner, and status badge.'}
-                </p>
-                {!demo && detail?.connection?.status === 'connected' && plan !== 'free' ? (
-                  <small>
-                    Google regular and special hours will be queued. Announcements stay on your
-                    website. Google visibility is not immediate.
-                  </small>
-                ) : (
-                  <small>Google is not included in this publication.</small>
-                )}
-              </div>
+              <PublishDestinations
+                paid={plan !== 'free'}
+                key={selected || 'demo'}
+                schedule={draft}
+                locationId={demo ? 'demo' : selected}
+                demo={demo}
+                readonly={readonly || busy}
+                google={
+                  !demo &&
+                  detail?.connection?.status === 'connected' &&
+                  !!detail.connection.remoteId &&
+                  plan !== 'free'
+                }
+              />
               {error && (
                 <div className="form-error publish-error" role="alert">
                   {error}
@@ -2319,7 +2343,7 @@ export function Dashboard({
                 const data = new FormData(e.currentTarget);
                 void act(async () => {
                   if (demo) {
-                    notify('Multiple real locations are available on Business.');
+                    notify('Multiple real locations are available on Pro.');
                     setModal('');
                     return;
                   }

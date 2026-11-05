@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { Check, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 
 type Account = {
@@ -72,6 +73,19 @@ export function SocialPublishing({
   const [error, setError] = useState('');
   const [review, setReview] = useState<Snapshot | null>(null);
   const [active, setActive] = useState<Publication | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const reviewing = !!review;
+  const pending =
+    confirmed &&
+    !error &&
+    !timedOut &&
+    (!active || ['ready', 'preparing', 'checking', 'publishing'].includes(active.status));
+  useEffect(() => {
+    if (reviewing) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [reviewing]);
   const polls = useRef(0);
   const inFlight = useRef(false);
   const accounts = (status?.accounts || []).filter(
@@ -145,15 +159,28 @@ export function SocialPublishing({
     }
   }
   useEffect(() => {
-    if (!active || active.status !== 'ready' || polls.current >= 5 || error) return;
+    if (
+      !confirmed ||
+      !active ||
+      !['ready', 'preparing', 'checking', 'publishing'].includes(active.status) ||
+      error ||
+      busy ||
+      timedOut
+    )
+      return;
     const timer = setTimeout(() => {
+      if (polls.current >= 5) {
+        setTimedOut(true);
+        return;
+      }
       polls.current++;
-      void advance(active.id);
+      if (active.status === 'ready') void advance(active.id);
+      else void refresh();
     }, 60000);
     return () => clearTimeout(timer);
     // A pending request stays tied to its captured publication, not edited composer content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, error]);
+  }, [active, error, busy, confirmed, timedOut]);
 
   async function publish() {
     if (!review || inFlight.current) return;
@@ -161,11 +188,12 @@ export function SocialPublishing({
     setBusy(true);
     setError('');
     polls.current = 0;
+    setConfirmed(true);
+    setTimedOut(false);
     let next: Publication | null = null;
     try {
       next = (await api('/api/social/publish', review)).publication;
       record(next!);
-      setReview(null);
     } catch (e) {
       setError(
         e instanceof Error
@@ -182,7 +210,7 @@ export function SocialPublishing({
   return (
     <section className="social-direct">
       <div className="section-heading">
-        <h3>Publish to your account</h3>
+        <h3>Publish to {platform}</h3>
         <span className="pill">Direct publishing</span>
       </div>
       {demo ? (
@@ -259,6 +287,9 @@ export function SocialPublishing({
                 onClick={() => {
                   if (!account) return;
                   try {
+                    setConfirmed(false);
+                    setTimedOut(false);
+                    setActive(null);
                     setReview({
                       id: locationId,
                       requestId: crypto.randomUUID(),
@@ -310,88 +341,110 @@ export function SocialPublishing({
             </>
           )}
           {review && (
-            <div
-              role="region"
+            <dialog
+              ref={dialog}
               aria-label="Confirm social publication"
-              className="notice social-review"
+              className="social-publish-dialog"
+              onCancel={(event) => {
+                if (pending || busy) event.preventDefault();
+                else setReview(null);
+              }}
             >
-              <h4>
-                Publish {review.format} to {review.accountName} on {review.platform}?
-              </h4>
-              <Image
-                unoptimized
-                src={review.image}
-                width={180}
-                height={review.format === 'story' ? 320 : 180}
-                alt="Exact image to publish"
-              />
-              {review.format === 'post' ? (
-                <p className="social-caption">{review.caption}</p>
-              ) : (
-                <p>The announcement is on the image. Stories do not include a separate caption.</p>
-              )}
-              <p>
-                This publishes now to the selected account. It does not update your website or other
-                social accounts.
-              </p>
-              {status?.publications.some((p) => p.status === 'unknown') && (
-                <p>
-                  There is an earlier unconfirmed publication. Check the account for duplicates
-                  before continuing.
-                </p>
-              )}
-              <div className="social-actions">
-                <Button disabled={busy} onClick={publish}>
-                  {busy ? 'Publishing…' : 'Publish now'}
-                </Button>
-                <Button variant="outline" disabled={busy} onClick={() => setReview(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-          {active?.status === 'ready' && (
-            <p role="status">
-              Meta is preparing your image. We check once a minute for up to five minutes while this
-              screen stays open. You can also continue from the history below.
-            </p>
-          )}
-          {!!status?.publications.length && (
-            <div className="social-history">
-              <h4>Recent publications</h4>
-              {status.publications.map((item) => (
-                <div key={item.id} className="notice subtle">
-                  <strong>
-                    {item.platform} {item.format} · {item.accountName}
-                  </strong>
-                  <p>
-                    {item.status === 'published'
-                      ? 'Published'
-                      : item.status === 'ready'
-                        ? 'Waiting for Meta / ready to continue'
-                        : item.status === 'unknown'
-                          ? 'Outcome unconfirmed — check your account'
-                          : item.status}
-                  </p>
-                  {item.remoteId && <small>Provider ID: {item.remoteId}</small>}
-                  {item.error && <p>{item.error}</p>}
-                  {item.status === 'ready' && (
-                    <Button
-                      variant="outline"
-                      disabled={busy || disabled}
-                      onClick={() => advance(item.id)}
-                    >
-                      Continue publishing
-                    </Button>
+              {confirmed ? (
+                <div className="social-publish-result" role="status" aria-live="polite">
+                  {active?.status === 'published' ? (
+                    <>
+                      <span className="social-publish-success">
+                        <Check size={40} aria-hidden="true" />
+                      </span>
+                      <h3>Published</h3>
+                      <p>
+                        Your {review.format} is live on {review.platform} for {review.accountName}.
+                      </p>
+                      <Button onClick={() => setReview(null)}>Done</Button>
+                    </>
+                  ) : pending ? (
+                    <>
+                      <Loader2 className="social-publish-spinner" size={44} aria-hidden="true" />
+                      <h3>Publishing...</h3>
+                      <p>
+                        We are preparing and publishing your {review.format} to {review.platform}.
+                        Keep this window open.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3>
+                        {active?.status === 'failed'
+                          ? 'Publishing failed'
+                          : 'Publication not confirmed yet'}
+                      </h3>
+                      <p>
+                        {error ||
+                          active?.error ||
+                          'Check your account before trying again. You can follow the publication in Activity.'}
+                      </p>
+                      <Button
+                        variant="outline"
+                        disabled={busy}
+                        onClick={async () => {
+                          setError('');
+                          polls.current = 0;
+                          setTimedOut(false);
+                          await refresh();
+                        }}
+                      >
+                        Refresh status
+                      </Button>
+                      <Button onClick={() => setReview(null)}>Close</Button>
+                    </>
                   )}
                 </div>
-              ))}
-            </div>
+              ) : (
+                <>
+                  <h4>
+                    Publish {review.format} to {review.accountName} on {review.platform}?
+                  </h4>
+                  <Image
+                    unoptimized
+                    src={review.image}
+                    width={180}
+                    height={review.format === 'story' ? 320 : 180}
+                    alt="Exact image to publish"
+                  />
+                  {review.format === 'post' ? (
+                    <p className="social-caption">{review.caption}</p>
+                  ) : (
+                    <p>
+                      The announcement is on the image. Stories do not include a separate caption.
+                    </p>
+                  )}
+                  <p>
+                    This publishes now to the selected account. It does not update your website or
+                    other social accounts.
+                  </p>
+                  {status?.publications.some((p) => p.status === 'unknown') && (
+                    <p>
+                      There is an earlier unconfirmed publication. Check the account for duplicates
+                      before continuing.
+                    </p>
+                  )}
+                  <div className="social-actions">
+                    <Button disabled={busy} onClick={publish}>
+                      Confirm publish
+                    </Button>
+                    <Button variant="outline" disabled={busy} onClick={() => setReview(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              )}
+            </dialog>
           )}
         </>
       )}
       {readonly && <p className="muted">Ask an owner or editor to connect accounts and publish.</p>}
-      {error && (
+      {error && !review && (
         <p role="alert" className="notice">
           {error}
         </p>
