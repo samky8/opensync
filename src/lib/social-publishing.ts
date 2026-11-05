@@ -80,10 +80,10 @@ export async function createPublication(input: z.infer<typeof publishInput>) {
   if (input.platform === 'Instagram' && !account.instagramId)
     throw new Error('Meta requires a linked professional Instagram account.');
   if (
-    input.platform === 'Instagram' &&
-    input.format === 'story' &&
-    account.instagramType !== 'BUSINESS'
-  )
+  input.platform === 'Instagram' &&
+  input.format === 'story' &&
+  account.instagramType === 'CREATOR'
+)
     throw new Error(
       'Meta requires an Instagram Business account for story publishing through this connection.',
     );

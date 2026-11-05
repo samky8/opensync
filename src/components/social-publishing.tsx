@@ -77,7 +77,7 @@ export function SocialPublishing({
   const accounts = (status?.accounts || []).filter(
     (account) =>
       platform === 'Facebook' ||
-      (account.instagramId && (format !== 'story' || account.instagramType === 'BUSINESS')),
+      (account.instagramId && (format !== 'story' || account.instagramType !== 'CREATOR')),
   );
   const account = accounts.find((item) => item.id === accountId);
   const disabled = demo || readonly || !status?.canPublish;
