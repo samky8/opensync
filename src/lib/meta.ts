@@ -101,7 +101,7 @@ export async function metaPages(token: string) {
       data: Page[];
       paging?: { next?: string; cursors?: { after?: string } };
     }>('me/accounts', token, {
-      fields: 'id,name,access_token,tasks',
+      fields: 'id,name,access_token,tasks,instagram_business_account{id}',
       limit: '100',
       ...(after ? { after } : {}),
     });
