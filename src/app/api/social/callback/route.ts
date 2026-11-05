@@ -63,7 +63,8 @@ export async function GET(req: Request) {
       }
     });
     return NextResponse.redirect(`${appUrl()}/dashboard?tab=social&location=${pending.locationId}`);
-  } catch {
+    } catch (error) {
+    console.error('[Meta OAuth callback failed]', error);
     return NextResponse.redirect(
       `${appUrl()}/dashboard?tab=social&error=${encodeURIComponent('Meta connection failed. Grant Page and Instagram publishing permissions and select a Page you can create content for. Try connecting again.')}`,
     );
