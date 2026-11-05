@@ -101,17 +101,49 @@ export async function metaPages(token: string) {
       data: Page[];
       paging?: { next?: string; cursors?: { after?: string } };
     }>('me/accounts', token, {
-      fields: 'id,name,access_token,tasks,instagram_business_account{id,account_type}',
+      fields: 'id,name,access_token,tasks,instagram_business_account{id}',
       limit: '100',
       ...(after ? { after } : {}),
     });
-    pages.push(
-      ...result.data.filter(
-        (page) =>
-          page.access_token &&
-          page.tasks?.some((task) => ['CREATE_CONTENT', 'MANAGE'].includes(task)),
-      ),
-    );
+    const eligiblePages = result.data.filter(
+  (page) =>
+    page.access_token &&
+    page.tasks?.some((task) =>
+      ['CREATE_CONTENT', 'MANAGE'].includes(task)
+    ),
+);
+
+for (const page of eligiblePages) {
+  const igId = page.instagram_business_account?.id;
+
+  if (igId) {
+    try {
+      const ig = await graph<{
+        id: string;
+        username?: string;
+        account_type?: string;
+      }>(
+        igId,
+        page.access_token,
+        { fields: 'id,username,account_type' }
+      );
+
+      page.instagram_business_account = ig;
+
+      console.info(
+        '[Meta] Instagram account type:',
+        ig.account_type || 'unknown'
+      );
+    } catch (error) {
+      console.warn(
+        '[Meta] Instagram details unavailable:',
+        error instanceof MetaError ? error.code : 'unknown'
+      );
+    }
+  }
+
+  pages.push(page);
+}
     if (!result.paging?.next) return pages;
     after = result.paging.cursors?.after || '';
     if (!after) throw new Error('Meta Page pagination failed. Reconnect your account.');
