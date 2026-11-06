@@ -209,15 +209,7 @@ export function SocialPublishing({
   }
   return (
     <section className="social-direct">
-      <div className="section-heading">
-        <h3>Publish to {platform}</h3>
-        <span className="pill">Direct publishing</span>
-      </div>
-      {demo ? (
-        <p className="notice subtle">
-          Connect and publish from your real account. Demo images are never posted to social media.
-        </p>
-      ) : (
+      {!demo && (
         <>
           <p className="muted">
             Connect a Facebook Page and its linked Instagram professional account. Instagram stories

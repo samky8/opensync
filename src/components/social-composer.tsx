@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Share2, SlidersHorizontal, Pencil, Check } from 'lucide-react';
+import { Download, Copy, Share2, Pencil, Check, Upload } from 'lucide-react';
 import { ProBadge } from './ui/pro-badge';
 import { Button } from './ui/button';
 import { SocialPublishing } from './social-publishing';
-import { days, formatIntervals, type Schedule } from '@/lib/domain';
+import { type Schedule } from '@/lib/domain';
 
 const backgrounds = ['botanical', 'sunset', 'waves', 'arches'] as const;
 
@@ -88,6 +88,7 @@ export function SocialComposer({
   selected?: boolean;
   initialPlatform?: Design['platform'];
 }) {
+  const backgroundUpload = useRef<HTMLInputElement>(null);
   const [design, setDesign] = useState<Design>({
     title: 'A little update.',
     message: 'Our hours are changing. Here’s what to know before your next visit.',
@@ -101,7 +102,6 @@ export function SocialComposer({
   const [editing, setEditing] = useState<'title' | 'message' | 'footer' | null>(null);
   const platforms = design.platforms || [design.platform];
   const [notice, setNotice] = useState('');
-  const [customizing, setCustomizing] = useState(false);
   const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{
@@ -141,6 +141,57 @@ export function SocialComposer({
   function update(patch: Partial<Design>) {
     setDesign((current) => ({ ...current, ...patch }));
     setNotice('');
+  }
+
+  function restore(silent = false) {
+    try {
+      const raw = localStorage.getItem(platformStorageKey) || localStorage.getItem(storageKey);
+      if (!raw) {
+        if (!silent) setNotice('No saved social draft for this location yet.');
+        return;
+      }
+      const value = JSON.parse(raw);
+      if (
+        !value ||
+        !['post', 'story'].includes(value.format) ||
+        !['Instagram', 'Facebook'].includes(value.platform) ||
+        !['cream', 'dark', 'accent'].includes(value.theme) ||
+        !/^#[a-f\d]{6}$/i.test(value.accent) ||
+        !['title', 'message', 'footer', 'caption'].every((key) => typeof value[key] === 'string') ||
+        value.title.length > 100 ||
+        value.message.length > 700 ||
+        value.footer.length > 120 ||
+        value.caption.length > 2200
+      )
+        throw new Error();
+      if (value.background && !['custom', ...backgrounds].includes(value.background))
+        throw new Error();
+      if (
+        value.customImage &&
+        (typeof value.customImage !== 'string' ||
+          value.customImage.length > 6000000 ||
+          !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(value.customImage))
+      )
+        throw new Error();
+      if (value.fontColour && !/^#[a-f\d]{6}$/i.test(value.fontColour)) throw new Error();
+      if (
+        value.platforms &&
+        (!Array.isArray(value.platforms) ||
+          !value.platforms.length ||
+          !value.platforms.every((platform: string) =>
+            ['Instagram', 'Facebook'].includes(platform),
+          ))
+      )
+        throw new Error();
+      setDesign({
+        ...value,
+        platform: initialPlatform || value.platform,
+        platforms: initialPlatform ? [initialPlatform] : value.platforms,
+      });
+      if (!silent) setNotice('Saved draft restored. Review it before sharing.');
+    } catch {
+      setNotice('The saved draft could not be read. Create a fresh draft below.');
+    }
   }
 
   useEffect(() => {
@@ -200,9 +251,6 @@ export function SocialComposer({
     ctx.globalAlpha = 1;
   }, [design, schedule.name, height, backgroundImage, backgroundSource]);
 
-  function applyContent(title: string, message: string) {
-    update({ title, message, caption: '' });
-  }
   function save() {
     try {
       localStorage.setItem(storageKey, JSON.stringify(design));
@@ -210,56 +258,6 @@ export function SocialComposer({
       setNotice('Draft saved on this browser for this location.');
     } catch {
       setNotice('This browser could not save the draft. You can still download your image.');
-    }
-  }
-  function restore(silent = false) {
-    try {
-      const raw = localStorage.getItem(platformStorageKey) || localStorage.getItem(storageKey);
-      if (!raw) {
-        if (!silent) setNotice('No saved social draft for this location yet.');
-        return;
-      }
-      const value = JSON.parse(raw);
-      if (
-        !value ||
-        !['post', 'story'].includes(value.format) ||
-        !['Instagram', 'Facebook'].includes(value.platform) ||
-        !['cream', 'dark', 'accent'].includes(value.theme) ||
-        !/^#[a-f\d]{6}$/i.test(value.accent) ||
-        !['title', 'message', 'footer', 'caption'].every((key) => typeof value[key] === 'string') ||
-        value.title.length > 100 ||
-        value.message.length > 700 ||
-        value.footer.length > 120 ||
-        value.caption.length > 2200
-      )
-        throw new Error();
-      if (value.background && !['custom', ...backgrounds].includes(value.background))
-        throw new Error();
-      if (
-        value.customImage &&
-        (typeof value.customImage !== 'string' ||
-          value.customImage.length > 6000000 ||
-          !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(value.customImage))
-      )
-        throw new Error();
-      if (value.fontColour && !/^#[a-f\d]{6}$/i.test(value.fontColour)) throw new Error();
-      if (
-        value.platforms &&
-        (!Array.isArray(value.platforms) ||
-          !value.platforms.length ||
-          !value.platforms.every((platform: string) =>
-            ['Instagram', 'Facebook'].includes(platform),
-          ))
-      )
-        throw new Error();
-      setDesign({
-        ...value,
-        platform: initialPlatform || value.platform,
-        platforms: initialPlatform ? [initialPlatform] : value.platforms,
-      });
-      if (!silent) setNotice('Saved draft restored. Review it before sharing.');
-    } catch {
-      setNotice('The saved draft could not be read. Create a fresh draft below.');
     }
   }
   async function uploadBackground(asset?: File) {
@@ -341,16 +339,6 @@ export function SocialComposer({
   }
   return (
     <div className={`social-workspace${compact ? ' social-workspace-compact' : ''}`}>
-      {compact && (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-expanded={customizing}
-          onClick={() => setCustomizing(!customizing)}
-        >
-          <SlidersHorizontal size={14} /> {customizing ? 'Done customizing' : 'Customize'}
-        </Button>
-      )}
       <section className="card padded social-output">
         <div className="section-heading">
           <h3>
@@ -442,19 +430,32 @@ export function SocialComposer({
                 Your image
               </button>
             )}
-          </div>
-          <label className="social-background-upload">
-            Upload your own image <ProBadge />
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
+            <button
+              type="button"
+              className="social-background-upload"
               disabled={!paid || uploading}
-              onChange={(event) => {
-                void uploadBackground(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-          </label>
+              onClick={() => backgroundUpload.current?.click()}
+            >
+              <span className="social-background-thumb">
+                <Upload size={22} aria-hidden="true" />
+              </span>
+              <span className="social-background-upload-name">
+                Upload <ProBadge />
+              </span>
+            </button>
+          </div>
+          <input
+            ref={backgroundUpload}
+            hidden
+            aria-label="Upload your own image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={!paid || uploading}
+            onChange={(event) => {
+              void uploadBackground(event.target.files?.[0]);
+              event.target.value = '';
+            }}
+          />
           <small className="muted">
             {!paid ? 'Available with Pro or Business. ' : ''}JPG, PNG or WebP, up to 10 MB. Images
             are cropped to fit.
@@ -534,12 +535,6 @@ export function SocialComposer({
             </div>
           ))}
         </div>
-        <p className="muted">
-          {design.format === 'story'
-            ? '9:16 story with space above and below your announcement.'
-            : '1:1 image for your feed.'}{' '}
-          Preview matches the downloaded image.
-        </p>
         {(!compact || selected) && (
           <>
             <div className="social-actions">
@@ -570,10 +565,6 @@ export function SocialComposer({
                 <Copy size={16} /> Copy caption
               </Button>
             </div>
-            <p className="notice subtle">
-              In {platforms.join(' and ')}, create a {design.format}, select your downloaded image,
-              and review before publishing. For stories, your announcement is already on the image.
-            </p>
             <p role="status" aria-live="polite">
               {notice}
             </p>
@@ -597,105 +588,6 @@ export function SocialComposer({
           </>
         )}
       </section>
-      {(!compact || customizing) && (
-        <section className="card padded social-controls">
-          <span className="eyebrow">FROM YOUR BUSINESS TO THEIR FEED</span>
-          <h2>Create a social update</h2>
-          <p className="muted">
-            Create a post or story, then publish to a connected Instagram or Facebook account or
-            download the image to share yourself.
-          </p>
-          <label>
-            Start with your business details
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === 'weekly')
-                  applyContent(
-                    'Our opening hours.',
-                    schedule.weekly
-                      .map((hours, i) => `${days[i]}: ${formatIntervals(hours)}`)
-                      .join('\n'),
-                  );
-                if (value.startsWith('exception:')) {
-                  const item = schedule.exceptions[Number(value.split(':')[1])];
-                  applyContent(
-                    item.label || 'An update to our hours.',
-                    `${item.start}${item.end !== item.start ? ` – ${item.end}` : ''}\n${formatIntervals(item.intervals)}`,
-                  );
-                }
-                if (value.startsWith('announcement:')) {
-                  const item = schedule.announcements[Number(value.split(':')[1])];
-                  applyContent(item.title || 'A little update.', item.message);
-                }
-                e.target.value = '';
-              }}
-            >
-              <option value="" disabled>
-                Choose hours or an announcement…
-              </option>
-              <option value="weekly">Regular opening hours</option>
-              {schedule.exceptions.map((item, i) => (
-                <option key={item.id} value={`exception:${i}`}>
-                  {item.label || 'Holidays & exceptions'} · {item.start}
-                </option>
-              ))}
-              {schedule.announcements.map((item, i) => (
-                <option key={item.id} value={`announcement:${i}`}>
-                  {item.title || 'Announcement'}
-                  {!item.enabled ? ' (disabled)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="muted">
-            Uses your current business draft. Check dates and hours before sharing.
-          </p>
-          <div className="form-grid">
-            <label>
-              Style
-              <select
-                value={design.theme}
-                onChange={(e) => update({ theme: e.target.value as Design['theme'] })}
-              >
-                <option value="cream">Warm paper</option>
-                <option value="dark">After hours</option>
-                <option value="accent">Brand colour</option>
-              </select>
-            </label>
-            <label>
-              Brand colour
-              <input
-                type="color"
-                value={design.accent}
-                onChange={(e) => update({ accent: e.target.value })}
-              />
-            </label>
-          </div>
-          <label>
-            Post caption
-            <textarea
-              rows={5}
-              maxLength={2200}
-              value={caption}
-              onChange={(e) => update({ caption: e.target.value })}
-            />
-          </label>
-          <div className="social-actions">
-            <Button variant="outline" onClick={save}>
-              Save draft
-            </Button>
-            <Button variant="ghost" onClick={() => restore()}>
-              Restore saved draft
-            </Button>
-          </div>
-          <small className="muted">
-            Designs save automatically on this browser. Saving here does not publish or change your
-            website.
-          </small>
-        </section>
-      )}
     </div>
   );
 }

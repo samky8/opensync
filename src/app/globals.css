@@ -3992,6 +3992,8 @@ label > .pro-field-label {
 }
 .social-background-options button {
   width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
   padding: 5px;
   border: 2px solid transparent;
   border-radius: 10px;
@@ -4007,22 +4009,32 @@ label > .pro-field-label {
 .social-background-thumb {
   display: block;
   width: 100%;
-  height: 58px;
+  height: 52px;
   margin-bottom: 5px;
   border-radius: 5px;
   background-size: cover;
   background-position: center;
 }
-.social-background-upload {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+.social-background-options .social-background-upload {
+  border: 2px dotted #a5a2b8;
+  background: transparent;
 }
-.social-background-upload input {
-  max-width: 100%;
-  font-size: 13px;
+.social-background-upload .social-background-thumb {
+  display: grid;
+  place-items: center;
+  color: #716b88;
+}
+.social-background-upload-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.social-background-upload:disabled {
+  cursor: not-allowed;
+}
+.social-background-upload:focus-visible {
+  outline: 2px solid #5046df;
+  outline-offset: 3px;
 }
 
 .social-publish-dialog {

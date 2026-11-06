@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Temporal } from '@js-temporal/polyfill';
 import { Plus, Trash2, Copy, CalendarDays, Clock, ArrowRight } from 'lucide-react';
 import {
@@ -169,6 +169,26 @@ export function BusinessFields({
   draft: Schedule;
   onChange: (s: Schedule) => void;
 }) {
+  const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    const now = new Date();
+    const zones = [...new Set([...Intl.supportedValuesOf('timeZone'), 'UTC', draft.timezone])];
+    setTimezones(
+      zones.sort().map((value) => {
+        const offset = new Intl.DateTimeFormat('en', {
+          timeZone: value,
+          timeZoneName: 'longOffset',
+        })
+          .formatToParts(now)
+          .find((part) => part.type === 'timeZoneName')!
+          .value.replace('GMT', 'UTC');
+        return {
+          value,
+          label: `${value.replaceAll('_', ' ')} (${offset === 'UTC' ? 'UTC+00:00' : offset})`,
+        };
+      }),
+    );
+  }, [draft.timezone]);
   return (
     <fieldset className="form-grid business-fields" disabled={disabled}>
       <label>
@@ -202,32 +222,16 @@ export function BusinessFields({
       </label>
       <label className="span-two">
         Time zone
-        <input
-          list="timezones"
+        <select
           value={draft.timezone}
           onChange={(e) => onChange({ ...draft, timezone: e.target.value })}
-        />
-        <datalist id="timezones">
-          {[
-            'America/Toronto',
-            'America/Vancouver',
-            'America/Edmonton',
-            'America/Winnipeg',
-            'America/Halifax',
-            'America/St_Johns',
-            'America/New_York',
-            'America/Chicago',
-            'America/Denver',
-            'America/Los_Angeles',
-            'Europe/London',
-            'Europe/Paris',
-            'Asia/Tokyo',
-            'Australia/Sydney',
-            'UTC',
-          ].map((t) => (
-            <option key={t}>{t}</option>
+        >
+          {!timezones.length && <option value={draft.timezone}>{draft.timezone}</option>}
+          {timezones.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
           ))}
-        </datalist>
+        </select>
+        <small>UTC offsets reflect daylight saving time where applicable.</small>
       </label>
       <label className="span-two">
         Address <span>optional</span>
@@ -239,10 +243,21 @@ export function BusinessFields({
       <label>
         Website <span>optional</span>
         <input
-          type="url"
-          placeholder="https://yourbusiness.com"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          placeholder="yourbusiness.com"
           value={draft.website}
           onChange={(e) => onChange({ ...draft, website: e.target.value })}
+          onBlur={(e) => {
+            const website = e.target.value.trim();
+            onChange({
+              ...draft,
+              website: website && !/^[a-z][a-z\d+.-]*:/i.test(website)
+                ? `https://${website.replace(/^\/\//, '')}`
+                : website,
+            });
+          }}
         />
       </label>
       <LogoUpload
