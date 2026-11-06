@@ -39,7 +39,7 @@ Before deploying the trial feature, run `npm run db:migrate` against the intende
 - Public hours, status, and announcement widgets; responsive script/iframe snippets; multi-widget loading; safe text rendering; periodic refresh; automatic script-embed resizing and collapse of expired banners.
 - Google OAuth state checks, encrypted tokens, refresh, account/location pagination, location selection, import confirmation, hours-only update masks, durable destination jobs, bounded retry/backoff, and honest accepted/failed results.
 - Stripe Checkout, Billing Portal, raw-body webhook signatures, event deduplication, current subscription reconciliation, CAD price validation, checkout reuse, and server-side plan enforcement.
-- Activity history, in-app failure/subscription notifications, business settings, export, basic staff access grants, Instagram/Facebook post and story creation with PNG export, captions, browser-local drafts, and native sharing where supported, and saved support requests.
+- History, in-app failure/subscription notifications, business settings, export, basic staff access grants, Instagram/Facebook post and story creation with PNG export, captions, browser-local drafts, and native sharing where supported, and saved support requests.
 - Responsive marketing/help pages, explicit legal templates, metadata, sitemap, social image, PWA manifest/icons, and a network-only offline fallback that never caches private business pages.
 
 See [launch readiness](docs/LAUNCH-CHECKLIST.md) for verification and remaining scope. This is runnable application code, **not an assertion that an unconfigured deployment is ready to accept paying customers**.
@@ -72,7 +72,7 @@ Website features do not depend on Google.
 4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_BUSINESS_PROFILE_APPROVED=true`, and a 32-byte encryption key encoded as 64 hex characters in `TOKEN_ENCRYPTION_KEY`. Generate a unique random key locally; store it in a secret manager. Do not rotate it without a token migration or reconnect plan.
 5. Enable Pro or Business through a verified Stripe subscription. For **development only**, `DEV_PAID_FEATURES=true` unlocks paid actions. This override is explicitly ignored in production.
 6. Connect in Integrations, select a location, compare the imported hours, and explicitly confirm import if desired. Import changes the draft only. Review before publishing.
-7. Configure the job runner described below. Publish and inspect Activity.
+7. Configure the job runner described below. Publish and inspect History.
 
 Only `regularHours,specialHours` are patched. OpenSync never changes `openInfo`, permanently/temporarily closed status, address, category, or unrelated profile fields. Announcements are website-only. Unsupported imports must be reviewed manually; this release does not model 24-hour/full-week intervals. Google processing is reported as **accepted**, never as verified public Search/Maps visibility.
 
@@ -95,7 +95,7 @@ The canonical model is a versioned `Schedule` validated by Zod. Locations keep a
 
 Weekly periods, exceptions, announcements, and widget settings are typed JSONB inside drafts/revisions. This deliberate aggregate design keeps publication snapshots atomic; organizations, memberships, locations, revisions, jobs, connections, subscriptions, notifications, and activity are relational with foreign keys and indexes.
 
-Website activation/expiry is calculated from the published revision and current business-local time **on the server at every request**. A browser timer is only a display refresh. No cron run, owner session, or open browser is required for a new visitor to receive the correct status. Special hours automatically revert to weekly hours after their date range. Existing embedded pages refresh about every 30 seconds; public edge cache lifetime is at most 15 seconds. Browser throttling/background tabs can delay visual refresh.
+Website activation/expiry is calculated from the published revision and current business-local time **on the server at every request**. A browser timer is only a display refresh. No cron run, owner session, or open browser is required for a new visitor to receive the correct status. Holidays & exceptions automatically revert to weekly hours after their date range. Existing embedded pages refresh about every 30 seconds; public edge cache lifetime is at most 15 seconds. Browser throttling/background tabs can delay visual refresh.
 
 Google special dates are submitted when a revision is published; Google applies its own scheduled special hours. External jobs remain in PostgreSQL until processed:
 
@@ -104,11 +104,11 @@ Google special dates are submitted when a revision is published; Google applies 
 - A run processes one job, bounded to fit the 60-second function budget. Increase worker capacity deliberately if backlog grows; monitor queue age.
 - Workers use `FOR UPDATE SKIP LOCKED` and a location lock. They skip superseded revisions, serialize publication against delivery, and retry transient errors at 30, 60, 120… seconds up to six attempts.
 - A process crash rolls back the database transaction so work remains recoverable. Repeating the same hours PATCH is idempotent. Provider-side timing after an ambiguous network failure cannot prove public ordering; inspect/reconcile the latest state if Google reports unexpected data.
-- A failed job creates an in-app notification. Reconnect if necessary, then publish the current draft again to queue the latest version. Activity offers refresh and destination outcomes.
+- A failed job creates an in-app notification. Reconnect if necessary, then publish the current draft again to queue the latest version. History offers refresh and destination outcomes.
 
 ## Website installation
 
-Copy a real snippet from Website widgets after creating your location:
+Copy a real snippet from Add to your website after creating your location:
 
 ```html
 <div data-opensync="YOUR_LOCATION_UUID" data-type="hours"></div>
@@ -192,7 +192,7 @@ See [architecture and operational limits](docs/ARCHITECTURE.md) before extending
 
 The SwiftUI iPhone/iPad project is in [`ios/`](ios/README.md). It reuses the existing backend and accounts. The native source, App Store configuration, signing scripts, and macOS test workflow are included; a signed IPA still requires Xcode, live service configuration, and an Apple Developer account. See the iOS README for the exact validation status and build instructions.
 
-## Social studio
+## Social posts
 
 Create Instagram/Facebook posts and stories from hours or custom announcements. Download PNGs and captions, or connect Meta to publish directly to Facebook Pages and linked Instagram professional accounts (Business accounts for Instagram stories). Review the exact image and destination before publishing. Requests and provider outcomes are saved, with duplicate protection and explicit unconfirmed results after ambiguous failures. No cron is required. Browser drafts stay local; direct publishing uploads are retained temporarily on the server.
 

@@ -33,8 +33,8 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await expect
     .poll(async () => (await content.boundingBox())!.width)
     .toBeGreaterThan(original + 100);
-  await page.getByRole('button', { name: 'Website widgets', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Website widgets', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add to your website', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add to your website', exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   await expect
@@ -45,7 +45,7 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(
-    page.locator('.sidebar .sidebar-text').filter({ hasText: 'Website widgets' }),
+    page.locator('.sidebar .sidebar-text').filter({ hasText: 'Add to your website' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(page.locator('.sidebar')).toBeHidden();

@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/supabase';
 import { apiError, checkOrigin, detail, locationAccess, planFor, rateLimit } from '@/lib/server';
 import { defaultSchedule, scheduleSchema, validateEntitlements } from '@/lib/domain';
 import { googleDisconnect } from '@/lib/google';
+import { publishScopes, scopedSchedule } from '@/lib/publish-scope';
 export async function GET(req: Request) {
   try {
     const id = z.uuid().parse(new URL(req.url).searchParams.get('id'));
@@ -223,13 +224,24 @@ export async function POST(req: Request) {
       if (existing) return { revision: existing };
       if (body.version !== fresh.draftVersion)
         throw new Error('Draft version changed. Refresh and review before publishing');
+      const scope = z.enum(publishScopes).parse(body.scope ?? 'all');
+      if (body.publishedVersion !== undefined && body.publishedVersion !== fresh.publishedVersion)
+        throw new Error('Published version changed. Refresh and review before publishing');
+      const [previous] = await tx
+        .select({ snapshot: t.revisions.snapshot })
+        .from(t.revisions)
+        .where(
+          and(eq(t.revisions.locationId, id), eq(t.revisions.version, fresh.publishedVersion)),
+        );
+      const snapshot = scheduleSchema.parse(scopedSchedule(fresh.draft, previous?.snapshot, scope));
+      validateEntitlements(snapshot, previous?.snapshot ?? fresh.draft, plan);
       const version = fresh.publishedVersion + 1;
       const [revision] = await tx
         .insert(t.revisions)
         .values({
           locationId: id,
           version,
-          snapshot: fresh.draft,
+          snapshot,
           actorId: user.id,
           idempotencyKey: key,
         })
@@ -248,7 +260,13 @@ export async function POST(req: Request) {
         .select()
         .from(t.connections)
         .where(eq(t.connections.locationId, id));
-      if (connection?.remoteId && connection.status === 'connected' && plan !== 'free')
+      const queueGoogle =
+        body.google !== false &&
+        ['hours', 'special', 'all'].includes(scope) &&
+        connection?.remoteId &&
+        connection.status === 'connected' &&
+        plan !== 'free';
+      if (queueGoogle)
         await tx.insert(t.jobs).values({
           locationId: id,
           revisionId: revision.id,
@@ -258,7 +276,7 @@ export async function POST(req: Request) {
       await tx.insert(t.activity).values({
         locationId: id,
         actorId: user.id,
-        message: `Published revision ${version} to website widgets${connection?.remoteId && plan !== 'free' ? '; Google queued. Announcements are website-only.' : ''}`,
+        message: `Published ${scope} revision ${version} to website widgets${queueGoogle ? '; Google queued.' : ''}`,
       });
       return { revision };
     });

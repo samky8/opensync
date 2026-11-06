@@ -638,7 +638,7 @@ export function SocialComposer({
               <option value="weekly">Regular opening hours</option>
               {schedule.exceptions.map((item, i) => (
                 <option key={item.id} value={`exception:${i}`}>
-                  {item.label || 'Special hours'} · {item.start}
+                  {item.label || 'Holidays & exceptions'} · {item.start}
                 </option>
               ))}
               {schedule.announcements.map((item, i) => (

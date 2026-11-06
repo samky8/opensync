@@ -79,20 +79,20 @@ struct ScheduleEditor: View {
                     }
                     Button("Copy Monday to weekdays") { for day in 1..<5 { draft.weekly[day] = draft.weekly[0] } }
                 }
-                Section("Special hours") {
+                Section("Holidays & exceptions") {
                     ForEach($draft.exceptions) { $exception in
                         NavigationLink {
                             SpecialHoursEditor(exception: $exception, timezone: draft.timezone)
                         } label: {
                             VStack(alignment: .leading) {
-                                Text(exception.label.nonempty("Special hours"))
+                                Text(exception.label.nonempty("Holidays & exceptions"))
                                 Text("\(exception.start) – \(exception.end)").font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }.onDelete { draft.exceptions.remove(atOffsets: $0) }
                     Button("Add special hours") {
                         let date = Wire.date(Date(), timezone: draft.timezone)
-                        draft.exceptions.append(SpecialHours(id: UUID().uuidString, start: date, end: date, label: "Special hours", intervals: []))
+                        draft.exceptions.append(SpecialHours(id: UUID().uuidString, start: date, end: date, label: "Holidays & exceptions", intervals: []))
                     }.disabled(draft.exceptions.count >= 100)
                     Text("An empty day is closed. Earlier closing times mean overnight hours. All times use the business time zone.").font(.footnote).foregroundStyle(.secondary)
                 }
@@ -170,9 +170,9 @@ struct SpecialHoursEditor: View {
             TextField("Label", text: $exception.label)
             BusinessDatePicker(title: "From", value: $exception.start, timezone: timezone)
             BusinessDatePicker(title: "Through", value: $exception.end, timezone: timezone)
-            NavigationLink("Opening periods (\(exception.intervals.count))") { PeriodEditor(periods: $exception.intervals).navigationTitle("Special hours") }
+            NavigationLink("Opening periods (\(exception.intervals.count))") { PeriodEditor(periods: $exception.intervals).navigationTitle("Holidays & exceptions") }
             Text("Date ranges cannot overlap another exception. Remove or adjust existing ranges before saving.").font(.footnote)
-        }.navigationTitle("Special hours")
+        }.navigationTitle("Holidays & exceptions")
     }
 }
 struct BusinessDatePicker: View {

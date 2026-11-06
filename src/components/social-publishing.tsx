@@ -382,7 +382,7 @@ export function SocialPublishing({
                       <p>
                         {error ||
                           active?.error ||
-                          'Check your account before trying again. You can follow the publication in Activity.'}
+                          'Check your account before trying again. You can follow the publication in History.'}
                       </p>
                       <Button
                         variant="outline"

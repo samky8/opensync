@@ -9,7 +9,7 @@ test('social drafts restore and export correctly sized posts and stories', async
   async function openStudio() {
     if (info.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Social studio', exact: true }).click();
+    await page.getByRole('button', { name: 'Social posts', exact: true }).click();
   }
   await openStudio();
   await page.getByLabel('Start with your business details').selectOption('weekly');
@@ -64,7 +64,7 @@ test('social background presets and custom uploads restore and export', async ({
   async function openStudio() {
     if (info.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Social studio', exact: true }).click();
+    await page.getByRole('button', { name: 'Social posts', exact: true }).click();
   }
   await openStudio();
   for (const name of ['Botanical', 'Sunset', 'Waves', 'Arches']) {

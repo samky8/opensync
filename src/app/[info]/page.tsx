@@ -24,7 +24,7 @@ export default async function Page({ params }: { params: Promise<{ info: string 
               overnight.
             </li>
             <li>Review and publish. Your public widgets are now ready.</li>
-            <li>Copy a snippet from Website widgets into an HTML block on your website.</li>
+            <li>Copy a snippet from Add to your website into an HTML block on your website.</li>
           </ol>
           <h2>Installing on your website</h2>
           <p>
@@ -40,18 +40,18 @@ export default async function Page({ params }: { params: Promise<{ info: string 
           </p>
           <h2>Create a social post or story</h2>
           <p>
-            Open Social studio in your dashboard. Choose Instagram or Facebook and a post or story,
+            Open Social posts in your dashboard. Choose Instagram or Facebook and a post or story,
             add your announcement or import draft hours, then connect Meta and select a destination.
             Review the image and caption before choosing Publish now. Facebook Pages and linked
             Instagram professional accounts are supported; Instagram stories require a Business
             account. If direct publishing needs setup, you can still download the image and copy the
             caption. Drafts can be saved on this browser. Pending publications can be continued from
-            Social studio; unconfirmed outcomes should be checked in the destination app.
+            Social posts; unconfirmed outcomes should be checked in the destination app.
           </p>
           <h2>Google connection</h2>
           <p>
             Connection requires approved Business Profile API access, configured credentials, a
-            selected location, and an eligible plan. In Activity, “accepted” means Google accepted
+            selected location, and an eligible plan. In History, “accepted” means Google accepted
             your hours update; it does not confirm public visibility. Reconnect if permission was
             revoked.
           </p>
@@ -97,7 +97,7 @@ export default async function Page({ params }: { params: Promise<{ info: string 
             retention requirements.
           </p>
           <p>
-            Disconnect a Meta account in Social studio to remove its stored token for that location.
+            Disconnect a Meta account in Social posts to remove its stored token for that location.
             Remove OpenSync from Facebook Business Integrations to revoke Meta access completely.
             Existing posts remain on Meta; delete them in Instagram or Facebook. Account deletion
             removes locally stored social tokens, uploads, and history for owned businesses.

@@ -114,7 +114,7 @@ export function Widget({
             onClick={() => setExpanded(!expanded)}
             aria-expanded={expanded}
           >
-            Opening hours <ChevronDown size={16} />
+            Business hours <ChevronDown size={16} />
           </button>
           {expanded && (
             <div className="widget-week">

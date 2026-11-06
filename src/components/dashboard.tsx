@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import styles from './dashboard-overview.module.css';
 import { useRouter } from 'next/navigation';
 import {
   ArrowUpRight,
@@ -30,7 +31,10 @@ import {
   Menu,
   X,
   Sun,
-  CloudSun,
+  DoorOpen,
+  PanelTop,
+  Share2,
+  MapPin,
   Store,
   ArrowDownToLine,
   RefreshCw,
@@ -44,7 +48,8 @@ import { ProfileMenu } from './profile-menu';
 import { ProBadge } from './ui/pro-badge';
 import { Widget, type WidgetType } from './widget';
 import { SocialComposer } from './social-composer';
-import { PublishDestinations } from './publish-destinations';
+import { PublishWizard } from './publish-wizard';
+import { scopedSchedule, publishScopes, type PublishScope } from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
 import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
@@ -91,23 +96,23 @@ type Detail = {
 };
 const navigation = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'hours', label: 'Opening hours', icon: Clock },
-  { id: 'special', label: 'Special hours', icon: CalendarDays },
+  { id: 'hours', label: 'Business hours', icon: Clock },
+  { id: 'special', label: 'Holidays & exceptions', icon: CalendarDays },
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
-  { id: 'widgets', label: 'Website widgets', icon: Code2 },
-  { id: 'social', label: 'Social studio', icon: Instagram },
+  { id: 'widgets', label: 'Add to your website', icon: Code2 },
+  { id: 'social', label: 'Social posts', icon: Instagram },
   { id: 'integrations', label: 'Connections', icon: Plug },
-  { id: 'activity', label: 'Activity', icon: History },
+  { id: 'activity', label: 'History', icon: History },
 ];
 const titles: Record<string, [string, string]> = {
   overview: ['Overview', 'Manage your hours and updates.'],
-  hours: ['Opening hours', 'Set your regular weekly schedule.'],
-  special: ['Special hours', 'Set holiday hours and one-off closures.'],
+  hours: ['Business hours', 'Set your regular weekly schedule.'],
+  special: ['Holidays & exceptions', 'Set holiday hours and one-off closures.'],
   announcements: ['Announcements', 'Share updates on your website.'],
-  widgets: ['Website widgets', 'Add your hours and updates to your website.'],
-  social: ['Social studio', 'Create posts and stories for Instagram and Facebook.'],
+  widgets: ['Add to your website', 'Add your hours and updates to your website.'],
+  social: ['Social posts', 'Create posts and stories for Instagram and Facebook.'],
   integrations: ['Connections', 'Manage your publishing channels.'],
-  activity: ['Activity', 'Check published updates and sync results.'],
+  activity: ['History', 'Check published updates and sync results.'],
   settings: ['Business settings', 'Manage the selected business profile and team.'],
   account: ['Account settings', 'Manage your account and personal data.'],
   billing: ['Plans & billing', 'Manage your plan and subscription.'],
@@ -135,7 +140,10 @@ function Modal({ children, onClose }: { children: ReactNode; onClose: () => void
     <dialog
       ref={ref}
       className="modal"
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -222,7 +230,7 @@ export function Dashboard({
     ]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved),
     widgetPlanError = /widget customization requires Pro|custom branding requires Pro/i.test(error),
-    publishedSchedule = demo ? published : detail?.published,
+    publishedSchedule = demo ? (pubVersion ? published : null) : detail?.published,
     unpublished =
       (demo || !!detail) &&
       (!publishedSchedule ||
@@ -277,7 +285,7 @@ export function Dashboard({
           setDraft(valid);
           setSaved(valid);
           setPublished(scheduleSchema.parse(parsed.published));
-          setPubVersion(parsed.version || 1);
+          setPubVersion(parsed.version ?? 1);
           setDemoHistory(parsed.history || []);
         }
       } catch {
@@ -396,6 +404,7 @@ export function Dashboard({
       persistDemo(d);
       setSaved(structuredClone(d));
       setVersion((v) => v + 1);
+      setStep(nextStep);
       return version + 1;
     }
     const resultSave = await request('/api/manage', {
@@ -413,48 +422,60 @@ export function Dashboard({
     setStep(nextStep);
     return resultSave.location.draftVersion as number;
   }
-  async function publish() {
-    await act(async () => {
-      const v = dirty ? await save() : version;
-      if (demo) {
-        const history = [
-          {
-            id: crypto.randomUUID(),
-            message: `Published demo revision ${pubVersion + 1} to the local preview`,
-            createdAt: new Date().toISOString(),
-          },
-          ...demoHistory,
-        ];
-        setPublished(structuredClone(draft));
-        setPubVersion(pubVersion + 1);
-        setDemoHistory(history);
-        persistDemo(draft, draft, pubVersion + 1, history);
-      } else {
-        const key = sessionStorage.getItem(`publish-${selected}-${v}`) || crypto.randomUUID();
-        sessionStorage.setItem(`publish-${selected}-${v}`, key);
-        await request('/api/manage', { op: 'publish', id: selected, version: v, key });
-        await refresh(true);
-        sessionStorage.removeItem(`publish-${selected}-${v}`);
-      }
-      setModal('');
-      setOnboarding(false);
-      notify(
-        demo
-          ? 'Demo published. Your local widget preview is up to date.'
-          : 'Published to website widgets. Check Activity for destination outcomes.',
-      );
-    });
+  const [publishScope, setPublishScope] = useState<PublishScope>('all');
+  function openPublish(scope?: string) {
+    const pageScope = scope ?? new URLSearchParams(window.location.search).get('tab') ?? tab;
+    setPublishScope(
+      publishScopes.includes(pageScope as PublishScope) ? (pageScope as PublishScope) : 'all',
+    );
+    setModal('publish');
   }
-  async function publishLater() {
-    await act(async () => {
-      await save(draft, onboarding ? 6 : step);
-      setModal('');
-      if (onboarding) {
-        setOnboarding(false);
-        switchTab('overview');
-      }
-      notify('Draft saved. Publish when you’re ready.');
-    });
+  async function publish(includeGoogle: boolean) {
+    const v = dirty ? await save() : version;
+    if (demo) {
+      const history = [
+        {
+          id: crypto.randomUUID(),
+          message: `Published demo revision ${pubVersion + 1} to the local preview`,
+          createdAt: new Date().toISOString(),
+        },
+        ...demoHistory,
+      ];
+      const snapshot = scopedSchedule(draft, published, publishScope);
+      setPublished(structuredClone(snapshot));
+      setPubVersion(pubVersion + 1);
+      setDemoHistory(history);
+      persistDemo(draft, snapshot, pubVersion + 1, history);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    } else {
+      const key =
+        sessionStorage.getItem(
+          `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
+        ) || crypto.randomUUID();
+      sessionStorage.setItem(
+        `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
+        key,
+      );
+      await request('/api/manage', {
+        op: 'publish',
+        id: selected,
+        version: v,
+        key,
+        scope: publishScope,
+        google: includeGoogle,
+        publishedVersion: pubVersion,
+      });
+      await refresh(true);
+      sessionStorage.removeItem(
+        `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
+      );
+    }
+    setOnboarding(false);
+    notify(
+      demo
+        ? 'Demo published. Your local widget preview is up to date.'
+        : 'Published to website widgets. Check History for destination outcomes.',
+    );
   }
   async function copy(text: string) {
     try {
@@ -465,6 +486,7 @@ export function Dashboard({
     }
   }
   function switchTab(next: string) {
+    if (demo) setOnboarding(false);
     if (next !== tab) {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', next);
@@ -472,6 +494,29 @@ export function Dashboard({
     }
     setTab(next);
     setMobile(false);
+  }
+  function startDemoOnboarding() {
+    if (!demo) return;
+    const fresh = defaultSchedule(
+      'Your business',
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    persistDemo(fresh, fresh, 0, []);
+    setDraft(fresh);
+    setSaved(structuredClone(fresh));
+    setPublished(structuredClone(fresh));
+    setVersion(1);
+    setPubVersion(0);
+    setDemoHistory([]);
+    setDemoTrial({ status: 'available', endsAt: null });
+    setWidgetType('hours');
+    setPlatform('Custom HTML');
+    setModal('');
+    setError('');
+    setToast('');
+    switchTab('overview');
+    setStep(1);
+    setOnboarding(true);
   }
   async function claimTrial(): Promise<ProTrial> {
     if (demo) {
@@ -511,43 +556,61 @@ export function Dashboard({
       window.location.href = result.url;
     });
   }
-  const destinations = [
-    {
-      label: 'Google Business Profile',
-      description: demo ? 'Not connected in demo' : 'Automatic Google sync paused',
-      icon: Globe,
-      status: detail?.connection?.status === 'connected' ? 'Connected' : 'Not connected',
-      color: 'blue',
-    },
-    {
-      label: 'Website banner',
-      description: 'Website announcements',
-      icon: Megaphone,
-      status: pubVersion ? 'Published' : 'Not published',
-      color: 'violet',
-    },
-    {
-      label: 'Opening-hours widget',
-      description: 'Regular and special hours',
-      icon: Clock,
-      status: pubVersion ? 'Published' : 'Not published',
-      color: 'orange',
-    },
-    {
-      label: 'Live status badge',
-      description: 'Current open or closed status',
-      icon: Code2,
-      status: pubVersion ? 'Published' : 'Not published',
-      color: 'green',
-    },
-  ];
   const upcoming = draft.exceptions
     .filter((e) => e.end >= status.date)
     .sort((a, b) => a.start.localeCompare(b.start));
   const history = demo ? demoHistory : detail?.history || [];
+  const localHour = Number(
+    new Intl.DateTimeFormat('en', {
+      hour: 'numeric',
+      hourCycle: 'h23',
+      timeZone: draft.timezone,
+    }).format(new Date(now)),
+  );
+  const greeting =
+    localHour < 12 ? 'Good morning' : localHour < 18 ? 'Good afternoon' : 'Good evening';
+  const overviewChannels = [
+    {
+      label: 'Website hours',
+      icon: Globe,
+      tab: 'widgets',
+      state: pubVersion ? 'Published' : 'Not published',
+      ready: !!pubVersion,
+    },
+    {
+      label: 'Website announcement',
+      icon: PanelTop,
+      tab: 'widgets',
+      state: pubVersion ? 'Published' : 'Not published',
+      ready: !!pubVersion,
+    },
+    {
+      label: 'Facebook / Instagram',
+      icon: Share2,
+      tab: 'social',
+      state: 'Open studio',
+      ready: false,
+    },
+    {
+      label: 'Google Business Profile',
+      icon: MapPin,
+      tab: 'integrations',
+      state:
+        detail?.connection?.status === 'connected'
+          ? 'Sync paused'
+          : detail?.googleConfigured
+            ? 'Connect'
+            : 'Unavailable',
+      ready: false,
+    },
+  ];
   const goPublish = (value: Schedule) => {
     setDraft(value);
-    setModal('publish');
+    openPublish(
+      modal.startsWith('announcement:') || modal === 'Post announcement'
+        ? 'announcements'
+        : 'special',
+    );
   };
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -626,8 +689,8 @@ export function Dashboard({
                   key={item.id}
                   aria-label={item.label}
                   title={item.label}
-                  aria-current={tab === item.id ? 'page' : undefined}
-                  className={`${tab === item.id ? 'active' : ''} nav-${item.id}`}
+                  aria-current={!onboarding && tab === item.id ? 'page' : undefined}
+                  className={`${!onboarding && tab === item.id ? 'active' : ''} nav-${item.id}`}
                   onClick={() => switchTab(item.id)}
                 >
                   <item.icon size={18} />
@@ -637,6 +700,23 @@ export function Dashboard({
             </nav>
           </div>
         ))}
+        {demo && (
+          <div className="nav-group">
+            <nav aria-label="Demo">
+              <button
+                aria-label="Onboarding"
+                title="Onboarding"
+                aria-current={onboarding ? 'page' : undefined}
+                className={onboarding ? 'active' : ''}
+                disabled={busy}
+                onClick={startDemoOnboarding}
+              >
+                <Store size={18} />
+                <span className="sidebar-text">Onboarding</span>
+              </button>
+            </nav>
+          </div>
+        )}
         <div className="sidebar-bottom">
           <nav aria-label="Account">
             <button
@@ -781,7 +861,7 @@ export function Dashboard({
                 {[
                   'Welcome',
                   'Your business',
-                  'Opening hours',
+                  'Business hours',
                   'Google',
                   'Your website',
                   'Ready to go',
@@ -825,7 +905,7 @@ export function Dashboard({
                         disabled={busy}
                         onClick={() =>
                           act(async () => {
-                            if (!selected) {
+                            if (!demo && !selected) {
                               const created = await request('/api/manage', {
                                 op: 'create',
                                 sourceLocationId,
@@ -927,7 +1007,7 @@ export function Dashboard({
                         value={widgetType}
                         onChange={(e) => setWidgetType(e.target.value as WidgetType)}
                       >
-                        <option value="hours">Opening hours</option>
+                        <option value="hours">Business hours</option>
                         <option value="banner">Announcement banner</option>
                         <option value="status">Status badge</option>
                       </select>
@@ -957,7 +1037,7 @@ export function Dashboard({
                       Publish your hours to activate your public website widgets. Google is optional
                       and will only receive updates after connection.
                     </p>
-                    <Button onClick={() => setModal('publish')}>
+                    <Button onClick={() => openPublish()}>
                       Review & publish <ArrowRight size={16} />
                     </Button>
                   </div>
@@ -966,11 +1046,13 @@ export function Dashboard({
             </>
           ) : (
             <>
-              <div className="page-heading">
-                <div>
-                  <h1>{titles[tab]?.[0]}</h1>
-                  <p>{titles[tab]?.[1]}</p>
-                </div>
+              <div className={`page-heading ${tab === 'overview' ? styles.overviewHeading : ''}`}>
+                {tab !== 'overview' && (
+                  <div>
+                    <h1>{titles[tab]?.[0]}</h1>
+                    <p>{titles[tab]?.[1]}</p>
+                  </div>
+                )}
                 {['overview', 'hours', 'special', 'announcements', 'widgets', 'settings'].includes(
                   tab,
                 ) && (
@@ -989,7 +1071,7 @@ export function Dashboard({
                         Save draft
                       </Button>
                     )}
-                    <Button disabled={busy || readonly} onClick={() => setModal('publish')}>
+                    <Button disabled={busy || readonly} onClick={() => openPublish()}>
                       <Send size={16} />
                       Publish changes
                     </Button>
@@ -1011,7 +1093,7 @@ export function Dashboard({
                   </span>
                 </div>
               )}
-              {['overview', 'billing'].includes(tab) && (demo || detail?.trial) && (
+              {tab === 'billing' && (demo || detail?.trial) && (
                 <ProTrialCard
                   key={selected || 'demo'}
                   trial={demo ? demoTrial : detail!.trial}
@@ -1022,213 +1104,134 @@ export function Dashboard({
                 />
               )}
               {tab === 'overview' && (
-                <>
-                  <div className="overview-grid">
-                    <section className="status-card">
-                      <div className="status-card-top">
-                        <span className="eyebrow">RIGHT NOW AT {draft.name.toUpperCase()}</span>
-                        <span className="live-pill">
-                          <span className="status-dot green" />
-                          {!demo && !detail
-                            ? 'Loading status'
-                            : dirty || unpublished
-                              ? 'Draft preview'
-                              : 'Published schedule'}
-                        </span>
-                      </div>
-                      <div className="status-main">
-                        <div>
-                          <div className="big-status">
-                            <span className={`status-orb ${status.open ? '' : 'closed'}`} />
-                            {status.open ? 'You’re open.' : 'You’re closed.'}
-                          </div>
-                          <p>
-                            {status.nextLabel}
-                            {dirty ? ' · Draft preview' : ''}
-                          </p>
-                        </div>
-                        <div className="sun-illustration">
-                          <Sun size={65} strokeWidth={1.2} />
-                          <div />
-                        </div>
-                      </div>
-                      <div className="status-card-bottom">
-                        <div>
-                          <span>TODAY’S HOURS</span>
-                          <strong>{formatIntervals(status.today)}</strong>
-                        </div>
-                        <Button variant="outline" onClick={() => setModal('Change today’s hours')}>
-                          Update hours <ArrowRight size={16} />
-                        </Button>
-                      </div>
-                    </section>
-                    <section className="snapshot-card">
-                      <span className="eyebrow">WEBSITE WIDGETS</span>
-                      <div className="snapshot-icon">
-                        <CheckCircle2 size={25} />
-                      </div>
-                      <h3>{pubVersion ? 'Widgets published' : 'Not published yet'}</h3>
-                      <p>
-                        {pubVersion
-                          ? 'Published widgets are available. Check that they are installed on your website.'
-                          : 'Publish your hours, then install a widget on your website.'}
-                      </p>
-                      <button className="text-link" onClick={() => switchTab('widgets')}>
-                        {pubVersion ? 'View your widgets' : 'Set up your widgets'}{' '}
-                        <ArrowUpRight size={14} />
-                      </button>
-                    </section>
-                  </div>
-                  <section className="quick-section">
-                    <div className="section-heading">
-                      <h3>Quick actions</h3>
+                <section className={styles.panel} aria-label="Business overview">
+                  <header className={styles.header}>
+                    <span className={styles.mark}>
+                      <RefreshCw size={18} />
+                    </span>
+                    <div className={styles.identity}>
+                      <strong>OpenSync</strong>
+                      <span>{draft.name}</span>
                     </div>
-                    <div className="quick-actions">
-                      {[
-                        { label: 'Close early', icon: Clock },
-                        { label: 'Open late', icon: CloudSun },
-                        { label: 'Closed today', icon: Store },
-                        { label: 'Add special hours', icon: CalendarDays },
-                        { label: 'Post announcement', icon: Megaphone },
-                      ].map((a) => (
-                        <button key={a.label} onClick={() => setModal(a.label)} disabled={readonly}>
-                          <a.icon size={20} />
-                          <span>{a.label}</span>
-                          <Plus size={14} />
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                  <div className="lower-grid">
-                    <section className="card">
-                      <div className="card-heading">
-                        <div>
-                          <h3>
-                            <Plug size={18} /> Publishing channels
-                          </h3>
-                        </div>
-                        <button className="text-link" onClick={() => switchTab('integrations')}>
-                          Manage <ArrowUpRight size={14} />
-                        </button>
-                      </div>
-                      <div className="destination-list">
-                        {destinations.map((d, i) => (
-                          <button
-                            key={d.label}
-                            onClick={() => switchTab(i ? 'widgets' : 'integrations')}
-                            className="destination-row"
-                          >
-                            <span className={`provider-icon ${d.color}`}>
-                              <d.icon size={20} />
-                            </span>
-                            <span className="destination-info">
-                              <strong>{d.label}</strong>
-                              <small>{d.description}</small>
-                            </span>
-                            <span
-                              className={`destination-status ${i && pubVersion ? 'success' : ''}`}
-                            >
-                              {i && pubVersion ? (
-                                <Check size={13} />
-                              ) : (
-                                <span className="status-dot gray" />
-                              )}
-                              {d.status}
-                            </span>
-                            <ChevronRight size={15} />
-                          </button>
-                        ))}
-                      </div>
-                      <button className="coming-row" onClick={() => switchTab('social')}>
-                        <span className="social-symbols">
-                          <Instagram size={16} />
-                          <Facebook size={16} />
-                        </span>
-                        <span>Create a post or story.</span>
-                        <span className="pill">Social studio</span>
-                      </button>
-                    </section>
-                    <section className="card upcoming-card">
-                      <div className="card-heading">
-                        <div>
-                          <h3>Upcoming special hours</h3>
-                        </div>
-                        <CalendarDays size={18} />
-                      </div>
-                      {upcoming.length ? (
-                        upcoming.slice(0, 3).map((e) => (
-                          <div className="upcoming-item" key={e.id}>
-                            <div className="date-tile">
-                              <span>
-                                {new Intl.DateTimeFormat('en', {
-                                  month: 'short',
-                                  timeZone: 'UTC',
-                                }).format(new Date(e.start))}
-                              </span>
-                              <strong>{e.start.slice(8)}</strong>
-                            </div>
-                            <div>
-                              <strong>{e.label || 'Special hours'}</strong>
-                              <p>{formatIntervals(e.intervals)}</p>
-                              <small>Special hours · {e.start}</small>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="empty-state small">
-                          <CalendarDays size={28} />
-                          <h4>No upcoming special hours</h4>
-                          <p>Your regular schedule applies.</p>
-                        </div>
-                      )}
-                      <button
-                        className="add-upcoming"
-                        onClick={() => setModal('Add special hours')}
-                      >
-                        <Plus size={16} />
-                        Add special hours
-                      </button>
-                    </section>
+                    <button
+                      className={`${styles.badge} ${pubVersion ? styles.ready : ''}`}
+                      onClick={() => switchTab('widgets')}
+                    >
+                      {pubVersion ? <CheckCircle2 size={13} /> : <Globe size={13} />}
+                      {demo
+                        ? 'Demo preview'
+                        : !detail
+                          ? 'Loading'
+                          : pubVersion
+                            ? 'Website published'
+                            : 'Set up website'}
+                    </button>
+                  </header>
+                  <div className={styles.greeting}>
+                    <h1>
+                      {greeting}
+                      {demo ? ', Jamie' : ''} <Sun size={25} aria-hidden="true" />
+                    </h1>
+                    <p>Here&apos;s what&apos;s happening with your business today.</p>
                   </div>
-                  {status.announcement && (
-                    <div className="active-announcement">
-                      <span className="provider-icon violet">
-                        <Megaphone size={20} />
+                  <div className={styles.summaries}>
+                    <section className={styles.summary}>
+                      <span>
+                        Business status{dirty || unpublished ? ' \u00b7 Draft preview' : ''}
                       </span>
-                      <div>
-                        <span className="eyebrow">ANNOUNCEMENT PREVIEW</span>
-                        <strong>{status.announcement.title || status.announcement.message}</strong>
-                        <p>{status.announcement.message}</p>
-                      </div>
-                      <button className="text-link" onClick={() => switchTab('announcements')}>
-                        View announcement <ArrowUpRight size={14} />
+                      <strong>
+                        <CheckCircle2 size={16} className={status.open ? styles.open : ''} />
+                        {status.open ? 'Open now' : 'Closed now'}
+                      </strong>
+                      <p>{status.nextLabel}</p>
+                    </section>
+                    <button className={styles.summary} onClick={() => switchTab('special')}>
+                      <span>Next change</span>
+                      <strong>
+                        {upcoming[0]?.label ||
+                          (upcoming.length ? 'Holidays & exceptions' : 'No upcoming changes')}
+                      </strong>
+                      <p>
+                        {upcoming[0] ? (
+                          <>
+                            {formatIntervals(upcoming[0].intervals)} &middot;{' '}
+                            {new Intl.DateTimeFormat('en', {
+                              month: 'short',
+                              day: 'numeric',
+                              timeZone: 'UTC',
+                            }).format(new Date(upcoming[0].start))}
+                          </>
+                        ) : (
+                          'Your regular schedule applies'
+                        )}
+                      </p>
+                    </button>
+                  </div>
+                  <section className={styles.actions}>
+                    <h2>What would you like to do?</h2>
+                    <div className={styles.actionGrid}>
+                      <button onClick={() => switchTab('hours')} disabled={readonly}>
+                        <Clock size={20} />
+                        <span>Change hours</span>
+                      </button>
+                      <button onClick={() => setModal('Close early')} disabled={readonly}>
+                        <DoorOpen size={20} />
+                        <span>Close early</span>
+                      </button>
+                      <button onClick={() => setModal('Post announcement')} disabled={readonly}>
+                        <Megaphone size={20} />
+                        <span>Post an update</span>
+                      </button>
+                      <button onClick={() => setModal('Add special hours')} disabled={readonly}>
+                        <CalendarDays size={20} />
+                        <span>Holiday hours</span>
                       </button>
                     </div>
-                  )}
-                  <section className="card activity-preview">
-                    <div className="card-heading">
-                      <h3>Recent activity</h3>
-                      <button className="text-link" onClick={() => switchTab('activity')}>
-                        View all activity <ArrowRight size={14} />
-                      </button>
-                    </div>
-                    {history.length ? (
-                      history.slice(0, 3).map((h) => (
-                        <div className="activity-row" key={h.id}>
-                          <span className="activity-check">
-                            <Check size={15} />
-                          </span>
-                          <span>{h.message}</span>
-                          <time>{new Date(h.createdAt).toLocaleDateString('en-CA')}</time>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state small">
-                        <p>No published updates yet.</p>
-                      </div>
-                    )}
                   </section>
-                </>
+                  <section className={styles.channels}>
+                    <div className={styles.sectionHeading}>
+                      <h2>Where your updates appear</h2>
+                      {demo && <span>Demo</span>}
+                    </div>
+                    {overviewChannels.map((channel) => (
+                      <button
+                        key={channel.label}
+                        className={styles.channel}
+                        onClick={() => switchTab(channel.tab)}
+                      >
+                        <channel.icon size={17} />
+                        <span>{channel.label}</span>
+                        <span className={`${styles.badge} ${channel.ready ? styles.ready : ''}`}>
+                          {channel.state}
+                        </span>
+                      </button>
+                    ))}
+                  </section>
+                  <button className={styles.activity} onClick={() => switchTab('activity')}>
+                    <strong>
+                      Recent activity <ChevronRight size={15} />
+                    </strong>
+                    <p>
+                      {history[0] ? (
+                        <>
+                          <time>
+                            {new Date(history[0].createdAt).toLocaleDateString('en-CA', {
+                              timeZone: draft.timezone,
+                            })}
+                          </time>{' '}
+                          &middot; {history[0].message}
+                        </>
+                      ) : (
+                        'No published updates yet.'
+                      )}
+                    </p>
+                  </button>
+                  <p className={styles.footnote}>
+                    {demo
+                      ? 'Demo changes stay in this browser. Channel availability is shown above.'
+                      : 'Published widgets appear on your website once installed.'}
+                  </p>
+                </section>
               )}
               {tab === 'hours' && (
                 <WeeklyEditor
@@ -1241,7 +1244,7 @@ export function Dashboard({
                 <section className="card">
                   <div className="card-heading">
                     <div>
-                      <h3>Special hours</h3>
+                      <h3>Holidays & exceptions</h3>
                       <p>These take priority over your regular hours for the selected dates.</p>
                     </div>
                     <Button size="sm" onClick={() => setModal('Add special hours')}>
@@ -1256,7 +1259,7 @@ export function Dashboard({
                           <CalendarDays size={20} />
                         </span>
                         <div className="grow">
-                          <strong>{e.label || 'Special hours'}</strong>
+                          <strong>{e.label || 'Holidays & exceptions'}</strong>
                           <p>
                             {e.start}
                             {e.start !== e.end ? ` → ${e.end}` : ''} ·{' '}
@@ -1740,7 +1743,7 @@ export function Dashboard({
                               )}
                             </pre>
                             <p>
-                              Local hours are shown in Opening hours. Import replaces the local
+                              Local hours are shown in Business hours. Import replaces the local
                               weekly schedule and special hours in your draft only.
                             </p>
                             <Button
@@ -1797,7 +1800,7 @@ export function Dashboard({
                           : 'No published hours yet. Publish your first update to activate your widgets.'}
                       </div>
                       <Button variant="outline" onClick={() => switchTab('widgets')}>
-                        Configure website widgets <ArrowRight size={16} />
+                        Add to your website <ArrowRight size={16} />
                       </Button>
                     </section>
                     <section className="card padded social-card">
@@ -1812,7 +1815,7 @@ export function Dashboard({
                         image. Publish to a connected account or download it to share yourself.
                       </p>
                       <Button variant="outline" onClick={() => switchTab('social')}>
-                        Open social studio <ArrowRight size={16} />
+                        Open Social posts <ArrowRight size={16} />
                       </Button>
                     </section>
                   </div>
@@ -1840,7 +1843,7 @@ export function Dashboard({
                         onClick={() =>
                           act(async () => {
                             await refresh();
-                            notify('Activity refreshed');
+                            notify('History refreshed');
                           })
                         }
                       >
@@ -2165,11 +2168,11 @@ export function Dashboard({
                   {[
                     [
                       'How do I update today’s hours?',
-                      'Choose Close early, Open late, or Closed today on Overview. Edit the times, review affected destinations, and publish. This creates an exception without changing your usual week.',
+                      'Choose Close early on Overview, or Holiday hours for other one-off changes. Edit the times, review affected destinations, and publish. This creates an exception without changing your usual week.',
                     ],
                     [
                       'How do I install a widget?',
-                      'Open Website widgets, choose a type, and copy the embed snippet into an HTML block on your website. Publish your first revision before testing. Published updates appear within about 45 seconds.',
+                      'Open Add to your website, choose a type, and copy the embed snippet into an HTML block on your website. Publish your first revision before testing. Published updates appear within about 45 seconds.',
                     ],
                     [
                       'Why hasn’t Google changed yet?',
@@ -2268,74 +2271,26 @@ export function Dashboard({
               onCancel={() => setModal('')}
             />
           ) : modal === 'publish' ? (
-            <>
-              <div className="modal-icon">
-                <Send size={24} />
-              </div>
-              <h2>Publish changes?</h2>
-              <p className="muted">
-                Publish a new version of {draft.name}’s hours and announcements.
-              </p>
-              <div className="publish-summary">
-                <div>
-                  <Clock size={18} />
-                  <span>Today</span>
-                  <strong>{formatIntervals(status.today)}</strong>
-                </div>
-                <div>
-                  <CalendarDays size={18} />
-                  <span>Special-hour periods</span>
-                  <strong>{draft.exceptions.length}</strong>
-                </div>
-                <div>
-                  <Megaphone size={18} />
-                  <span>Enabled announcements</span>
-                  <strong>{draft.announcements.filter((a) => a.enabled).length}</strong>
-                </div>
-              </div>
-              <PublishDestinations
-                paid={plan !== 'free'}
-                key={selected || 'demo'}
-                schedule={draft}
-                locationId={demo ? 'demo' : selected}
-                demo={demo}
-                readonly={readonly || busy}
-                google={
-                  !demo &&
-                  detail?.connection?.status === 'connected' &&
-                  !!detail.connection.remoteId &&
-                  plan !== 'free'
-                }
-              />
-              {error && (
-                <div className="form-error publish-error" role="alert">
-                  {error}
-                  {widgetPlanError && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || readonly}
-                      onClick={resetWidget}
-                    >
-                      <RotateCcw size={15} />
-                      Reset to Free defaults
-                    </Button>
-                  )}
-                </div>
-              )}
-              <div className="modal-actions">
-                <Button variant="outline" disabled={busy} onClick={() => setModal('')}>
-                  Keep editing
-                </Button>
-                <Button variant="outline" disabled={busy || readonly} onClick={publishLater}>
-                  Publish later
-                </Button>
-                <Button disabled={busy} onClick={publish}>
-                  {busy ? 'Publishing…' : 'Publish changes'}
-                  <ArrowRight size={16} />
-                </Button>
-              </div>
-            </>
+            <PublishWizard
+              draft={draft}
+              published={publishedSchedule}
+              scope={publishScope}
+              locationId={demo ? 'demo' : selected}
+              demo={demo}
+              readonly={readonly}
+              google={
+                !demo &&
+                ['hours', 'special', 'all'].includes(publishScope) &&
+                detail?.connection?.status === 'connected' &&
+                !!detail.connection.remoteId &&
+                plan !== 'free'
+              }
+              onPublish={publish}
+              onClose={() => setModal('')}
+              onBusy={setBusy}
+              error={error}
+              onResetWidget={widgetPlanError ? resetWidget : undefined}
+            />
           ) : modal === 'location' ? (
             <form
               onSubmit={(e) => {

@@ -29,7 +29,10 @@ test('reset is available directly in the banner and publish error', async ({ pag
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Reset to Free defaults' }).click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Demo published');
   await page.reload();
   await expect(page.getByLabel('Accent colour')).toHaveValue('#4f46e5');

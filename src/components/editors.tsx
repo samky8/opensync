@@ -21,6 +21,18 @@ export function Periods({
   value: Interval[];
   onChange: (v: Interval[]) => void;
 }) {
+  const addPeriodButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={() => onChange([...value, { open: '09:00', close: '17:00' }])}
+    >
+      <Plus size={14} />
+      {value.length ? 'Add period' : 'Add hours'}
+    </Button>
+  );
+
   return (
     <div className="periods">
       {value.map((item, i) => (
@@ -50,18 +62,11 @@ export function Periods({
           >
             <Trash2 size={15} />
           </button>
+          {i === value.length - 1 && addPeriodButton}
           {item.close < item.open && <small className="overnight">Next day</small>}
         </div>
       ))}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => onChange([...value, { open: '09:00', close: '17:00' }])}
-      >
-        <Plus size={14} />
-        {value.length ? 'Add period' : 'Add hours'}
-      </Button>
+      {!value.length && addPeriodButton}
     </div>
   );
 }
@@ -83,10 +88,10 @@ export function WeeklyEditor({
             Core opening hours repeat every week.{' '}
             {onSpecialHours ? (
               <button type="button" className="text-link" onClick={onSpecialHours}>
-                Special hours
+                Holidays & exceptions
               </button>
             ) : (
-              'Special hours'
+              'Holidays & exceptions'
             )}{' '}
             override them for holidays, closures, or other one-off dates. Your core hours resume
             automatically afterward.

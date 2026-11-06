@@ -1,6 +1,6 @@
 # Direct Instagram and Facebook publishing
 
-Social studio publishes image posts and photo stories on demand. There is no social scheduling or cron requirement. Facebook destinations are Pages, not personal profiles. Instagram must be a professional account linked to an authorized Page; the Facebook Login API supports stories for Business accounts.
+Social posts publishes image posts and photo stories on demand. There is no social scheduling or cron requirement. Facebook destinations are Pages, not personal profiles. Instagram must be a professional account linked to an authorized Page; the Facebook Login API supports stories for Business accounts.
 
 ## Deployment setup
 
@@ -11,7 +11,7 @@ Run `npm run meta:check` first. It loads Next.js environment files and reports m
 3. Set `META_APP_ID`, `META_APP_SECRET`, `META_GRAPH_VERSION` (default `v25.0`), `NEXT_PUBLIC_APP_URL` (the public HTTPS origin), and `TOKEN_ENCRYPTION_KEY` (64 hexadecimal characters). Keep the existing encryption key if Google or Meta tokens are already stored.
 4. Configure the app's website domain, privacy-policy URL and data-deletion instructions URL (`/privacy`, after completing the operator details). Follow Meta's current business verification and App Review requirements before connecting accounts outside app roles/test accounts. Request `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, and `instagram_content_publish` for this Facebook Login flow. Do not substitute Instagram Login permission names.
 5. Ensure `/api/social/media/*` is reachable by Meta without deployment protection, browser authentication, or a bot challenge. URLs contain a random capability and expire after 24 hours. Never expose a Vercel bypass token in a media URL.
-6. Sign in to OpenSync, open Social studio, and choose Connect / reconnect Meta. Select the Pages to authorize and grant the publishing permissions. Select a destination, then Review & publish. The confirmation shows the captured image, destination, format and caption.
+6. Sign in to OpenSync, open Social posts, and choose Connect / reconnect Meta. Select the Pages to authorize and grant the publishing permissions. Select a destination, then Review & publish. The confirmation shows the captured image, destination, format and caption.
 7. Test all four paths on controlled accounts: Facebook post, Facebook story, Instagram post, Instagram story. Verify the returned provider ID and the actual account. The local automated tests mock Meta; they do not prove live app approval or publishing access.
 
 ## Facebook Login for Business
@@ -36,7 +36,7 @@ One operator-owned Meta app serves all OpenSync customers. Customers authorize t
 | `instagram_basic`           | Identify the professional Instagram account linked to the selected Page.                                 |
 | `instagram_content_publish` | Publish the customer's approved image post or eligible Business-account story to that Instagram account. |
 
-4. Prepare an accessible OpenSync reviewer login and a screencast of the real flow: sign in, select a location, open Social studio, connect Meta, grant permissions/select assets, choose destination, review image/caption, publish, and show the resulting post in Facebook/Instagram. Demonstrate disconnect and deletion instructions. Supply clear test steps and any fixtures requested by Meta. Do not use the demo as evidence of live publishing or share your personal account password.
+4. Prepare an accessible OpenSync reviewer login and a screencast of the real flow: sign in, select a location, open Social posts, connect Meta, grant permissions/select assets, choose destination, review image/caption, publish, and show the resulting post in Facebook/Instagram. Demonstrate disconnect and deletion instructions. Supply clear test steps and any fixtures requested by Meta. Do not use the demo as evidence of live publishing or share your personal account password.
 5. Obtain approval, confirm Advanced Access for the required permissions, and switch the app to Live/published mode as presented by Meta. Test with an authorized customer who has **no app role**; confirm they see only their authorized assets and can publish to them.
 6. Maintain Meta's recurring data-use checks and any required verification. Reconnection is necessary when a customer revokes access or Meta invalidates their token.
 

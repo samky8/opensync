@@ -18,7 +18,10 @@ test('verified account creates a location, publishes hours and exposes its publi
   await expect(page.locator('pre')).toContainText('data-opensync');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Review & publish' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Publish changes' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Published');
   const id = await page
     .locator('[data-profile-id][aria-current="true"]')

@@ -7,16 +7,16 @@ test('tabs survive reload and follow browser Back and Forward', async ({ page },
       await page.getByRole('button', { name: 'Open navigation' }).click();
     await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   };
-  await navigate('Opening hours');
+  await navigate('Business hours');
   await expect(page).toHaveURL(/tab=hours/);
-  await navigate('Website widgets');
+  await navigate('Add to your website');
   await expect(page).toHaveURL(/tab=widgets/);
   await page.goBack();
-  await expect(page.locator('main h1')).toHaveText('Opening hours');
+  await expect(page.locator('main h1')).toHaveText('Business hours');
   await page.goForward();
-  await expect(page.locator('main h1')).toHaveText('Website widgets');
+  await expect(page.locator('main h1')).toHaveText('Add to your website');
   await page.reload();
-  await expect(page.locator('main h1')).toHaveText('Website widgets');
+  await expect(page.locator('main h1')).toHaveText('Add to your website');
 });
 
 test('saved drafts stay visibly unpublished after reload until published', async ({ page }) => {
@@ -33,12 +33,15 @@ test('saved drafts stay visibly unpublished after reload until published', async
   await page.goto('/demo?tab=widgets');
   await page.getByText('View last published demo', { exact: true }).click();
   await expect(page.locator('.published-demo')).not.toContainText('Saved draft business');
+  await page.goto('/demo?tab=settings');
   await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Publish changes', exact: true })
-    .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.locator('.draft-notice')).toHaveCount(0);
+  await page.goto('/demo?tab=widgets');
+  await page.getByText('View last published demo', { exact: true }).click();
   await expect(page.locator('.published-demo')).toContainText('Saved draft business');
   await page.reload();
   await expect(page.locator('.draft-notice')).toHaveCount(0);
