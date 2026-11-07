@@ -31,6 +31,8 @@ import {
   Menu,
   X,
   Sun,
+  Sunset,
+  Moon,
   DoorOpen,
   PanelTop,
   Share2,
@@ -49,7 +51,12 @@ import { ProBadge } from './ui/pro-badge';
 import { Widget, type WidgetType } from './widget';
 import { SocialComposer } from './social-composer';
 import { PublishWizard } from './publish-wizard';
-import { scopedSchedule, publishScopes, type PublishScope } from '@/lib/publish-scope';
+import {
+  publishChanges,
+  scopedSchedule,
+  publishScopes,
+  type PublishScope,
+} from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
 import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
@@ -236,6 +243,7 @@ export function Dashboard({
       (!publishedSchedule ||
         JSON.stringify(scheduleSchema.parse(saved)) !==
           JSON.stringify(scheduleSchema.parse(publishedSchedule))),
+    hoursHaveChanges = publishChanges(draft, publishedSchedule, 'hours').length > 0,
     plan = demo ? 'pro' : detail?.plan || 'free';
   let status;
   try {
@@ -569,6 +577,7 @@ export function Dashboard({
   );
   const greeting =
     localHour < 12 ? 'Good morning' : localHour < 18 ? 'Good afternoon' : 'Good evening';
+  const GreetingIcon = localHour < 6 || localHour >= 22 ? Moon : localHour >= 18 ? Sunset : Sun;
   const overviewChannels = [
     {
       label: 'Website hours',
@@ -1071,7 +1080,10 @@ export function Dashboard({
                         Save draft
                       </Button>
                     )}
-                    <Button disabled={busy || readonly} onClick={() => openPublish()}>
+                    <Button
+                      disabled={busy || readonly || (tab === 'hours' && !hoursHaveChanges)}
+                      onClick={() => openPublish()}
+                    >
                       <Send size={16} />
                       Publish changes
                     </Button>
@@ -1130,7 +1142,7 @@ export function Dashboard({
                   <div className={styles.greeting}>
                     <h1>
                       {greeting}
-                      {demo ? ', Jamie' : ''} <Sun size={25} aria-hidden="true" />
+                      {demo ? ', Jamie' : ''} <GreetingIcon size={25} aria-hidden="true" />
                     </h1>
                     <p>Here&apos;s what&apos;s happening with your business today.</p>
                   </div>

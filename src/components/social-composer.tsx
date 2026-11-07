@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Share2, Pencil, Check, Upload } from 'lucide-react';
+import { Download, Copy, Share2, Pencil, Check, Upload, Instagram, Facebook } from 'lucide-react';
 import { ProBadge } from './ui/pro-badge';
 import { Button } from './ui/button';
 import { SocialPublishing } from './social-publishing';
@@ -12,11 +12,16 @@ const backgrounds = ['botanical', 'sunset', 'waves', 'arches'] as const;
 type Design = {
   background?: string;
   customImage?: string;
+  headerText?: string;
+  showHeaderText?: boolean;
+  showBusinessName?: boolean;
+  showBusinessLogo?: boolean;
   title: string;
   message: string;
   footer: string;
   caption: string;
   format: 'post' | 'story';
+  formats?: ('post' | 'story')[];
   platform: 'Instagram' | 'Facebook';
   platforms?: ('Instagram' | 'Facebook')[];
   fontColour?: string;
@@ -57,16 +62,18 @@ function drawText(
   height: number,
   maxSize: number,
   bold = false,
+  x = 108,
+  width = 864,
 ) {
   let size = maxSize;
   let wrapped: string[] = [];
   do {
     ctx.font = `${bold ? '600' : '400'} ${size}px ${bold ? 'Georgia' : 'Arial'}`;
-    wrapped = lines(ctx, text, 864);
+    wrapped = lines(ctx, text, width);
     if (wrapped.length * size * 1.3 <= height) break;
     size--;
   } while (size > 12);
-  wrapped.forEach((line, i) => ctx.fillText(line, 108, y + i * size * 1.3));
+  wrapped.forEach((line, i) => ctx.fillText(line, x, y + i * size * 1.3));
 }
 
 export function SocialComposer({
@@ -90,6 +97,10 @@ export function SocialComposer({
 }) {
   const backgroundUpload = useRef<HTMLInputElement>(null);
   const [design, setDesign] = useState<Design>({
+    headerText: '',
+    showHeaderText: false,
+    showBusinessName: true,
+    showBusinessLogo: false,
     title: 'A little update.',
     message: 'Our hours are changing. Here’s what to know before your next visit.',
     footer: schedule.website || schedule.name,
@@ -99,12 +110,20 @@ export function SocialComposer({
     theme: 'cream',
     accent: schedule.widget.accent,
   });
-  const [editing, setEditing] = useState<'title' | 'message' | 'footer' | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const platforms = design.platforms || [design.platform];
+  const formats = design.formats || [design.format];
+  const showHeaderText = design.showHeaderText ?? false;
+  const showBusinessName = design.showBusinessName ?? true;
+  const showBusinessLogo = design.showBusinessLogo ?? false;
   const [notice, setNotice] = useState('');
   const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{
+    source: string;
+    image: HTMLImageElement;
+  } | null>(null);
+  const [businessLogoImage, setBusinessLogoImage] = useState<{
     source: string;
     image: HTMLImageElement;
   } | null>(null);
@@ -116,6 +135,8 @@ export function SocialComposer({
         ? '/social-backgrounds/' + design.background + '.svg'
         : '';
   const backgroundReady = !backgroundSource || backgroundImage?.source === backgroundSource;
+  const businessLogoReady =
+    !showBusinessLogo || !schedule.logo || businessLogoImage?.source === schedule.logo;
   useEffect(() => {
     if (!backgroundSource) return;
     let cancelled = false;
@@ -131,10 +152,26 @@ export function SocialComposer({
       cancelled = true;
     };
   }, [backgroundSource]);
-  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!schedule.logo) return;
+    let cancelled = false;
+    const image = new window.Image();
+    if (/^https?:/i.test(schedule.logo)) image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      if (!cancelled) setBusinessLogoImage({ source: schedule.logo, image });
+    };
+    image.onerror = () => {
+      if (!cancelled)
+        setNotice('Your business logo could not load. Deselect it or upload it again.');
+    };
+    image.src = schedule.logo;
+    return () => {
+      cancelled = true;
+    };
+  }, [schedule.logo]);
+  const canvases = useRef<Partial<Record<Design['format'], HTMLCanvasElement | null>>>({});
   const storageKey = `opensync-social-v1:${locationId}`;
   const platformStorageKey = initialPlatform ? `${storageKey}:${initialPlatform}` : storageKey;
-  const height = design.format === 'story' ? 1920 : 1080;
   const caption =
     design.caption ||
     `${design.title}\n${design.message}${design.footer && design.footer !== schedule.name ? `\n\n${design.footer}` : ''}`;
@@ -158,6 +195,11 @@ export function SocialComposer({
         !['cream', 'dark', 'accent'].includes(value.theme) ||
         !/^#[a-f\d]{6}$/i.test(value.accent) ||
         !['title', 'message', 'footer', 'caption'].every((key) => typeof value[key] === 'string') ||
+        (value.headerText !== undefined && typeof value.headerText !== 'string') ||
+        ['showHeaderText', 'showBusinessName', 'showBusinessLogo'].some(
+          (key) => value[key] !== undefined && typeof value[key] !== 'boolean',
+        ) ||
+        (value.headerText?.length || 0) > 98 ||
         value.title.length > 100 ||
         value.message.length > 700 ||
         value.footer.length > 120 ||
@@ -183,8 +225,20 @@ export function SocialComposer({
           ))
       )
         throw new Error();
+      if (
+        value.formats &&
+        (!Array.isArray(value.formats) ||
+          !value.formats.length ||
+          !value.formats.every((format: string) => ['post', 'story'].includes(format)) ||
+          new Set(value.formats).size !== value.formats.length)
+      )
+        throw new Error();
       setDesign({
         ...value,
+        headerText: value.headerText || '',
+        showHeaderText: value.showHeaderText ?? false,
+        showBusinessName: value.showBusinessName ?? true,
+        showBusinessLogo: value.showBusinessLogo ?? false,
         platform: initialPlatform || value.platform,
         platforms: initialPlatform ? [initialPlatform] : value.platforms,
       });
@@ -211,45 +265,101 @@ export function SocialComposer({
   }, [design, platformStorageKey, restored]);
 
   useEffect(() => {
-    const ctx = canvas.current?.getContext('2d');
-    if (!ctx) return;
-    const rgb = design.accent
-      .slice(1)
-      .match(/.{2}/g)!
-      .map((v) => parseInt(v, 16));
-    const dark =
-      design.theme === 'dark' ||
-      (design.theme === 'accent' && rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114 < 150);
-    ctx.fillStyle = design.theme === 'accent' ? design.accent : dark ? '#182b27' : '#faf5eb';
-    ctx.textBaseline = 'top';
-    ctx.fillRect(0, 0, 1080, height);
-    if (backgroundSource && backgroundImage?.source === backgroundSource) {
-      const image = backgroundImage.image;
-      const scale = Math.max(1080 / image.width, height / image.height);
-      ctx.drawImage(
-        image,
-        (1080 - image.width * scale) / 2,
-        (height - image.height * scale) / 2,
-        image.width * scale,
-        image.height * scale,
-      );
-      ctx.fillStyle = dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
+    for (const format of design.formats || [design.format]) {
+      const height = format === 'story' ? 1920 : 1080;
+      const ctx = canvases.current[format]?.getContext('2d');
+      if (!ctx) continue;
+      const rgb = design.accent
+        .slice(1)
+        .match(/.{2}/g)!
+        .map((v) => parseInt(v, 16));
+      const dark =
+        design.theme === 'dark' ||
+        (design.theme === 'accent' && rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114 < 150);
+      ctx.fillStyle = design.theme === 'accent' ? design.accent : dark ? '#182b27' : '#faf5eb';
+      ctx.textBaseline = 'top';
       ctx.fillRect(0, 0, 1080, height);
+      if (backgroundSource && backgroundImage?.source === backgroundSource) {
+        const image = backgroundImage.image;
+        const scale = Math.max(1080 / image.width, height / image.height);
+        ctx.drawImage(
+          image,
+          (1080 - image.width * scale) / 2,
+          (height - image.height * scale) / 2,
+          image.width * scale,
+          image.height * scale,
+        );
+        ctx.fillStyle = dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
+        ctx.fillRect(0, 0, 1080, height);
+      }
+      // A quiet frame and generous safe space keep story content clear of app controls.
+      ctx.strokeStyle = dark ? '#52645e' : '#b5b0a5';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(48, 48, 984, height - 96);
+      const start = format === 'story' ? 300 : 110;
+      ctx.fillStyle = design.fontColour || (dark ? '#faf5eb' : '#152823');
+      let headerX = 108;
+      if (showBusinessLogo && schedule.logo && businessLogoImage?.source === schedule.logo) {
+        const logo = businessLogoImage.image;
+        const size = 78;
+        const scale = Math.min(size / logo.width, size / logo.height);
+        const width = logo.width * scale;
+        const logoHeight = logo.height * scale;
+        ctx.drawImage(
+          logo,
+          108 + (size - width) / 2,
+          start + (size - logoHeight) / 2,
+          width,
+          logoHeight,
+        );
+        headerX += 108;
+      }
+      const headerItems = [
+        showBusinessName ? schedule.name : '',
+        showHeaderText ? design.headerText || '' : '',
+      ].filter(Boolean);
+      headerItems.forEach((item, index) =>
+        drawText(
+          ctx,
+          item,
+          start + (headerItems.length === 1 ? 18 : index * 42),
+          headerItems.length === 1 ? 64 : 38,
+          headerItems.length === 1 ? 32 : 28,
+          index === 0 && showBusinessName,
+          headerX,
+          972 - headerX,
+        ),
+      );
+      ctx.fillRect(108, start + 125, 78, 5);
+      drawText(ctx, design.title, start + 185, 230, 82, true);
+      drawText(ctx, design.message, start + 440, height - start - 660, 40);
+      ctx.globalAlpha = 0.75;
+      drawText(ctx, design.footer, height - (format === 'story' ? 300 : 145), 90, 28);
+      ctx.globalAlpha = 1;
+      if (!paid) {
+        ctx.font = '600 26px Arial';
+        const label = 'Opensync.ca';
+        const width = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(24,43,39,.85)';
+        ctx.fillRect(1032 - width - 24, height - 94, width + 40, 46);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'right';
+        ctx.fillText(label, 1024, height - 84);
+        ctx.textAlign = 'left';
+      }
     }
-    // A quiet frame and generous safe space keep story content clear of app controls.
-    ctx.strokeStyle = dark ? '#52645e' : '#b5b0a5';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(48, 48, 984, height - 96);
-    const start = design.format === 'story' ? 300 : 110;
-    ctx.fillStyle = design.fontColour || (dark ? '#faf5eb' : '#152823');
-    drawText(ctx, schedule.name, start, 100, 32);
-    ctx.fillRect(108, start + 125, 78, 5);
-    drawText(ctx, design.title, start + 185, 230, 82, true);
-    drawText(ctx, design.message, start + 440, height - start - 660, 40);
-    ctx.globalAlpha = 0.75;
-    drawText(ctx, design.footer, height - (design.format === 'story' ? 300 : 145), 90, 28);
-    ctx.globalAlpha = 1;
-  }, [design, schedule.name, height, backgroundImage, backgroundSource]);
+  }, [
+    design,
+    schedule.name,
+    schedule.logo,
+    paid,
+    backgroundImage,
+    backgroundSource,
+    businessLogoImage,
+    showBusinessLogo,
+    showBusinessName,
+    showHeaderText,
+  ]);
 
   function save() {
     try {
@@ -292,15 +402,18 @@ export function SocialComposer({
       setUploading(false);
     }
   }
-  async function file() {
-    if (!backgroundReady || uploading) throw new Error('Background is still loading.');
+  async function file(format: Design['format']) {
+    if (!backgroundReady || !businessLogoReady || uploading)
+      throw new Error('Artwork is still loading.');
+    const canvas = canvases.current[format];
+    if (!canvas) throw new Error('Preview unavailable.');
     const blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.current?.toBlob(
+      canvas.toBlob(
         (value) => (value ? resolve(value) : reject(new Error('Image export failed.'))),
         'image/png',
       ),
     );
-    return new File([blob], `opensync-${platforms.join('-').toLowerCase()}-${design.format}.png`, {
+    return new File([blob], `opensync-${platforms.join('-').toLowerCase()}-${format}.png`, {
       type: 'image/png',
     });
   }
@@ -308,19 +421,21 @@ export function SocialComposer({
     setBusy(true);
     setNotice('');
     try {
-      const asset = await file();
-      if (share && navigator.canShare?.({ files: [asset] })) {
-        await navigator.share({ files: [asset] });
+      const assets = await Promise.all(formats.map(file));
+      if (share && navigator.canShare?.({ files: assets })) {
+        await navigator.share({ files: assets });
         setNotice(
           'Image shared to your selected app. Finish publishing there; copy the caption separately if needed.',
         );
       } else {
-        const url = URL.createObjectURL(asset);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = asset.name;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        for (const asset of assets) {
+          const url = URL.createObjectURL(asset);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = asset.name;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
         setNotice(
           share
             ? 'File sharing is unavailable here. Image downloaded; upload it in your social app.'
@@ -342,7 +457,7 @@ export function SocialComposer({
       <section className="card padded social-output">
         <div className="section-heading">
           <h3>
-            {platforms.join(' & ')} {design.format}
+            {platforms.join(' & ')} {formats.join(' & ')}
           </h3>
           <span className="pill">Preview</span>
         </div>
@@ -350,7 +465,7 @@ export function SocialComposer({
           <fieldset className="social-platforms">
             <legend>Platform</legend>
             {(['Instagram', 'Facebook'] as const).map((platform) => (
-              <label key={platform}>
+              <label key={platform} className="social-platform-toggle" title={platform}>
                 <input
                   type="checkbox"
                   aria-label={platform}
@@ -363,20 +478,36 @@ export function SocialComposer({
                     if (next.length) update({ platforms: next, platform: next[0] });
                   }}
                 />
-                {platform === 'Instagram' ? 'IG' : 'FB'}
+                <span className="social-platform-logo">
+                  {platform === 'Instagram' ? (
+                    <Instagram size={24} aria-hidden="true" />
+                  ) : (
+                    <Facebook size={24} aria-hidden="true" />
+                  )}
+                  <Check className="social-platform-check" size={12} aria-hidden="true" />
+                </span>
               </label>
             ))}
           </fieldset>
-          <label>
-            Format
-            <select
-              value={design.format}
-              onChange={(e) => update({ format: e.target.value as Design['format'] })}
-            >
-              <option value="post">Square post · 1080 × 1080</option>
-              <option value="story">Story · 1080 × 1920</option>
-            </select>
-          </label>
+          <fieldset className="social-platforms">
+            <legend>Format</legend>
+            {(['post', 'story'] as const).map((format) => (
+              <label key={format}>
+                <input
+                  type="checkbox"
+                  aria-label={format === 'post' ? 'Post' : 'Story'}
+                  checked={formats.includes(format)}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                      ? [...formats, format]
+                      : formats.filter((item) => item !== format);
+                    if (next.length) update({ formats: next, format: next[0] });
+                  }}
+                />
+                {format === 'post' ? 'Post' : 'Story'}
+              </label>
+            ))}
+          </fieldset>
 
           <label>
             Font colour
@@ -462,84 +593,196 @@ export function SocialComposer({
           </small>
           {(uploading || !backgroundReady) && <p role="status">Preparing background?</p>}
         </fieldset>
-        <div className="social-editable-preview" style={{ maxWidth: height === 1920 ? 366 : 650 }}>
-          <canvas
-            ref={canvas}
-            width={1080}
-            height={height}
-            className="social-artwork"
-            role="img"
-            aria-label={`${schedule.name}: ${design.title}. ${design.message}. ${design.footer}`}
-          />
-          {(
-            [
-              {
-                key: 'title',
-                label: 'Headline',
-                top: design.format === 'story' ? 485 : 295,
-                limit: 100,
-              },
-              {
-                key: 'message',
-                label: 'Announcement',
-                top: design.format === 'story' ? 740 : 550,
-                limit: 700,
-              },
-              {
-                key: 'footer',
-                label: 'Footer / website',
-                top: height - (design.format === 'story' ? 300 : 145),
-                limit: 120,
-              },
-            ] as const
-          ).map(({ key, label, top, limit }) => (
-            <div
-              className={editing === key ? 'social-inline-edit is-editing' : 'social-inline-edit'}
-              key={key}
-              style={{ top: (top / height) * 100 + '%' }}
-            >
-              {editing === key ? (
-                <div className="social-inline-field">
-                  <label>
-                    {label}
-                    <textarea
-                      autoFocus
-                      aria-label={label}
-                      rows={key === 'message' ? 4 : 2}
-                      maxLength={limit}
-                      value={design[key]}
-                      onChange={(event) => update({ [key]: event.target.value })}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') setEditing(null);
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    aria-label={'Done editing ' + label}
-                    onClick={() => setEditing(null)}
-                  >
-                    <Check size={16} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="social-edit-pen"
-                  aria-label={'Edit ' + label}
-                  onClick={() => setEditing(key)}
+        <div className={`social-preview-grid${formats.length > 1 ? ' has-both-formats' : ''}`}>
+          {formats.map((format) => {
+            const height = format === 'story' ? 1920 : 1080;
+            return (
+              <section
+                key={format}
+                className="social-format-preview"
+                aria-label={`${format} preview`}
+              >
+                <h4>{format === 'post' ? 'Post ? 1080 ? 1080' : 'Story ? 1080 ? 1920'}</h4>
+                <div
+                  className="social-editable-preview"
+                  style={{ maxWidth: height === 1920 ? 366 : 650 }}
                 >
-                  <Pencil size={14} />
-                </button>
-              )}
-            </div>
-          ))}
+                  <canvas
+                    ref={(node) => {
+                      canvases.current[format] = node;
+                    }}
+                    width={1080}
+                    height={height}
+                    className="social-artwork"
+                    role="img"
+                    aria-label={`${format} preview: ${showBusinessName ? schedule.name : ''}${showHeaderText ? ` ${design.headerText}` : ''}. ${design.title}. ${design.message}. ${design.footer}`}
+                  />
+                  <div
+                    className={
+                      editing === `${format}:header`
+                        ? 'social-inline-edit social-header-edit is-editing'
+                        : 'social-inline-edit social-header-edit'
+                    }
+                    style={{ top: ((format === 'story' ? 300 : 110) / height) * 100 + '%' }}
+                  >
+                    {editing === `${format}:header` ? (
+                      <div className="social-inline-field social-header-field">
+                        <fieldset>
+                          <legend>Header</legend>
+                          <label className="social-header-option">
+                            <input
+                              type="checkbox"
+                              checked={showHeaderText}
+                              onChange={(event) => update({ showHeaderText: event.target.checked })}
+                            />
+                            Text
+                          </label>
+                          {showHeaderText && (
+                            <label className="social-header-text">
+                              Header text
+                              <input
+                                autoFocus
+                                aria-label="Header text"
+                                maxLength={98}
+                                value={design.headerText || ''}
+                                onChange={(event) => update({ headerText: event.target.value })}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') setEditing(null);
+                                }}
+                              />
+                              <span className="character-counter" aria-live="polite">
+                                ({(design.headerText || '').length}/98)
+                              </span>
+                            </label>
+                          )}
+                          <label className="social-header-option">
+                            <input
+                              type="checkbox"
+                              checked={showBusinessName}
+                              onChange={(event) =>
+                                update({ showBusinessName: event.target.checked })
+                              }
+                            />
+                            Business name
+                          </label>
+                          <label className="social-header-option">
+                            <input
+                              type="checkbox"
+                              checked={showBusinessLogo}
+                              disabled={!schedule.logo}
+                              onChange={(event) =>
+                                update({ showBusinessLogo: event.target.checked })
+                              }
+                            />
+                            Business logo
+                            {!schedule.logo && <small>No logo uploaded</small>}
+                          </label>
+                        </fieldset>
+                        <button
+                          type="button"
+                          aria-label="Done editing Header"
+                          onClick={() => setEditing(null)}
+                        >
+                          <Check size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="social-edit-pen"
+                        aria-label="Edit Header"
+                        onClick={() => setEditing(`${format}:header`)}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {(
+                    [
+                      {
+                        key: 'title',
+                        label: 'Headline',
+                        top: format === 'story' ? 485 : 295,
+                        limit: 100,
+                      },
+                      {
+                        key: 'message',
+                        label: 'Announcement',
+                        top: format === 'story' ? 740 : 550,
+                        limit: 700,
+                      },
+                      {
+                        key: 'footer',
+                        label: 'Footer / website',
+                        top: height - (format === 'story' ? 300 : 145),
+                        limit: 120,
+                      },
+                    ] as const
+                  ).map(({ key, label, top, limit }) => (
+                    <div
+                      className={
+                        editing === `${format}:${key}`
+                          ? 'social-inline-edit is-editing'
+                          : 'social-inline-edit'
+                      }
+                      key={key}
+                      style={{ top: (top / height) * 100 + '%' }}
+                    >
+                      {editing === `${format}:${key}` ? (
+                        <div className="social-inline-field">
+                          <label>
+                            {label}
+                            <textarea
+                              autoFocus
+                              aria-label={label}
+                              rows={key === 'message' ? 4 : 2}
+                              maxLength={limit}
+                              value={design[key]}
+                              onChange={(event) => update({ [key]: event.target.value })}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') setEditing(null);
+                              }}
+                            />
+                            <span className="character-counter" aria-live="polite">
+                              ({design[key].length}/{limit})
+                            </span>
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={'Done editing ' + label}
+                            onClick={() => setEditing(null)}
+                          >
+                            <Check size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="social-edit-pen"
+                          aria-label={'Edit ' + label}
+                          onClick={() => setEditing(`${format}:${key}`)}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
         {(!compact || selected) && (
           <>
             <div className="social-actions">
               <Button
-                disabled={busy || uploading || !backgroundReady || !design.message.trim()}
+                disabled={
+                  busy ||
+                  uploading ||
+                  !backgroundReady ||
+                  !businessLogoReady ||
+                  !design.message.trim()
+                }
                 onClick={() => download()}
               >
                 <Download size={16} /> Download PNG
@@ -568,23 +811,32 @@ export function SocialComposer({
             <p role="status" aria-live="polite">
               {notice}
             </p>
-            {platforms.map((platform) => (
-              <SocialPublishing
-                key={platform}
-                locationId={locationId}
-                platform={platform}
-                format={design.format}
-                caption={caption}
-                demo={demo}
-                readonly={readonly}
-                saveDraft={save}
-                getImage={() => {
-                  if (!canvas.current || !backgroundReady || uploading || !design.message.trim())
-                    throw new Error('Add an announcement first.');
-                  return canvas.current.toDataURL('image/jpeg', 0.92);
-                }}
-              />
-            ))}
+            {platforms.flatMap((platform) =>
+              formats.map((format) => (
+                <SocialPublishing
+                  key={`${platform}-${format}`}
+                  locationId={locationId}
+                  platform={platform}
+                  format={format}
+                  caption={caption}
+                  demo={demo}
+                  readonly={readonly}
+                  saveDraft={save}
+                  getImage={() => {
+                    const canvas = canvases.current[format];
+                    if (
+                      !canvas ||
+                      !backgroundReady ||
+                      !businessLogoReady ||
+                      uploading ||
+                      !design.message.trim()
+                    )
+                      throw new Error('Add an announcement first.');
+                    return canvas.toDataURL('image/jpeg', 0.92);
+                  }}
+                />
+              )),
+            )}
           </>
         )}
       </section>

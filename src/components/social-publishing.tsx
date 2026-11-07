@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, X } from 'lucide-react';
 import { Button } from './ui/button';
 
 type Account = {
@@ -336,12 +336,24 @@ export function SocialPublishing({
             <dialog
               ref={dialog}
               aria-label="Confirm social publication"
-              className="social-publish-dialog"
+              className="modal social-publish-dialog"
               onCancel={(event) => {
                 if (pending || busy) event.preventDefault();
                 else setReview(null);
               }}
+              onClick={(event) => {
+                if (event.target === event.currentTarget && !pending && !busy) setReview(null);
+              }}
             >
+              {!pending && !busy && (
+                <button
+                  className="modal-close icon-button"
+                  aria-label="Close dialog"
+                  onClick={() => setReview(null)}
+                >
+                  <X size={20} />
+                </button>
+              )}
               {confirmed ? (
                 <div className="social-publish-result" role="status" aria-live="polite">
                   {active?.status === 'published' ? (
@@ -421,7 +433,7 @@ export function SocialPublishing({
                       before continuing.
                     </p>
                   )}
-                  <div className="social-actions">
+                  <div className="modal-actions social-actions">
                     <Button disabled={busy} onClick={publish}>
                       Confirm publish
                     </Button>

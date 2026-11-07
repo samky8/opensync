@@ -38,7 +38,12 @@ test('social drafts restore and export correctly sized posts and stories', async
   await expect(page.getByLabel('Font colour', { exact: true })).toHaveValue('#cc2244');
   await expect(page.getByRole('checkbox', { name: 'Facebook', exact: true })).toBeChecked();
   for (const format of ['post', 'story']) {
-    await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption(format);
+    await page
+      .getByRole('checkbox', { name: format === 'post' ? 'Post' : 'Story', exact: true })
+      .check();
+    await page
+      .getByRole('checkbox', { name: format === 'post' ? 'Story' : 'Post', exact: true })
+      .uncheck();
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download PNG' }).click();
@@ -101,7 +106,12 @@ test('social background presets and custom uploads restore and export', async ({
     'true',
   );
   for (const format of ['post', 'story']) {
-    await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption(format);
+    await page
+      .getByRole('checkbox', { name: format === 'post' ? 'Post' : 'Story', exact: true })
+      .check();
+    await page
+      .getByRole('checkbox', { name: format === 'post' ? 'Story' : 'Post', exact: true })
+      .uncheck();
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download PNG', exact: true }).click();
     const asset = await pending;

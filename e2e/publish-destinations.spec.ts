@@ -3,7 +3,11 @@ import { demoSchedule } from '../src/lib/demo';
 
 test('page-specific publishing reviews selected formats and progress', async ({ page }, info) => {
   await page.goto('/demo?tab=hours');
-  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  const publishButton = page.getByRole('button', { name: 'Publish changes', exact: true });
+  await expect(publishButton).toBeDisabled();
+  await page.getByLabel('Opening time 1').first().fill('08:30');
+  await expect(publishButton).toBeEnabled();
+  await publishButton.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Publish opening hours' })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Review changes', exact: true })).toBeVisible();
