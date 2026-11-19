@@ -56,6 +56,18 @@ export const socialPublications = pgTable('social_publications', {
   createdAt: created(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+export const socialBackgroundImages = pgTable(
+  'social_background_images',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => locations.id, { onDelete: 'cascade' }),
+    image: text().notNull(),
+    createdAt: created(),
+  },
+  (t) => [index('social_background_images_location_created').on(t.locationId, t.createdAt)],
+);
 export const organizations = pgTable('organizations', {
   id: uuid().primaryKey().defaultRandom(),
   name: text().notNull(),

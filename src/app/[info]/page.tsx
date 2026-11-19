@@ -72,9 +72,9 @@ export default async function Page({ params }: { params: Promise<{ info: string 
           <h2>Information we use</h2>
           <p>
             OpenSync stores your account email, organization membership, business profile,
-            schedules, announcements, publication history, support requests, and subscription
-            status. Public widgets expose only the business information in your published schedule.
-            Integration tokens are encrypted on the server.
+            schedules, announcements, saved custom social backgrounds, publication history, support
+            requests, and subscription status. Public widgets expose only the business information
+            in your published schedule. Integration tokens are encrypted on the server.
           </p>
           <h2>Service providers</h2>
           <p>
@@ -97,10 +97,11 @@ export default async function Page({ params }: { params: Promise<{ info: string 
             retention requirements.
           </p>
           <p>
-            Disconnect a Meta account in Social posts to remove its stored token for that location.
-            Remove OpenSync from Facebook Business Integrations to revoke Meta access completely.
-            Existing posts remain on Meta; delete them in Instagram or Facebook. Account deletion
-            removes locally stored social tokens, uploads, and history for owned businesses.
+            Delete saved backgrounds individually in Social posts. Disconnect a Meta account there
+            to remove its stored token for that location. Remove OpenSync from Facebook Business
+            Integrations to revoke Meta access completely. Existing posts remain on Meta; delete
+            them in Instagram or Facebook. Account deletion removes locally stored social tokens,
+            uploads, and history for owned businesses.
           </p>
           <h2>Cookies and demo storage</h2>
           <p>

@@ -21,7 +21,7 @@ const fields: Record<PublishScope, (keyof Schedule)[]> = {
   hours: ['weekly'],
   special: ['exceptions'],
   announcements: ['announcements'],
-  widgets: ['widget'],
+  widgets: ['widget', 'widgetVisibility'],
   settings: ['name', 'category', 'website', 'address', 'logo', 'timezone'],
   all: [
     'name',
@@ -33,6 +33,7 @@ const fields: Record<PublishScope, (keyof Schedule)[]> = {
     'weekly',
     'exceptions',
     'announcements',
+    'widgetVisibility',
     'widget',
   ],
 };
@@ -56,6 +57,13 @@ export function publishChanges(
   published: Schedule | null | undefined,
   scope: PublishScope,
 ) {
+  const formatAnnouncementDate = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: draft.timezone,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(value));
   const rows: { label: string; before: string; after: string }[] = [];
   const add = (label: string, before: string, after: string) => {
     if (before !== after) rows.push({ label, before, after });
@@ -80,9 +88,15 @@ export function publishChanges(
             ? ''
             : 'intervals' in item
               ? `${item.label} · ${item.start} – ${item.end} · ${formatIntervals(item.intervals)}`
-              : `${item.title}: ${item.message} · ${item.enabled ? 'Enabled' : 'Disabled'} · ${item.start}${item.end ? ` – ${item.end}` : ''}${item.ctaText ? ` · ${item.ctaText}: ${item.ctaUrl}` : ''}`;
+              : `${item.enabled ? '' : 'Hidden from website · '}${item.message} (${formatAnnouncementDate(item.start)}${item.end ? ` – ${formatAnnouncementDate(item.end)}` : ''})${item.ctaText ? ` · ${item.ctaText}: ${item.ctaUrl}` : ''}`;
+        const announcementLabel =
+          after && 'message' in after && after.title && after.title !== after.message
+            ? after.title
+            : before && 'message' in before && before.title && before.title !== before.message
+              ? before.title
+              : 'Website update';
         add(
-          field === 'exceptions' ? 'Holidays & exceptions' : 'Announcement',
+          field === 'exceptions' ? 'Holidays & exceptions' : announcementLabel,
           describe(before),
           describe(after),
         );
@@ -90,6 +104,16 @@ export function publishChanges(
     } else if (field === 'widget') {
       for (const key of Object.keys(draft.widget) as (keyof Schedule['widget'])[])
         add(key, String(published?.widget[key] ?? ''), String(draft.widget[key]));
+    } else if (field === 'widgetVisibility') {
+      const defaults = defaultSchedule().widgetVisibility;
+      const nextVisibility = draft.widgetVisibility || defaults;
+      const previousVisibility = published?.widgetVisibility || defaults;
+      for (const key of Object.keys(nextVisibility) as (keyof Schedule['widgetVisibility'])[])
+        add(
+          `${key === 'hours' ? 'Hours' : key === 'banner' ? 'Banner' : 'Status'} widget`,
+          previousVisibility[key] ? 'Visible' : 'Hidden',
+          nextVisibility[key] ? 'Visible' : 'Hidden',
+        );
     } else
       add(
         field,

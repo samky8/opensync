@@ -1,9 +1,36 @@
 'use client';
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Clock, ChevronDown, ExternalLink, X } from 'lucide-react';
-import { days, formatIntervals, getStatus, type Schedule } from '@/lib/domain';
+import {
+  CalendarClock,
+  ChevronDown,
+  CircleCheck,
+  CircleX,
+  Clock,
+  ExternalLink,
+  Info,
+  TriangleAlert,
+} from 'lucide-react';
+import {
+  announcementStyleColours,
+  days,
+  formatIntervals,
+  getStatus,
+  type Schedule,
+} from '@/lib/domain';
 import Image from 'next/image';
+import { RichText } from './rich-text';
 export type WidgetType = 'hours' | 'banner' | 'status';
+const announcementStyles = {
+  none: { className: 'none', Icon: null },
+  information: { className: 'information', Icon: Info },
+  success: { className: 'success', Icon: CircleCheck },
+  warning: { className: 'warning', Icon: TriangleAlert },
+  closure: { className: 'closure', Icon: CircleX },
+  'special hours': {
+    className: 'special-hours',
+    Icon: CalendarClock,
+  },
+} as const;
 export function Widget({
   schedule,
   type = 'hours',
@@ -18,7 +45,6 @@ export function Widget({
   const [data, setData] = useState(schedule),
     [now, setNow] = useState(initialNow || new Date().toISOString()),
     [expanded, setExpanded] = useState(true),
-    [dismissed, setDismissed] = useState<string | null>(null),
     [unavailable, setUnavailable] = useState(false);
   useEffect(() => setData(schedule), [schedule]);
   useEffect(() => {
@@ -49,6 +75,7 @@ export function Widget({
     textAlign: w.alignment,
     fontFamily: w.font === 'serif' ? 'Georgia, serif' : 'inherit',
   } as CSSProperties;
+  if (data.widgetVisibility?.[type] === false) return null;
   if (unavailable)
     return (
       <div className="widget" style={style}>
@@ -57,20 +84,32 @@ export function Widget({
     );
   if (type === 'banner') {
     const a = status.announcement;
-    if (!a || dismissed === a.id) return null;
+    if (!a) return null;
+    const announcementStyle = announcementStyles[a.type];
+    const AnnouncementIcon = announcementStyle.Icon;
+    const defaultColours = announcementStyleColours[a.type];
+    const bannerStyle = {
+      ...style,
+      '--announcement-font-colour': a.fontColour || defaultColours.font,
+      '--announcement-background-colour': a.backgroundColour || defaultColours.background,
+      '--announcement-border-colour': a.borderColour || defaultColours.border,
+    } as CSSProperties;
     return (
-      <div className={`widget announcement-widget ${w.theme}`} style={style}>
-        {w.dismissible && (
-          <button
-            aria-label="Dismiss announcement"
-            className="widget-close"
-            onClick={() => setDismissed(a.id)}
-          >
-            <X size={16} />
-          </button>
-        )}
-        {a.title && <strong>{a.title}</strong>}
-        <p>{a.message}</p>
+      <div
+        className={`widget announcement-widget announcement-${announcementStyle.className} ${w.theme}`}
+        style={bannerStyle}
+      >
+        <div
+          className={`announcement-widget-content ${a.messageVisible !== false && a.messagePosition !== 'below' ? 'is-inline' : ''}`}
+        >
+          {(AnnouncementIcon || a.title) && (
+            <div className="announcement-widget-heading">
+              {AnnouncementIcon && <AnnouncementIcon size={17} aria-hidden="true" />}
+              {a.title && <strong>{a.title}</strong>}
+            </div>
+          )}
+          {a.messageVisible !== false && a.message && <RichText value={a.message} />}
+        </div>
         {a.ctaText && a.ctaUrl && (
           <a href={a.ctaUrl} target="_blank" rel="noopener noreferrer">
             {a.ctaText} <ExternalLink size={13} />
@@ -138,12 +177,16 @@ export function Widget({
                 ))}
             </div>
           )}
-          <div className="widget-zone">Times in {data.timezone.replaceAll('_', ' ')}</div>
         </>
       )}
-      <a className="widget-credit" href="/" target="_blank" rel="noopener">
-        Powered by <b>OpenSync</b>
-      </a>
+      <div className="widget-footer">
+        {type === 'hours' && (
+          <div className="widget-zone">Times in {data.timezone.replaceAll('_', ' ')}</div>
+        )}
+        <a className="widget-credit" href="/" target="_blank" rel="noopener">
+          Powered by <b>OpenSync</b>
+        </a>
+      </div>
     </section>
   );
 }

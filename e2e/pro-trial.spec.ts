@@ -33,7 +33,7 @@ test('trial welcome animates, lists features, and closes accessibly', async ({
 
 test('trial welcome respects reduced motion and Escape dismissal', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/demo');
+  await page.goto('/demo?tab=billing');
   await page.getByRole('button', { name: 'Preview free trial', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.locator('.trial-confetti')).toBeHidden();

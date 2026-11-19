@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
+import { SignupBackdrop } from './signup-backdrop';
 import { Button } from './ui/button';
 export function AuthForm({
   mode,
@@ -43,12 +44,13 @@ export function AuthForm({
     }
   }
   return (
-    <div className="auth-layout">
+    <div className={`auth-layout${mode === 'signup' ? ' auth-layout-signup' : ''}`}>
       <aside className="auth-story">
-        <Link href="/" className="brand">
+        {mode === 'signup' && <SignupBackdrop />}
+        <Link href="/" className="brand auth-story-content">
           <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
         </Link>
-        <div>
+        <div className="auth-story-content">
           <span className="eyebrow">A LITTLE LESS ADMIN. A LOT MORE BUSINESS.</span>
           <h1>
             Your time belongs
@@ -62,7 +64,9 @@ export function AuthForm({
           </p>
           <div className="auth-quote">“One update. Everywhere your customers look.”</div>
         </div>
-        <small>Thoughtfully built for independent businesses.</small>
+        <small className="auth-story-content">
+          Thoughtfully built for independent businesses.
+        </small>
       </aside>
       <main className="auth-panel">
         <Link className="back-link" href="/">

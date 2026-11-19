@@ -11,6 +11,15 @@ import {
   resetWidgetToDefaults,
 } from '../src/lib/domain';
 describe('business-local schedules', () => {
+  it('enables every website widget when parsing legacy schedules', () => {
+    const legacy = defaultSchedule() as Partial<ReturnType<typeof defaultSchedule>>;
+    delete legacy.widgetVisibility;
+    expect(scheduleSchema.parse(legacy).widgetVisibility).toEqual({
+      hours: true,
+      banner: true,
+      status: true,
+    });
+  });
   it('does not invent a closing at the edge of the lookup window', () => {
     const s = defaultSchedule();
     s.weekly = s.weekly.map(() => [
@@ -181,12 +190,17 @@ describe('entitlements and retries', () => {
     next.widget.accent = '#000000';
     expect(() => validateEntitlements(next, original, 'free')).toThrow(/requires Pro/);
   });
+  it('lets Free accounts control which installed widgets are visible', () => {
+    const original = defaultSchedule(),
+      next = structuredClone(original);
+    next.widgetVisibility.banner = false;
+    expect(() => validateEntitlements(next, original, 'free')).not.toThrow();
+  });
   it('lets downgraded accounts restore Free defaults without changing business data', () => {
     const previous = defaultSchedule('Keep my business');
     previous.widget.accent = '#123456';
     previous.widget.theme = 'dark';
     previous.widget.placement = 'floating';
-    previous.widget.dismissible = false;
     const reset = resetWidgetToDefaults(previous);
     expect(reset.widget).toEqual(defaultSchedule().widget);
     expect({ ...reset, widget: previous.widget }).toEqual(previous);

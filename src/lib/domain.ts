@@ -18,6 +18,15 @@ const safeUrl = z.union([
   z.literal(''),
   z.url().refine((s) => /^https?:\/\//.test(s), 'Use an http or https URL'),
 ]);
+export const announcementStyleColours = {
+  none: { font: '#181b1a', background: '#ffffff', border: '#181b1a' },
+  information: { font: '#2563eb', background: '#f5f9ff', border: '#2563eb' },
+  success: { font: '#18794e', background: '#f2fbf6', border: '#2f9e69' },
+  warning: { font: '#a85408', background: '#fffaf0', border: '#a85408' },
+  closure: { font: '#b42318', background: '#fff6f5', border: '#b42318' },
+  'special hours': { font: '#7038b6', background: '#faf7ff', border: '#7038b6' },
+} as const;
+const colour = z.string().regex(/^#[a-fA-F0-9]{6}$/);
 export const scheduleSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
@@ -62,8 +71,13 @@ export const scheduleSchema = z
           .object({
             id: z.string(),
             title: z.string().max(100),
-            message: z.string().min(1).max(500),
-            type: z.enum(['information', 'warning', 'closure', 'special hours']),
+            message: z.string().max(500),
+            messagePosition: z.enum(['below', 'inline']).optional(),
+            messageVisible: z.boolean().optional(),
+            type: z.enum(['none', 'information', 'success', 'warning', 'closure', 'special hours']),
+            fontColour: colour.optional(),
+            backgroundColour: colour.optional(),
+            borderColour: colour.optional(),
             start: z.iso.datetime(),
             end: z.union([z.iso.datetime(), z.literal('')]),
             enabled: z.boolean(),
@@ -73,18 +87,30 @@ export const scheduleSchema = z
           .refine(
             (x) => !x.end || Date.parse(x.end) > Date.parse(x.start),
             'Expiry must be after activation',
+          )
+          .refine(
+            (x) =>
+              x.title.trim().length > 0 ||
+              (x.messageVisible !== false && x.message.trim().length > 0),
+            'Add a title or visible message',
           ),
       )
       .max(50),
+    widgetVisibility: z
+      .object({
+        hours: z.boolean(),
+        banner: z.boolean(),
+        status: z.boolean(),
+      })
+      .default({ hours: true, banner: true, status: true }),
     widget: z.object({
-      accent: z.string().regex(/^#[a-fA-F0-9]{6}$/),
+      accent: colour,
       theme: z.enum(['light', 'dark']),
       radius: z.number().min(0).max(32),
       showName: z.boolean(),
       compact: z.boolean(),
       font: z.enum(['system', 'serif']),
       alignment: z.enum(['left', 'center']),
-      dismissible: z.boolean(),
       placement: z.enum(['inline', 'top', 'floating']),
     }),
   })
@@ -152,6 +178,7 @@ export const defaultSchedule = (
   weekly: days.map((_, i) => (i === 6 ? [] : [{ open: '09:00', close: '17:00' }])),
   exceptions: [],
   announcements: [],
+  widgetVisibility: { hours: true, banner: true, status: true },
   widget: {
     accent: '#4f46e5',
     theme: 'light',
@@ -160,7 +187,6 @@ export const defaultSchedule = (
     compact: false,
     font: 'system',
     alignment: 'left',
-    dismissible: true,
     placement: 'inline',
   },
 });

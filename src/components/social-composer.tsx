@@ -5,11 +5,18 @@ import { Download, Copy, Share2, Pencil, Check, Upload, Instagram, Facebook } fr
 import { ProBadge } from './ui/pro-badge';
 import { Button } from './ui/button';
 import { SocialPublishing } from './social-publishing';
+import { SavedBackgroundOptions, useSavedBackgrounds } from './saved-backgrounds';
 import { type Schedule } from '@/lib/domain';
+import {
+  readSocialPresets,
+  socialBackgrounds,
+  socialStyle,
+  writeSocialPresets,
+  type SocialPreset,
+  type SocialStyle,
+} from '@/lib/social-presets';
 
-const backgrounds = ['botanical', 'sunset', 'waves', 'arches'] as const;
-
-type Design = {
+type Design = SocialStyle & {
   background?: string;
   customImage?: string;
   headerText?: string;
@@ -25,8 +32,6 @@ type Design = {
   platform: 'Instagram' | 'Facebook';
   platforms?: ('Instagram' | 'Facebook')[];
   fontColour?: string;
-  theme: 'cream' | 'dark' | 'accent';
-  accent: string;
 };
 
 // Break long words as well as paragraphs so exports never run beyond the artwork.
@@ -85,6 +90,7 @@ export function SocialComposer({
   selected = true,
   initialPlatform,
   paid = false,
+  onManageConnections,
 }: {
   paid?: boolean;
   schedule: Schedule;
@@ -94,6 +100,7 @@ export function SocialComposer({
   compact?: boolean;
   selected?: boolean;
   initialPlatform?: Design['platform'];
+  onManageConnections?: () => void;
 }) {
   const backgroundUpload = useRef<HTMLInputElement>(null);
   const [design, setDesign] = useState<Design>({
@@ -117,6 +124,9 @@ export function SocialComposer({
   const showBusinessName = design.showBusinessName ?? true;
   const showBusinessLogo = design.showBusinessLogo ?? false;
   const [notice, setNotice] = useState('');
+  const [presets, setPresets] = useState<SocialPreset[]>([]);
+  const [presetName, setPresetName] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('');
   const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{
@@ -128,10 +138,16 @@ export function SocialComposer({
     image: HTMLImageElement;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const {
+    images: savedBackgrounds,
+    loading: loadingBackgrounds,
+    save: saveBackground,
+    remove: removeBackground,
+  } = useSavedBackgrounds(locationId, demo);
   const backgroundSource =
     design.background === 'custom'
       ? design.customImage || ''
-      : backgrounds.includes(design.background as (typeof backgrounds)[number])
+      : socialBackgrounds.includes(design.background as (typeof socialBackgrounds)[number])
         ? '/social-backgrounds/' + design.background + '.svg'
         : '';
   const backgroundReady = !backgroundSource || backgroundImage?.source === backgroundSource;
@@ -206,7 +222,7 @@ export function SocialComposer({
         value.caption.length > 2200
       )
         throw new Error();
-      if (value.background && !['custom', ...backgrounds].includes(value.background))
+      if (value.background && !['custom', ...socialBackgrounds].includes(value.background))
         throw new Error();
       if (
         value.customImage &&
@@ -250,6 +266,7 @@ export function SocialComposer({
 
   useEffect(() => {
     restore(true);
+    setPresets(readSocialPresets(locationId));
     setRestored(true);
     // Restore once for each location/platform, before autosaving edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -370,8 +387,29 @@ export function SocialComposer({
       setNotice('This browser could not save the draft. You can still download your image.');
     }
   }
+  function savePreset() {
+    const name = presetName.trim() || `Style ${presets.length + 1}`;
+    const id = selectedPreset || crypto.randomUUID();
+    const next = [
+      ...presets.filter((preset) => preset.id !== id),
+      { id, name, style: socialStyle(design) },
+    ];
+    try {
+      writeSocialPresets(locationId, next);
+      setPresets(next);
+      setSelectedPreset(id);
+      setPresetName(name);
+      setNotice(`Saved “${name}” as a style preset.`);
+    } catch {
+      setNotice('This browser could not save the style preset.');
+    }
+  }
   async function uploadBackground(asset?: File) {
     if (!asset || !paid || uploading) return;
+    if (savedBackgrounds.length >= 5) {
+      setNotice('Background limit reached. Delete one before uploading another.');
+      return;
+    }
     if (
       !['image/jpeg', 'image/png', 'image/webp'].includes(asset.type) ||
       asset.size > 10 * 1024 * 1024
@@ -394,9 +432,16 @@ export function SocialComposer({
       ctx.fillStyle = '#faf5eb';
       ctx.fillRect(0, 0, resized.width, resized.height);
       ctx.drawImage(image, 0, 0, resized.width, resized.height);
-      update({ background: 'custom', customImage: resized.toDataURL('image/jpeg', 0.8) });
-    } catch {
-      setNotice('Could not read this image. Try another JPG, PNG or WebP.');
+      const data = resized.toDataURL('image/jpeg', 0.8);
+      await saveBackground(data);
+      update({ background: 'custom', customImage: data });
+      setNotice('Custom background saved to this profile.');
+    } catch (error) {
+      setNotice(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not read this image. Try another JPG, PNG or WebP.',
+      );
     } finally {
       URL.revokeObjectURL(url);
       setUploading(false);
@@ -461,67 +506,131 @@ export function SocialComposer({
           </h3>
           <span className="pill">Preview</span>
         </div>
-        <div className="social-preview-toolbar">
-          <fieldset className="social-platforms">
-            <legend>Platform</legend>
-            {(['Instagram', 'Facebook'] as const).map((platform) => (
-              <label key={platform} className="social-platform-toggle" title={platform}>
-                <input
-                  type="checkbox"
-                  aria-label={platform}
-                  checked={platforms.includes(platform)}
-                  disabled={compact}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                      ? [...platforms, platform]
-                      : platforms.filter((item) => item !== platform);
-                    if (next.length) update({ platforms: next, platform: next[0] });
-                  }}
-                />
-                <span className="social-platform-logo">
-                  {platform === 'Instagram' ? (
-                    <Instagram size={24} aria-hidden="true" />
-                  ) : (
-                    <Facebook size={24} aria-hidden="true" />
-                  )}
-                  <Check className="social-platform-check" size={12} aria-hidden="true" />
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="social-platforms">
-            <legend>Format</legend>
-            {(['post', 'story'] as const).map((format) => (
-              <label key={format}>
-                <input
-                  type="checkbox"
-                  aria-label={format === 'post' ? 'Post' : 'Story'}
-                  checked={formats.includes(format)}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                      ? [...formats, format]
-                      : formats.filter((item) => item !== format);
-                    if (next.length) update({ formats: next, format: next[0] });
-                  }}
-                />
-                {format === 'post' ? 'Post' : 'Story'}
-              </label>
-            ))}
-          </fieldset>
-
+        <div className="social-preset-bar">
           <label>
-            Font colour
+            Style preset
+            <select
+              value={selectedPreset}
+              onChange={(event) => {
+                const preset = presets.find((item) => item.id === event.target.value);
+                setSelectedPreset(event.target.value);
+                if (!preset) return;
+                setPresetName(preset.name);
+                update(preset.style);
+              }}
+            >
+              <option value="">Current custom style</option>
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Preset name
             <input
-              type="color"
-              value={design.fontColour || '#152823'}
-              onChange={(event) => update({ fontColour: event.target.value })}
+              maxLength={60}
+              value={presetName}
+              placeholder="e.g. Weekly update"
+              onChange={(event) => setPresetName(event.target.value)}
             />
           </label>
-          {design.fontColour && (
-            <Button variant="ghost" size="sm" onClick={() => update({ fontColour: undefined })}>
-              Auto colour
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={savePreset}>
+            Save style preset
+          </Button>
+        </div>
+        <div className="social-setup-panel">
+          <div className="social-setup-heading">
+            <div>
+              <h4>Post setup</h4>
+              <p>Choose where the artwork appears and how it should be sized.</p>
+            </div>
+          </div>
+          <div className="social-preview-toolbar">
+            <fieldset className="social-control-group social-platforms">
+              <legend>Platform</legend>
+              <div className="social-control-options">
+                {(['Instagram', 'Facebook'] as const).map((platform) => (
+                  <label key={platform} className="social-platform-toggle" title={platform}>
+                    <input
+                      type="checkbox"
+                      aria-label={platform}
+                      checked={platforms.includes(platform)}
+                      disabled={compact}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...platforms, platform]
+                          : platforms.filter((item) => item !== platform);
+                        if (next.length) update({ platforms: next, platform: next[0] });
+                      }}
+                    />
+                    <span className="social-platform-logo">
+                      {platform === 'Instagram' ? (
+                        <Instagram size={21} aria-hidden="true" />
+                      ) : (
+                        <Facebook size={21} aria-hidden="true" />
+                      )}
+                      <span>{platform}</span>
+                      <Check className="social-platform-check" size={12} aria-hidden="true" />
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="social-control-group social-format-options">
+              <legend>Format</legend>
+              <div className="social-control-options">
+                {(['post', 'story'] as const).map((format) => (
+                  <label key={format}>
+                    <input
+                      type="checkbox"
+                      aria-label={format === 'post' ? 'Post' : 'Story'}
+                      checked={formats.includes(format)}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...formats, format]
+                          : formats.filter((item) => item !== format);
+                        if (next.length) update({ formats: next, format: next[0] });
+                      }}
+                    />
+                    <span className="social-format-shape" aria-hidden="true" />
+                    <span>
+                      <strong>{format === 'post' ? 'Post' : 'Story'}</strong>
+                      <small>{format === 'post' ? 'Square' : 'Portrait'}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="social-control-group social-colour-control">
+              <span className="social-control-label">Font colour</span>
+              <div className="social-colour-row">
+                <label className="social-colour-swatch">
+                  <span className="sr-only">Font colour</span>
+                  <input
+                    aria-label="Font colour"
+                    type="color"
+                    value={design.fontColour || '#152823'}
+                    onChange={(event) => update({ fontColour: event.target.value })}
+                  />
+                </label>
+                <span className="social-colour-value">
+                  {(design.fontColour || '#152823').toUpperCase()}
+                </span>
+                {design.fontColour && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => update({ fontColour: undefined })}
+                  >
+                    Use auto
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
         <fieldset className="social-background-picker">
           <legend>Background image</legend>
@@ -534,7 +643,7 @@ export function SocialComposer({
               <span className="social-background-thumb" style={{ background: '#faf5eb' }} />
               None
             </button>
-            {backgrounds.map((background) => (
+            {socialBackgrounds.map((background) => (
               <button
                 type="button"
                 key={background}
@@ -548,30 +657,56 @@ export function SocialComposer({
                 {background.charAt(0).toUpperCase() + background.slice(1)}
               </button>
             ))}
-            {design.customImage && (
-              <button
-                type="button"
-                aria-pressed={design.background === 'custom'}
-                onClick={() => update({ background: 'custom' })}
-              >
-                <span
-                  className="social-background-thumb"
-                  style={{ backgroundImage: 'url(' + design.customImage + ')' }}
-                />
-                Your image
-              </button>
-            )}
+            {design.customImage &&
+              !savedBackgrounds.some((background) => background.image === design.customImage) && (
+                <button
+                  type="button"
+                  aria-pressed={design.background === 'custom'}
+                  onClick={() => update({ background: 'custom' })}
+                >
+                  <span
+                    className="social-background-thumb"
+                    style={{ backgroundImage: 'url(' + design.customImage + ')' }}
+                  />
+                  Your image
+                </button>
+              )}
+            <SavedBackgroundOptions
+              images={savedBackgrounds}
+              selected={design.background === 'custom' ? design.customImage : undefined}
+              disabled={readonly}
+              onSelect={(image) => update({ background: 'custom', customImage: image })}
+              onDelete={async (image) => {
+                try {
+                  await removeBackground(image.id);
+                  if (design.customImage === image.image)
+                    update({ background: undefined, customImage: undefined });
+                  setNotice('Saved background deleted.');
+                } catch (error) {
+                  setNotice(
+                    error instanceof Error ? error.message : 'Could not delete this background.',
+                  );
+                }
+              }}
+            />
             <button
               type="button"
               className="social-background-upload"
-              disabled={!paid || uploading}
+              disabled={
+                !paid || readonly || uploading || loadingBackgrounds || savedBackgrounds.length >= 5
+              }
+              title={
+                savedBackgrounds.length >= 5
+                  ? 'Delete a saved background to upload another'
+                  : undefined
+              }
               onClick={() => backgroundUpload.current?.click()}
             >
               <span className="social-background-thumb">
                 <Upload size={22} aria-hidden="true" />
               </span>
               <span className="social-background-upload-name">
-                Upload <ProBadge />
+                <ProBadge /> Upload
               </span>
             </button>
           </div>
@@ -581,7 +716,7 @@ export function SocialComposer({
             aria-label="Upload your own image"
             type="file"
             accept="image/jpeg,image/png,image/webp"
-            disabled={!paid || uploading}
+            disabled={!paid || readonly || uploading || savedBackgrounds.length >= 5}
             onChange={(event) => {
               void uploadBackground(event.target.files?.[0]);
               event.target.value = '';
@@ -589,9 +724,9 @@ export function SocialComposer({
           />
           <small className="muted">
             {!paid ? 'Available with Pro or Business. ' : ''}JPG, PNG or WebP, up to 10 MB. Images
-            are cropped to fit.
+            are cropped to fit and saved to this profile. {savedBackgrounds.length}/5 saved.
           </small>
-          {(uploading || !backgroundReady) && <p role="status">Preparing background?</p>}
+          {(uploading || !backgroundReady) && <p role="status">Preparing background…</p>}
         </fieldset>
         <div className={`social-preview-grid${formats.length > 1 ? ' has-both-formats' : ''}`}>
           {formats.map((format) => {
@@ -602,7 +737,7 @@ export function SocialComposer({
                 className="social-format-preview"
                 aria-label={`${format} preview`}
               >
-                <h4>{format === 'post' ? 'Post ? 1080 ? 1080' : 'Story ? 1080 ? 1920'}</h4>
+                <h4>{format === 'post' ? 'Post · 1080 × 1080' : 'Story · 1080 × 1920'}</h4>
                 <div
                   className="social-editable-preview"
                   style={{ maxWidth: height === 1920 ? 366 : 650 }}
@@ -701,13 +836,13 @@ export function SocialComposer({
                     [
                       {
                         key: 'title',
-                        label: 'Headline',
+                        label: 'Title',
                         top: format === 'story' ? 485 : 295,
                         limit: 100,
                       },
                       {
                         key: 'message',
-                        label: 'Announcement',
+                        label: 'Message',
                         top: format === 'story' ? 740 : 550,
                         limit: 700,
                       },
@@ -821,6 +956,7 @@ export function SocialComposer({
                   caption={caption}
                   demo={demo}
                   readonly={readonly}
+                  onManageConnections={onManageConnections}
                   saveDraft={save}
                   getImage={() => {
                     const canvas = canvases.current[format];

@@ -7,9 +7,9 @@ test('tabs survive reload and follow browser Back and Forward', async ({ page },
       await page.getByRole('button', { name: 'Open navigation' }).click();
     await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   };
-  await navigate('Business hours');
+  await navigate('Regular hours');
   await expect(page).toHaveURL(/tab=hours/);
-  await navigate('Add to your website');
+  await navigate('Website');
   await expect(page).toHaveURL(/tab=widgets/);
   await page.goBack();
   await expect(page.locator('main h1')).toHaveText('Business hours');
@@ -45,4 +45,19 @@ test('saved drafts stay visibly unpublished after reload until published', async
   await expect(page.locator('.published-demo')).toContainText('Saved draft business');
   await page.reload();
   await expect(page.locator('.draft-notice')).toHaveCount(0);
+});
+
+test('website instructions open from Connections and stay separate from widget settings', async ({
+  page,
+}) => {
+  await page.goto('/demo?tab=widgets');
+  await expect(page.getByRole('heading', { name: 'Make it part of your website.' })).toHaveCount(0);
+
+  await page.goto('/demo?tab=integrations');
+  await page.getByRole('button', { name: 'View website instructions' }).click();
+  await expect(page).toHaveURL(/tab=website/);
+  await expect(page.getByRole('heading', { name: 'Add to your website' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Make it part of your website.' })).toBeVisible();
+  await expect(page.getByText('Copy the embed code', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

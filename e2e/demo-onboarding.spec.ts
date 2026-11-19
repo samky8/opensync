@@ -11,7 +11,7 @@ test('demo onboarding starts fresh, completes locally, and can restart', async (
   const startOnboarding = async () => {
     if (testInfo.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Onboarding', exact: true }).click();
+    await page.getByRole('button', { name: 'Restart setup', exact: true }).click();
     await expect(page.getByText('Step 1 of 6', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /get started/ }).click();
     await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Your business');

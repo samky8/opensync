@@ -6,7 +6,7 @@ test('logo checkboxes and simultaneous formats persist and export', async ({ pag
   async function openStudio() {
     if (info.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Social posts', exact: true }).click();
+    await page.getByRole('button', { name: 'Social', exact: true }).click();
   }
   await openStudio();
   await page.getByRole('checkbox', { name: 'Facebook', exact: true }).check();

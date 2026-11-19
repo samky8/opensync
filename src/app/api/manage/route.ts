@@ -59,7 +59,8 @@ export async function POST(req: Request) {
           await tx.execute(sql`select id from organizations where id=${org} for update`);
           if (!['owner', 'admin'].includes(member.role))
             throw new Error('Only an owner or admin can add locations');
-          if ((await planFor(org, tx)) === 'free') throw new Error('Multiple profiles require Pro');
+          if ((await planFor(org, tx)) !== 'business')
+            throw new Error('Adding multiple profiles requires Business');
           const count = await tx
             .select()
             .from(t.locations)

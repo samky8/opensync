@@ -12,9 +12,31 @@ import {
   Sun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { HeroShader } from '@/components/hero-shader';
 import { Widget } from '@/components/widget';
 import { demoSchedule } from '@/lib/demo';
-export default function Home() {
+import { authConfigured, supabase } from '@/lib/supabase';
+
+export const dynamic = 'force-dynamic';
+
+async function hasSignedInUser() {
+  if (!authConfigured()) return false;
+  try {
+    const {
+      data: { user },
+    } = await (await supabase()).auth.getUser();
+    return Boolean(user);
+  } catch {
+    return false;
+  }
+}
+
+export default async function Home() {
+  const signedIn = await hasSignedInUser();
+  const supportEmail = process.env.SUPPORT_EMAIL?.trim();
+  const moreInfoHref = supportEmail
+    ? `mailto:${supportEmail}?subject=${encodeURIComponent('Tell me more about OpenSync')}`
+    : '/help';
   return (
     <div className="marketing">
       <nav className="marketing-nav">
@@ -35,6 +57,7 @@ export default function Home() {
       </nav>
       <main id="main-content">
         <section className="hero">
+          <HeroShader />
           <span className="hero-kicker">
             <span className="status-dot green" />
             For the businesses that make a neighbourhood.
@@ -292,7 +315,21 @@ export default function Home() {
           </Link>
           <p>One update. Everywhere your customers look.</p>
         </div>
+        {!signedIn && (
+          <div className="footer-status-showcase">
+            <div className="footer-status-heading">
+              <span className="eyebrow">LIVE STATUS WIDGET</span>
+              <a href={moreInfoHref}>
+                Request more info <ArrowUpRight size={12} aria-hidden="true" />
+              </a>
+            </div>
+            <Widget schedule={demoSchedule} type="status" />
+          </div>
+        )}
         <nav>
+          <Link href="/free-business-hours-widget">Free hours widget</Link>
+          <Link href="/holiday-hours">Holiday hours</Link>
+          <Link href="/for-web-developers">Developers</Link>
           <Link href="/help">Help centre</Link>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>

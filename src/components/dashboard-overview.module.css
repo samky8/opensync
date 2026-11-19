@@ -1,11 +1,11 @@
 .overviewHeading {
   max-width: 1040px;
-  margin: 0 auto 18px;
+  margin: 0 auto 12px;
   justify-content: flex-end;
 }
 .panel {
   max-width: 1040px;
-  margin: 0 auto 32px;
+  margin: 0 auto 24px;
   color: var(--foreground);
   font-size: 14px;
 }
@@ -15,38 +15,6 @@
 .panel button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 4px;
-}
-.header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-.mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid #e5e2f5;
-  border-radius: 12px;
-  color: #6558a8;
-  background: #f0eefb;
-  flex-shrink: 0;
-}
-.identity {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-.identity strong {
-  font-size: 14px;
-}
-.identity span {
-  color: #656973;
-  font-size: 12px;
-  overflow-wrap: anywhere;
 }
 .badge {
   display: inline-flex;
@@ -68,7 +36,7 @@
   color: #28785c;
 }
 .greeting {
-  margin: 24px 0;
+  margin: 0 0 16px;
 }
 .greeting h1 {
   display: flex;
@@ -95,15 +63,15 @@
 .summaries {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .summary {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 10px;
-  padding: 22px 24px;
+  gap: 7px;
+  padding: 16px 18px;
   background: #fff;
   border: 1px solid #dfe7e5;
   border-radius: 12px;
@@ -141,12 +109,12 @@
   font-size: 12px;
 }
 .actions {
-  margin-top: 28px;
+  margin-top: 18px;
 }
 .actions h2 {
   font-size: 18px;
   letter-spacing: -0.3px;
-  margin: 0 0 14px;
+  margin: 0 0 10px;
 }
 .actionGrid {
   display: grid;
@@ -156,19 +124,19 @@
 .actionGrid button {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 76px;
+  gap: 11px;
+  min-height: 58px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
   font-weight: 600;
-  padding: 18px;
+  padding: 11px 14px;
   text-align: left;
 }
 .actionGrid button > svg {
   box-sizing: content-box;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 8px;
+  border-radius: 8px;
   background: #edeafb;
   color: #6c60af;
   flex-shrink: 0;
@@ -194,92 +162,7 @@
   border-color: #c8c6e4;
   background: #eeeef8;
 }
-.channels {
-  margin-top: 26px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
-  overflow: hidden;
-}
-.sectionHeading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border);
-}
-.sectionHeading h2 {
-  font-size: 14px;
-  margin: 0;
-}
-.sectionHeading > span {
-  color: #7a7f8f;
-  font-size: 11px;
-}
-.channel {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 12px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  padding: 13px 22px;
-  min-height: 52px;
-}
-.channel + .channel {
-  border-top: 1px solid #f0f1f5;
-}
-.channel:hover {
-  background: #fafaff;
-}
-.channel > svg {
-  color: #85839d;
-  flex-shrink: 0;
-}
-.channel > span:nth-child(2) {
-  flex: 1;
-  font-size: 13px;
-}
-.activity {
-  display: block;
-  width: 100%;
-  margin-top: 18px;
-  padding: 18px 22px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  text-align: left;
-}
-.activity:hover {
-  background: #fafaff;
-  border-color: #d6d3eb;
-}
-.activity strong {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-.activity strong svg {
-  color: #85839d;
-}
-.activity p {
-  font-size: 12px;
-}
-.footnote {
-  margin-top: 14px;
-  font-size: 11px;
-  color: #7a7f8f;
-}
 @media (max-width: 540px) {
-  .header {
-    gap: 10px;
-    padding-bottom: 18px;
-    flex-wrap: wrap;
-  }
   .greeting {
     margin: 22px 0;
   }
@@ -309,17 +192,6 @@
   }
   .actionGrid button > svg {
     padding: 9px;
-  }
-  .sectionHeading,
-  .channel,
-  .activity {
-    padding: 15px;
-  }
-  .channel {
-    gap: 8px;
-  }
-  .channel > span:nth-child(2) {
-    font-size: 12px;
   }
   .badge {
     font-size: 10px !important;

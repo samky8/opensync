@@ -41,4 +41,65 @@ describe('page-specific publication', () => {
       { after: '' },
     );
   });
+  it('reviews announcements with a readable local date and no status prefix', () => {
+    const published = defaultSchedule();
+    const draft = structuredClone(published);
+    draft.timezone = 'America/Toronto';
+    draft.announcements = [
+      {
+        id: 'late-night',
+        title: 'Open late tonight!',
+        message: 'Open late tonight!',
+        type: 'information',
+        start: '2026-11-17T15:55:13.350Z',
+        end: '',
+        enabled: true,
+        ctaText: '',
+        ctaUrl: '',
+      },
+    ];
+
+    expect(publishChanges(draft, published, 'announcements')).toEqual([
+      {
+        label: 'Website update',
+        before: '',
+        after: 'Open late tonight! (Tuesday, November 17)',
+      },
+    ]);
+  });
+  it('reviews an announcement removed from the website', () => {
+    const published = defaultSchedule();
+    published.announcements = [
+      {
+        id: 'live',
+        title: 'Today only',
+        message: 'Open late tonight!',
+        type: 'information',
+        start: '2026-11-17T15:55:13.350Z',
+        end: '',
+        enabled: true,
+        ctaText: '',
+        ctaUrl: '',
+      },
+    ];
+    const draft = structuredClone(published);
+    draft.announcements[0].enabled = false;
+
+    expect(publishChanges(draft, published, 'announcements')[0]).toMatchObject({
+      before: expect.not.stringContaining('Hidden from website'),
+      after: expect.stringContaining('Hidden from website'),
+    });
+  });
+  it('publishes website widget visibility with widget settings', () => {
+    const published = defaultSchedule();
+    const draft = structuredClone(published);
+    draft.widgetVisibility.banner = false;
+    const snapshot = scopedSchedule(draft, published, 'widgets');
+    expect(snapshot.widgetVisibility.banner).toBe(false);
+    expect(publishChanges(draft, published, 'widgets')).toContainEqual({
+      label: 'Banner widget',
+      before: 'Visible',
+      after: 'Hidden',
+    });
+  });
 });

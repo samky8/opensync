@@ -57,6 +57,7 @@ export function SocialPublishing({
   saveDraft,
   demo,
   readonly,
+  onManageConnections,
 }: {
   locationId: string;
   platform: 'Instagram' | 'Facebook';
@@ -66,6 +67,7 @@ export function SocialPublishing({
   saveDraft: () => void;
   demo: boolean;
   readonly: boolean;
+  onManageConnections?: () => void;
 }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [accountId, setAccountId] = useState('');
@@ -225,21 +227,13 @@ export function SocialPublishing({
           <div className="social-actions">
             <Button
               variant="outline"
-              disabled={busy || disabled || !status?.configured}
-              onClick={async () => {
-                setBusy(true);
-                setError('');
+              disabled={busy || !onManageConnections}
+              onClick={() => {
                 saveDraft();
-                try {
-                  const data = await api('/api/social/connect', { id: locationId });
-                  window.location.assign(data.url);
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Could not connect.');
-                  setBusy(false);
-                }
+                onManageConnections?.();
               }}
             >
-              Connect / reconnect Meta
+              Manage connections
             </Button>
             <Button variant="ghost" disabled={busy} onClick={refresh}>
               Refresh accounts &amp; status
@@ -303,33 +297,6 @@ export function SocialPublishing({
               >
                 Review &amp; publish
               </Button>
-              {account && (
-                <Button
-                  variant="ghost"
-                  disabled={busy || disabled}
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        `Disconnect ${account.name} from this location? Existing posts will stay online.`,
-                      )
-                    )
-                      return;
-                    try {
-                      await api(
-                        '/api/social/accounts',
-                        { id: locationId, accountId: account.id },
-                        'DELETE',
-                      );
-                      setAccountId('');
-                      await refresh();
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Could not disconnect.');
-                    }
-                  }}
-                >
-                  Disconnect selected account
-                </Button>
-              )}
             </>
           )}
           {review && (
@@ -386,7 +353,7 @@ export function SocialPublishing({
                       <p>
                         {error ||
                           active?.error ||
-                          'Check your account before trying again. You can follow the publication in History.'}
+                          'Check your account before trying again. You can follow the publication in Activity.'}
                       </p>
                       <Button
                         variant="outline"

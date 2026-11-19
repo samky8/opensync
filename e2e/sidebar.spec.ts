@@ -33,8 +33,8 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await expect
     .poll(async () => (await content.boundingBox())!.width)
     .toBeGreaterThan(original + 100);
-  await page.getByRole('button', { name: 'Add to your website', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Add to your website', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Website widgets', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Website widgets', exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Expand sidebar', exact: true })).toBeVisible();
   await expect
@@ -45,7 +45,7 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(
-    page.locator('.sidebar .sidebar-text').filter({ hasText: 'Add to your website' }),
+    page.locator('.sidebar .sidebar-text').filter({ hasText: /^Website widgets$/ }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(page.locator('.sidebar')).toBeHidden();
@@ -58,4 +58,22 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await expect
     .poll(async () => (await page.locator('.sidebar').boundingBox())!.width)
     .toBeGreaterThan(200);
+});
+
+test('sidebar separates management, customization, and publishing tasks', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/demo');
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Open navigation' }).click();
+
+  await expect(page.getByRole('navigation', { name: 'Manage' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Customize' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Publishing' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Activity', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restart setup', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'New update', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Restart setup', exact: true })).toBeVisible();
 });

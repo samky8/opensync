@@ -24,9 +24,10 @@ import {
   ExternalLink,
   Globe,
   Instagram,
-  Facebook,
+  Palette,
   Bell,
   Copy,
+  Sparkles,
   LogOut,
   Menu,
   X,
@@ -34,9 +35,6 @@ import {
   Sunset,
   Moon,
   DoorOpen,
-  PanelTop,
-  Share2,
-  MapPin,
   Store,
   ArrowDownToLine,
   RefreshCw,
@@ -44,12 +42,17 @@ import {
   Send,
   CreditCard,
   RotateCcw,
+  Pencil,
+  Trash2,
+  UserRound,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { ProfileMenu } from './profile-menu';
 import { ProBadge } from './ui/pro-badge';
 import { Widget, type WidgetType } from './widget';
 import { SocialComposer } from './social-composer';
+import { SocialConnections } from './social-connections';
+import { LogoUpload } from './logo-upload';
 import { PublishWizard } from './publish-wizard';
 import {
   publishChanges,
@@ -103,28 +106,47 @@ type Detail = {
 };
 const navigation = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'hours', label: 'Business hours', icon: Clock },
-  { id: 'special', label: 'Holidays & exceptions', icon: CalendarDays },
+  { id: 'hours', label: 'Regular hours', icon: Clock },
+  { id: 'special', label: 'Special hours', icon: CalendarDays },
   { id: 'announcements', label: 'Announcements', icon: Megaphone },
-  { id: 'widgets', label: 'Add to your website', icon: Code2 },
-  { id: 'social', label: 'Social posts', icon: Instagram },
+  { id: 'widgets', label: 'Website widgets', icon: Code2 },
+  { id: 'social', label: 'Social templates', icon: Instagram },
+  { id: 'brand', label: 'Brand kit', icon: Palette },
   { id: 'integrations', label: 'Connections', icon: Plug },
-  { id: 'activity', label: 'History', icon: History },
+  { id: 'activity', label: 'Activity', icon: History },
 ];
 const titles: Record<string, [string, string]> = {
   overview: ['Overview', 'Manage your hours and updates.'],
-  hours: ['Business hours', 'Set your regular weekly schedule.'],
-  special: ['Holidays & exceptions', 'Set holiday hours and one-off closures.'],
+  hours: ['Regular hours', 'Set your regular weekly schedule.'],
+  special: ['Special hours', 'Set holiday hours and one-off closures.'],
   announcements: ['Announcements', 'Share updates on your website.'],
-  widgets: ['Add to your website', 'Add your hours and updates to your website.'],
-  social: ['Social posts', 'Create posts and stories for Instagram and Facebook.'],
-  integrations: ['Connections', 'Manage your publishing channels.'],
-  activity: ['History', 'Check published updates and sync results.'],
+  widgets: ['Website widgets', 'Customize and preview your reusable website widgets.'],
+  website: ['Add to your website', 'Install your OpenSync widgets on your website.'],
+  social: ['Social templates', 'Save reusable post and story designs for future updates.'],
+  brand: ['Brand kit', 'Manage reusable identity defaults for widgets and social templates.'],
+  integrations: ['Connections', 'Manage publishing destinations and account access.'],
+  activity: ['Activity', 'Monitor publishing outcomes and synchronization events.'],
   settings: ['Business settings', 'Manage the selected business profile and team.'],
   account: ['Account settings', 'Manage your account and personal data.'],
   billing: ['Plans & billing', 'Manage your plan and subscription.'],
   notifications: ['Notifications', 'Updates that need your attention.'],
   help: ['Help', 'Find answers or contact support.'],
+};
+const titleIcons = {
+  hours: Clock,
+  special: CalendarDays,
+  announcements: Megaphone,
+  widgets: Code2,
+  website: Globe,
+  social: Instagram,
+  brand: Palette,
+  integrations: Plug,
+  activity: History,
+  settings: Settings,
+  account: UserRound,
+  billing: CreditCard,
+  notifications: Bell,
+  help: HelpCircle,
 };
 async function request(path: string, body: unknown) {
   const response = await fetch(path, {
@@ -136,7 +158,15 @@ async function request(path: string, body: unknown) {
   if (!response.ok) throw new Error(result.error || 'Could not complete request');
   return result;
 }
-function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+function Modal({
+  children,
+  onClose,
+  wide = false,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  wide?: boolean;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -146,7 +176,7 @@ function Modal({ children, onClose }: { children: ReactNode; onClose: () => void
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={`modal${wide ? ' modal-wide' : ''}`}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -202,7 +232,6 @@ export function Dashboard({
     ),
     [step, setStep] = useState(initialLocations[0]?.onboardingStep || 1),
     [widgetType, setWidgetType] = useState<WidgetType>('hours'),
-    [platform, setPlatform] = useState('Custom HTML'),
     [origin, setOrigin] = useState(''),
     [googleLocations, setGoogleLocations] = useState<
       {
@@ -234,7 +263,9 @@ export function Dashboard({
         message: 'Example: published winter opening hours to website widgets',
         createdAt: initialNow,
       },
-    ]);
+    ]),
+    [activityFilter, setActivityFilter] = useState('all'),
+    [destinationFilter, setDestinationFilter] = useState('all');
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved),
     widgetPlanError = /widget customization requires Pro|custom branding requires Pro/i.test(error),
     publishedSchedule = demo ? (pubVersion ? published : null) : detail?.published,
@@ -251,6 +282,18 @@ export function Dashboard({
   } catch {
     status = getStatus(saved, new Date(now));
   }
+  const liveAnnouncement = publishedSchedule
+      ? getStatus(publishedSchedule, new Date(now)).announcement
+      : null,
+    announcementDrafts = draft.announcements.filter(
+      (announcement) =>
+        !liveAnnouncement ||
+        announcement.id !== liveAnnouncement.id ||
+        JSON.stringify(announcement) !== JSON.stringify(liveAnnouncement),
+    ),
+    liveAnnouncementDraft = liveAnnouncement
+      ? announcementDrafts.find((announcement) => announcement.id === liveAnnouncement.id)
+      : undefined;
   const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1),
     readonly = !demo && detail?.role === 'viewer';
   async function refresh(resetDraft = false) {
@@ -482,7 +525,7 @@ export function Dashboard({
     notify(
       demo
         ? 'Demo published. Your local widget preview is up to date.'
-        : 'Published to website widgets. Check History for destination outcomes.',
+        : 'Published to website widgets. Check Activity for destination outcomes.',
     );
   }
   async function copy(text: string) {
@@ -518,7 +561,6 @@ export function Dashboard({
     setDemoHistory([]);
     setDemoTrial({ status: 'available', endsAt: null });
     setWidgetType('hours');
-    setPlatform('Custom HTML');
     setModal('');
     setError('');
     setToast('');
@@ -543,7 +585,32 @@ export function Dashboard({
     );
     return result.trial;
   }
-  const snippet = `<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="${widgetType}"></div>\n<script src="${origin}/embed.js" defer></script>`;
+  const snippet = `<!-- Place directly above the site header -->
+<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="banner"></div>
+
+<!-- Place in the business hours section -->
+<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="hours"></div>
+
+<!-- Place in the site footer -->
+<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="status"></div>
+
+<!-- Load OpenSync once, after the three placements -->
+<script src="${origin}/embed.js" defer></script>`,
+    aiIntegrationPrompt = `Integrate all three OpenSync website widgets into my existing website. You have access to the website's codebase, so inspect its framework, layout, components, and styling before making changes.
+
+Place the announcement banner directly above the site header, the business hours widget in the most useful hours or contact section, and the live status badge in the site footer. Preserve the existing visual design, responsiveness, accessibility, and site behavior. Use the exact OpenSync embed code below; do not change its location ID, data attributes, widget types, or script URL:
+
+${snippet}
+
+Implementation requirements:
+- Keep the three embed containers in their appropriate site regions; they do not need to remain adjacent in the source code.
+- Load the OpenSync script only once, even if the site uses reusable components or client-side navigation.
+- Follow the website's existing conventions instead of introducing a new framework or styling system.
+- Ensure every placement works on mobile and desktop without covering navigation or important content.
+- Do not add fallback spacing around an empty widget. OpenSync intentionally collapses disabled widgets and inactive announcements to zero height.
+- If the site has a Content Security Policy, allow ${origin || 'the OpenSync origin'} in its script-src and frame-src directives.
+- Do not replace the embed with mocked or hard-coded business hours.
+- After implementing it, verify the page still builds and briefly summarize what you changed and where.`;
   async function connect() {
     if (demo) {
       notify('Demo only. Create an account to connect a real business.');
@@ -567,7 +634,17 @@ export function Dashboard({
   const upcoming = draft.exceptions
     .filter((e) => e.end >= status.date)
     .sort((a, b) => a.start.localeCompare(b.start));
-  const history = demo ? demoHistory : detail?.history || [];
+  const history = demo ? demoHistory : detail?.history || [],
+    filteredJobs = (detail?.jobs || []).filter((job) => {
+      const statusMatches =
+        activityFilter === 'all' ||
+        (activityFilter === 'published' && ['published', 'accepted'].includes(job.status)) ||
+        (activityFilter === 'pending' && ['queued', 'retry'].includes(job.status)) ||
+        (activityFilter === 'failed' && job.status === 'failed');
+      return (
+        statusMatches && (destinationFilter === 'all' || job.destination === destinationFilter)
+      );
+    });
   const localHour = Number(
     new Intl.DateTimeFormat('en', {
       hour: 'numeric',
@@ -578,41 +655,7 @@ export function Dashboard({
   const greeting =
     localHour < 12 ? 'Good morning' : localHour < 18 ? 'Good afternoon' : 'Good evening';
   const GreetingIcon = localHour < 6 || localHour >= 22 ? Moon : localHour >= 18 ? Sunset : Sun;
-  const overviewChannels = [
-    {
-      label: 'Website hours',
-      icon: Globe,
-      tab: 'widgets',
-      state: pubVersion ? 'Published' : 'Not published',
-      ready: !!pubVersion,
-    },
-    {
-      label: 'Website announcement',
-      icon: PanelTop,
-      tab: 'widgets',
-      state: pubVersion ? 'Published' : 'Not published',
-      ready: !!pubVersion,
-    },
-    {
-      label: 'Facebook / Instagram',
-      icon: Share2,
-      tab: 'social',
-      state: 'Open studio',
-      ready: false,
-    },
-    {
-      label: 'Google Business Profile',
-      icon: MapPin,
-      tab: 'integrations',
-      state:
-        detail?.connection?.status === 'connected'
-          ? 'Sync paused'
-          : detail?.googleConfigured
-            ? 'Connect'
-            : 'Unavailable',
-      ready: false,
-    },
-  ];
+  const PageIcon = titleIcons[tab as keyof typeof titleIcons];
   const goPublish = (value: Schedule) => {
     setDraft(value);
     openPublish(
@@ -621,6 +664,70 @@ export function Dashboard({
         : 'special',
     );
   };
+  function publishAnnouncement(id: string) {
+    const activation = new Date(now).toISOString();
+    let source =
+      liveAnnouncement && !draft.announcements.some((item) => item.id === liveAnnouncement.id)
+        ? [...draft.announcements, { ...liveAnnouncement, enabled: false }]
+        : draft.announcements;
+    const selected = source.find((announcement) => announcement.id === id);
+    if (
+      selected &&
+      liveAnnouncement?.id === id &&
+      JSON.stringify(selected) !== JSON.stringify(liveAnnouncement)
+    )
+      source = [...source, { ...liveAnnouncement, id: crypto.randomUUID(), enabled: false }];
+    setDraft({
+      ...draft,
+      announcements: source.map((announcement) =>
+        announcement.id === id
+          ? {
+              ...announcement,
+              enabled: true,
+              start: activation,
+              end:
+                announcement.end && Date.parse(announcement.end) <= Date.parse(activation)
+                  ? ''
+                  : announcement.end,
+            }
+          : { ...announcement, enabled: false },
+      ),
+    });
+    openPublish('announcements');
+  }
+  function removeLiveAnnouncement() {
+    if (!liveAnnouncement || !confirm('Remove this announcement from your website?')) return;
+    const currentTime = Date.parse(now);
+    const source = draft.announcements.some((item) => item.id === liveAnnouncement.id)
+      ? draft.announcements
+      : [...draft.announcements, liveAnnouncement];
+    setDraft({
+      ...draft,
+      announcements: source.map((announcement) =>
+        announcement.id === liveAnnouncement.id ||
+        (announcement.enabled &&
+          Date.parse(announcement.start) <= currentTime &&
+          (!announcement.end || Date.parse(announcement.end) > currentTime))
+          ? { ...announcement, enabled: false }
+          : announcement,
+      ),
+    });
+    openPublish('announcements');
+  }
+  function editAnnouncement(announcement: Schedule['announcements'][number]) {
+    if (!draft.announcements.some((item) => item.id === announcement.id))
+      setDraft({
+        ...draft,
+        announcements: [...draft.announcements, structuredClone(announcement)],
+      });
+    setModal(`announcement:${announcement.id}`);
+  }
+  function announcementPreview(announcement: Schedule['announcements'][number]) {
+    return {
+      ...draft,
+      announcements: [{ ...announcement, enabled: true, start: now, end: '' }],
+    };
+  }
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside
@@ -687,8 +794,9 @@ export function Dashboard({
         />
         {[
           { label: 'Overview', items: navigation.slice(0, 1), hideLabel: true },
-          { label: 'Publishing', items: navigation.slice(1, 4) },
-          { label: 'Connections & setup', items: navigation.slice(4) },
+          { label: 'Manage', items: navigation.slice(1, 4) },
+          { label: 'Customize', items: navigation.slice(4, 7) },
+          { label: 'Publishing', items: navigation.slice(7) },
         ].map((group) => (
           <div className="nav-group" key={group.label}>
             {!group.hideLabel && <div className="nav-label">{group.label}</div>}
@@ -709,23 +817,6 @@ export function Dashboard({
             </nav>
           </div>
         ))}
-        {demo && (
-          <div className="nav-group">
-            <nav aria-label="Demo">
-              <button
-                aria-label="Onboarding"
-                title="Onboarding"
-                aria-current={onboarding ? 'page' : undefined}
-                className={onboarding ? 'active' : ''}
-                disabled={busy}
-                onClick={startDemoOnboarding}
-              >
-                <Store size={18} />
-                <span className="sidebar-text">Onboarding</span>
-              </button>
-            </nav>
-          </div>
-        )}
         <div className="sidebar-bottom">
           <nav aria-label="Account">
             <button
@@ -788,8 +879,22 @@ export function Dashboard({
             >
               <Menu size={21} />
             </button>
-            <Store size={15} />
-            <span>{draft.name}</span>
+            <button
+              type="button"
+              className="breadcrumb-overview breadcrumb-overview-icon"
+              aria-label="Go to overview"
+              title="Overview"
+              onClick={() => switchTab('overview')}
+            >
+              <Store size={15} />
+            </button>
+            <button
+              type="button"
+              className="breadcrumb-overview breadcrumb-business-name"
+              onClick={() => switchTab('overview')}
+            >
+              {draft.name}
+            </button>
             <ChevronRight size={13} />
             <strong>
               {onboarding
@@ -908,7 +1013,19 @@ export function Dashboard({
                       draft={draft}
                       onChange={setDraft}
                       disabled={busy || readonly}
+                      showLogo={false}
                     />
+                    <p className="muted">
+                      Logo and reusable visual defaults are managed in{' '}
+                      <button
+                        type="button"
+                        className="text-link inline-link"
+                        onClick={() => switchTab('brand')}
+                      >
+                        Brand kit
+                      </button>
+                      .
+                    </p>
                     <div className="modal-actions">
                       <Button
                         disabled={busy}
@@ -1008,23 +1125,31 @@ export function Dashboard({
                     <div className="card padded">
                       <h2>A small addition. Always up to date.</h2>
                       <p className="muted">
-                        Copy this code into an HTML block on your website. The widget becomes
+                        Copy this bundle into your website code. Each enabled widget becomes
                         available after you publish.
                       </p>
-                      <select
-                        aria-label="Widget type"
-                        value={widgetType}
-                        onChange={(e) => setWidgetType(e.target.value as WidgetType)}
-                      >
-                        <option value="hours">Business hours</option>
-                        <option value="banner">Announcement banner</option>
-                        <option value="status">Status badge</option>
-                      </select>
+                      <label>
+                        Preview widget
+                        <select
+                          value={widgetType}
+                          onChange={(e) => setWidgetType(e.target.value as WidgetType)}
+                        >
+                          <option value="hours">Business hours</option>
+                          <option value="banner">Announcement banner</option>
+                          <option value="status">Status badge</option>
+                        </select>
+                      </label>
                       <pre className="code-block">{snippet}</pre>
-                      <Button variant="outline" onClick={() => copy(snippet)}>
-                        <Copy size={16} />
-                        Copy embed code
-                      </Button>
+                      <div className="installation-actions">
+                        <Button variant="outline" onClick={() => copy(snippet)}>
+                          <Copy size={16} />
+                          Copy embed code
+                        </Button>
+                        <Button variant="outline" onClick={() => copy(aiIntegrationPrompt)}>
+                          <Sparkles size={16} />
+                          Copy prompt for AI
+                        </Button>
+                      </div>
                       <div className="modal-actions">
                         <Button variant="ghost" onClick={() => setStep(6)}>
                           Skip for now
@@ -1057,14 +1182,20 @@ export function Dashboard({
             <>
               <div className={`page-heading ${tab === 'overview' ? styles.overviewHeading : ''}`}>
                 {tab !== 'overview' && (
-                  <div>
-                    <h1>{titles[tab]?.[0]}</h1>
-                    <p>{titles[tab]?.[1]}</p>
+                  <div className="page-title">
+                    {PageIcon && (
+                      <span className="page-title-icon" aria-hidden="true">
+                        <PageIcon size={18} />
+                      </span>
+                    )}
+                    <div>
+                      <h1>{titles[tab]?.[0]}</h1>
+                      <p>{titles[tab]?.[1]}</p>
+                    </div>
                   </div>
                 )}
-                {['overview', 'hours', 'special', 'announcements', 'widgets', 'settings'].includes(
-                  tab,
-                ) && (
+                {['hours', 'special', 'widgets', 'brand', 'settings'].includes(tab) ||
+                (tab === 'overview' && (dirty || unpublished)) ? (
                   <div className="heading-actions">
                     {dirty && (
                       <Button
@@ -1088,7 +1219,7 @@ export function Dashboard({
                       Publish changes
                     </Button>
                   </div>
-                )}
+                ) : null}
               </div>
               {(dirty || unpublished) && (
                 <div className="draft-notice">
@@ -1117,28 +1248,6 @@ export function Dashboard({
               )}
               {tab === 'overview' && (
                 <section className={styles.panel} aria-label="Business overview">
-                  <header className={styles.header}>
-                    <span className={styles.mark}>
-                      <RefreshCw size={18} />
-                    </span>
-                    <div className={styles.identity}>
-                      <strong>OpenSync</strong>
-                      <span>{draft.name}</span>
-                    </div>
-                    <button
-                      className={`${styles.badge} ${pubVersion ? styles.ready : ''}`}
-                      onClick={() => switchTab('widgets')}
-                    >
-                      {pubVersion ? <CheckCircle2 size={13} /> : <Globe size={13} />}
-                      {demo
-                        ? 'Demo preview'
-                        : !detail
-                          ? 'Loading'
-                          : pubVersion
-                            ? 'Website published'
-                            : 'Set up website'}
-                    </button>
-                  </header>
                   <div className={styles.greeting}>
                     <h1>
                       {greeting}
@@ -1180,7 +1289,7 @@ export function Dashboard({
                     </button>
                   </div>
                   <section className={styles.actions}>
-                    <h2>What would you like to do?</h2>
+                    <h2>Quick actions</h2>
                     <div className={styles.actionGrid}>
                       <button onClick={() => switchTab('hours')} disabled={readonly}>
                         <Clock size={20} />
@@ -1200,49 +1309,6 @@ export function Dashboard({
                       </button>
                     </div>
                   </section>
-                  <section className={styles.channels}>
-                    <div className={styles.sectionHeading}>
-                      <h2>Where your updates appear</h2>
-                      {demo && <span>Demo</span>}
-                    </div>
-                    {overviewChannels.map((channel) => (
-                      <button
-                        key={channel.label}
-                        className={styles.channel}
-                        onClick={() => switchTab(channel.tab)}
-                      >
-                        <channel.icon size={17} />
-                        <span>{channel.label}</span>
-                        <span className={`${styles.badge} ${channel.ready ? styles.ready : ''}`}>
-                          {channel.state}
-                        </span>
-                      </button>
-                    ))}
-                  </section>
-                  <button className={styles.activity} onClick={() => switchTab('activity')}>
-                    <strong>
-                      Recent activity <ChevronRight size={15} />
-                    </strong>
-                    <p>
-                      {history[0] ? (
-                        <>
-                          <time>
-                            {new Date(history[0].createdAt).toLocaleDateString('en-CA', {
-                              timeZone: draft.timezone,
-                            })}
-                          </time>{' '}
-                          &middot; {history[0].message}
-                        </>
-                      ) : (
-                        'No published updates yet.'
-                      )}
-                    </p>
-                  </button>
-                  <p className={styles.footnote}>
-                    {demo
-                      ? 'Demo changes stay in this browser. Channel availability is shown above.'
-                      : 'Published widgets appear on your website once installed.'}
-                  </p>
                 </section>
               )}
               {tab === 'hours' && (
@@ -1310,102 +1376,172 @@ export function Dashboard({
                 </section>
               )}
               {tab === 'announcements' && (
-                <div className="two-columns">
-                  <section className="card">
+                <div className="announcement-workspace">
+                  <section className="card announcement-library announcement-section">
                     <div className="card-heading">
-                      <h3>Your announcements</h3>
-                      <Button size="sm" onClick={() => setModal('Post announcement')}>
-                        <Plus size={15} />
-                        New
+                      <div>
+                        <h3>Live announcements</h3>
+                        <p className="muted">
+                          This is the banner currently visible on your website.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          liveAnnouncementDraft && publishAnnouncement(liveAnnouncementDraft.id)
+                        }
+                        disabled={readonly || !liveAnnouncementDraft}
+                      >
+                        <Send size={14} />
+                        Publish changes
                       </Button>
                     </div>
-                    {draft.announcements.length ? (
-                      draft.announcements.map((a) => (
-                        <div className="announcement-item" key={a.id}>
-                          <div className="section-heading">
-                            <span className="pill">
-                              {!a.enabled
-                                ? 'Disabled'
-                                : a.end && Date.parse(a.end) <= Date.parse(now)
-                                  ? 'Expired'
-                                  : Date.parse(a.start) > Date.parse(now)
-                                    ? 'Scheduled'
-                                    : 'Active'}
-                            </span>
-                            <label className="check-label">
-                              <input
-                                type="checkbox"
-                                checked={a.enabled}
-                                onChange={(e) =>
-                                  setDraft({
-                                    ...draft,
-                                    announcements: draft.announcements.map((x) =>
-                                      x.id === a.id ? { ...x, enabled: e.target.checked } : x,
-                                    ),
-                                  })
-                                }
-                              />
-                              Enabled
-                            </label>
-                          </div>
-                          <h3>{a.title || 'Announcement'}</h3>
-                          <p>{a.message}</p>
-                          <small className="muted">
-                            Starts{' '}
-                            {new Date(a.start).toLocaleString('en-CA', {
-                              timeZone: draft.timezone,
-                            })}
-                            {a.end
-                              ? ` · Expires ${new Date(a.end).toLocaleString('en-CA', { timeZone: draft.timezone })}`
-                              : ''}
-                          </small>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setModal(`announcement:${a.id}`)}
-                          >
-                            Edit announcement
-                          </Button>
-                          <button
-                            className="text-link danger"
-                            onClick={() => {
-                              if (confirm('Remove this announcement from your draft?'))
-                                setDraft({
-                                  ...draft,
-                                  announcements: draft.announcements.filter((x) => x.id !== a.id),
-                                });
-                            }}
-                          >
-                            Remove
-                          </button>
+                    {liveAnnouncement && publishedSchedule ? (
+                      <article className="announcement-banner-record is-live">
+                        <div className="announcement-banner-preview">
+                          <Widget schedule={publishedSchedule} type="banner" now={now} />
                         </div>
-                      ))
+                        <div className="announcement-record-footer">
+                          <div>
+                            <span className="pill">Live on website</span>
+                            <small className="muted">
+                              {liveAnnouncement.end
+                                ? `Expires ${new Intl.DateTimeFormat('en-CA', {
+                                    timeZone: publishedSchedule.timezone,
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  }).format(new Date(liveAnnouncement.end))}`
+                                : 'No expiry'}
+                            </small>
+                          </div>
+                          <div className="announcement-actions">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => editAnnouncement(liveAnnouncement)}
+                              disabled={readonly}
+                            >
+                              <Pencil size={14} aria-hidden="true" />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={removeLiveAnnouncement}
+                              disabled={readonly}
+                            >
+                              <Trash2 size={14} aria-hidden="true" />
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      </article>
                     ) : (
-                      <div className="empty-state">
-                        <Megaphone size={32} />
-                        <h3>Something to share?</h3>
-                        <p>Your customers will see your latest active announcement here.</p>
+                      <div className="empty-state small">
+                        <Megaphone size={28} />
+                        <h4>No live announcement</h4>
+                        <p>Publish a draft to show a banner on your website.</p>
                       </div>
                     )}
                   </section>
-                  <div className="preview-panel">
-                    <span className="eyebrow">LIVE DRAFT PREVIEW</span>
-                    <Widget schedule={draft} type="banner" now={now} />
-                    {!status.announcement && (
-                      <p className="muted">No active banner at the moment.</p>
+
+                  <section className="card announcement-library announcement-section">
+                    <div className="card-heading">
+                      <div>
+                        <h3>Drafts</h3>
+                        <p className="muted">
+                          Publishing a draft replaces the live banner and moves the previous one
+                          here.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => setModal('Post announcement')}
+                        disabled={readonly}
+                      >
+                        <Plus size={15} />
+                        New announcement
+                      </Button>
+                    </div>
+                    {announcementDrafts.length ? (
+                      <div className="announcement-list">
+                        {announcementDrafts.map((announcement) => (
+                          <article className="announcement-banner-record" key={announcement.id}>
+                            <div className="announcement-banner-preview">
+                              <Widget
+                                schedule={announcementPreview(announcement)}
+                                type="banner"
+                                now={now}
+                              />
+                            </div>
+                            <div className="announcement-record-footer">
+                              <div>
+                                <span className="pill">Draft</span>
+                                <small className="muted">
+                                  {announcement.id === liveAnnouncement?.id
+                                    ? 'Unpublished changes to the live banner'
+                                    : 'Ready to replace the live banner'}
+                                </small>
+                              </div>
+                              <div className="announcement-actions">
+                                <Button
+                                  size="sm"
+                                  onClick={() => publishAnnouncement(announcement.id)}
+                                  disabled={readonly}
+                                >
+                                  <Send size={14} aria-hidden="true" />
+                                  Publish
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => editAnnouncement(announcement)}
+                                  disabled={readonly}
+                                >
+                                  <Pencil size={14} aria-hidden="true" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={readonly}
+                                  onClick={() => {
+                                    if (confirm('Remove this announcement from your drafts?'))
+                                      setDraft({
+                                        ...draft,
+                                        announcements: draft.announcements.filter(
+                                          (item) => item.id !== announcement.id,
+                                        ),
+                                      });
+                                  }}
+                                >
+                                  <Trash2 size={14} aria-hidden="true" />
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty-state">
+                        <Megaphone size={32} />
+                        <h3>No drafts</h3>
+                        <p>Create an announcement or edit the live banner to start a draft.</p>
+                      </div>
                     )}
-                    <small>
-                      Expired banners automatically disappear. No browser or manual reset needed.
-                    </small>
-                  </div>
+                  </section>
                 </div>
               )}
               {tab === 'widgets' && (
                 <div className="two-columns widget-config">
                   <div>
                     <section className="card padded">
-                      <h3>
-                        Widget appearance <ProBadge />
+                      <h3 className="pro-feature-title">
+                        <ProBadge /> Widget appearance
                       </h3>
                       <p className="muted">
                         Customise with Pro, or use the included Free defaults.
@@ -1421,13 +1557,48 @@ export function Dashboard({
                           </button>
                         ))}
                       </div>
+                      <fieldset className="widget-visibility">
+                        <legend>Visible on your website</legend>
+                        {(['hours', 'banner', 'status'] as WidgetType[]).map((type) => (
+                          <label className="check-label" key={type}>
+                            <input
+                              type="checkbox"
+                              checked={draft.widgetVisibility?.[type] ?? true}
+                              disabled={readonly}
+                              onChange={(event) =>
+                                setDraft({
+                                  ...draft,
+                                  widgetVisibility: {
+                                    ...(draft.widgetVisibility || {
+                                      hours: true,
+                                      banner: true,
+                                      status: true,
+                                    }),
+                                    [type]: event.target.checked,
+                                  },
+                                })
+                              }
+                            />
+                            {type === 'hours'
+                              ? 'Business hours'
+                              : type === 'banner'
+                                ? 'Announcement banner'
+                                : 'Live status'}
+                          </label>
+                        ))}
+                        <p className="muted">
+                          Install all three once. Disabled widgets collapse automatically on the
+                          live site after you publish.
+                        </p>
+                      </fieldset>
                       <div className="form-grid">
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Accent colour <ProBadge />
+                            <ProBadge /> Accent colour
                           </span>
                           <input
                             type="color"
+                            disabled={readonly || plan === 'free'}
                             value={draft.widget.accent}
                             onChange={(e) =>
                               setDraft({
@@ -1437,11 +1608,12 @@ export function Dashboard({
                             }
                           />
                         </label>
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Appearance <ProBadge />
+                            <ProBadge /> Appearance
                           </span>
                           <select
+                            disabled={readonly || plan === 'free'}
                             value={draft.widget.theme}
                             onChange={(e) =>
                               setDraft({
@@ -1457,11 +1629,12 @@ export function Dashboard({
                             <option value="dark">Dark</option>
                           </select>
                         </label>
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Typography <ProBadge />
+                            <ProBadge /> Typography
                           </span>
                           <select
+                            disabled={readonly || plan === 'free'}
                             value={draft.widget.font}
                             onChange={(e) =>
                               setDraft({
@@ -1477,12 +1650,13 @@ export function Dashboard({
                             <option value="serif">Classic serif</option>
                           </select>
                         </label>
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Corner radius <ProBadge />
+                            <ProBadge /> Corner radius
                           </span>
                           <input
                             type="range"
+                            disabled={readonly || plan === 'free'}
                             min={0}
                             max={32}
                             value={draft.widget.radius}
@@ -1494,11 +1668,12 @@ export function Dashboard({
                             }
                           />
                         </label>
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Alignment <ProBadge />
+                            <ProBadge /> Alignment
                           </span>
                           <select
+                            disabled={readonly || plan === 'free'}
                             value={draft.widget.alignment}
                             onChange={(e) =>
                               setDraft({
@@ -1514,11 +1689,12 @@ export function Dashboard({
                             <option value="center">Centre</option>
                           </select>
                         </label>
-                        <label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            Layout <ProBadge />
+                            <ProBadge /> Layout
                           </span>
                           <select
+                            disabled={readonly || plan === 'free'}
                             value={draft.widget.compact ? 'compact' : 'full'}
                             onChange={(e) =>
                               setDraft({
@@ -1532,10 +1708,12 @@ export function Dashboard({
                           </select>
                         </label>
                       </div>
-                      <label className="check-label">
+                      <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                        <ProBadge />
                         <input
                           type="checkbox"
                           checked={draft.widget.showName}
+                          disabled={readonly || plan === 'free'}
                           onChange={(e) =>
                             setDraft({
                               ...draft,
@@ -1543,7 +1721,7 @@ export function Dashboard({
                             })
                           }
                         />
-                        Show business name <ProBadge />
+                        Show business name
                       </label>
                       <Button
                         className="widget-reset"
@@ -1562,67 +1740,6 @@ export function Dashboard({
                         </p>
                       )}
                     </section>
-                    <section className="card padded installation">
-                      <h3>Make it part of your website.</h3>
-                      <label>
-                        Website platform
-                        <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
-                          {['Custom HTML', 'WordPress', 'Wix', 'Squarespace', 'Shopify'].map(
-                            (p) => (
-                              <option key={p}>{p}</option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                      <p className="muted">
-                        {platform === 'WordPress'
-                          ? 'Add a Custom HTML block to a page or widget area.'
-                          : platform === 'Wix'
-                            ? 'Use Embed Code → Embed HTML. Some plans restrict custom scripts; use the iframe alternative below.'
-                            : platform === 'Squarespace'
-                              ? 'Add a Code block with HTML enabled (plan-dependent).'
-                              : platform === 'Shopify'
-                                ? 'Add a Custom Liquid section in your theme editor.'
-                                : 'Paste this snippet where you want the widget to appear.'}
-                      </p>
-                      <pre className="code-block">{snippet}</pre>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          demo
-                            ? notify(
-                                'Demo snippets are examples. Create a business to get your working location ID.',
-                              )
-                            : copy(snippet)
-                        }
-                      >
-                        <Copy size={16} />
-                        Copy embed code
-                      </Button>
-                      <details>
-                        <summary>Iframe alternative & strict website policies</summary>
-                        <pre className="code-block">{`<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=${widgetType}" title="Business hours" style="width:100%;height:590px;border:0" loading="lazy"></iframe>`}</pre>
-                        <p className="muted">
-                          Allow {origin} in your site’s frame-src and script-src policies. For a top
-                          banner, install above your header. For floating placement, put the embed
-                          container in your site’s fixed-position element.
-                        </p>
-                      </details>
-                      {!demo && pubVersion > 0 && (
-                        <a
-                          className="text-link"
-                          href={`/embed/${selected}?type=${widgetType}`}
-                          target="_blank"
-                          rel="noopener"
-                        >
-                          Test published widget <ExternalLink size={14} />
-                        </a>
-                      )}
-                      <small className="muted">
-                        Published endpoint availability does not verify installation on another
-                        website.
-                      </small>
-                    </section>
                   </div>
                   <div className="preview-panel sticky">
                     <span className="eyebrow">YOUR WIDGET · DRAFT PREVIEW</span>
@@ -1635,11 +1752,19 @@ export function Dashboard({
                       </div>
                       <div className="preview-body">
                         <Widget schedule={draft} type={widgetType} now={now} />
-                        {widgetType === 'banner' && !status.announcement && (
+                        {draft.widgetVisibility?.[widgetType] === false && (
                           <p className="muted">
-                            Add an active announcement to preview your banner.
+                            This widget is hidden and will collapse on your live website after you
+                            publish.
                           </p>
                         )}
+                        {widgetType === 'banner' &&
+                          (draft.widgetVisibility?.banner ?? true) &&
+                          !status.announcement && (
+                            <p className="muted">
+                              Add an active announcement to preview your banner.
+                            </p>
+                          )}
                       </div>
                     </div>
                     <small>
@@ -1654,6 +1779,188 @@ export function Dashboard({
                       </details>
                     )}
                   </div>
+                </div>
+              )}
+              {tab === 'website' && (
+                <div className="website-installation">
+                  <section className="card padded installation">
+                    <div className="installation-intro">
+                      <span className="provider-icon violet">
+                        <Code2 size={24} />
+                      </span>
+                      <div>
+                        <h2>Make it part of your website.</h2>
+                        <p className="muted">
+                          Install all three placements once. OpenSync will show or hide each one
+                          from your published widget settings.
+                        </p>
+                      </div>
+                    </div>
+                    <ol className="installation-steps">
+                      <li>
+                        <strong>Copy the embed code</strong>
+                        <span>Use the exact bundle below so every widget uses this business.</span>
+                      </li>
+                      <li>
+                        <strong>Add each placement</strong>
+                        <span>
+                          Put the banner above your header, hours in your contact or hours section,
+                          and status in your footer.
+                        </span>
+                      </li>
+                      <li>
+                        <strong>Publish and test</strong>
+                        <span>
+                          Publish your OpenSync changes, then check the widgets on desktop and
+                          mobile.
+                        </span>
+                      </li>
+                    </ol>
+                    <pre className="code-block">{snippet}</pre>
+                    <div className="installation-actions">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          demo
+                            ? notify(
+                                'Demo snippets are examples. Create a business to get your working location ID.',
+                              )
+                            : copy(snippet)
+                        }
+                      >
+                        <Copy size={16} />
+                        Copy embed code
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          demo
+                            ? notify(
+                                'Demo prompts are examples. Create a business to get your working location ID.',
+                              )
+                            : copy(aiIntegrationPrompt)
+                        }
+                      >
+                        <Sparkles size={16} />
+                        Copy prompt for AI
+                      </Button>
+                    </div>
+                    <details>
+                      <summary>Iframe alternative &amp; strict website policies</summary>
+                      <pre className="code-block">{`<!-- Place directly above the site header -->
+<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=banner" title="Business announcement" style="width:100%;height:180px;border:0" loading="lazy"></iframe>
+
+<!-- Place in the business hours section -->
+<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=hours" title="Business hours" style="width:100%;height:590px;border:0" loading="lazy"></iframe>
+
+<!-- Place in the site footer -->
+<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=status" title="Business status" style="width:100%;height:130px;border:0" loading="lazy"></iframe>`}</pre>
+                      <p className="muted">
+                        Allow {origin} in your site’s frame-src and script-src policies. For a top
+                        banner, install above your header. For floating placement, put the embed
+                        container in your site’s fixed-position element.
+                      </p>
+                    </details>
+                    {!demo && pubVersion > 0 && (
+                      <a
+                        className="text-link"
+                        href={`/embed/${selected}?type=${widgetType}`}
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        Test published widget <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </section>
+                  <Button variant="ghost" onClick={() => switchTab('integrations')}>
+                    <ChevronLeft size={16} />
+                    Back to connections
+                  </Button>
+                </div>
+              )}
+              {tab === 'brand' && (
+                <div className="settings-grid brand-kit-grid">
+                  <section className="card padded">
+                    <h3>Business identity</h3>
+                    <p className="muted">
+                      These reusable details flow into website widgets and social templates.
+                    </p>
+                    <div className="form-grid brand-kit-fields">
+                      <label>
+                        Business display name
+                        <input
+                          value={draft.name}
+                          maxLength={100}
+                          disabled={busy || readonly}
+                          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                        />
+                      </label>
+                      <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                        <span className="pro-field-label">
+                          <ProBadge /> Primary brand colour
+                        </span>
+                        <input
+                          type="color"
+                          value={draft.widget.accent}
+                          disabled={busy || readonly || plan === 'free'}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              widget: { ...draft.widget, accent: event.target.value },
+                            })
+                          }
+                        />
+                        <small>Used as the starting accent for widgets and social designs.</small>
+                      </label>
+                      <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                        <span className="pro-field-label">
+                          <ProBadge /> Widget typography
+                        </span>
+                        <select
+                          value={draft.widget.font}
+                          disabled={busy || readonly || plan === 'free'}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              widget: {
+                                ...draft.widget,
+                                font: event.target.value as Schedule['widget']['font'],
+                              },
+                            })
+                          }
+                        >
+                          <option value="system">Clean sans-serif</option>
+                          <option value="serif">Classic serif</option>
+                        </select>
+                      </label>
+                    </div>
+                    <LogoUpload
+                      value={draft.logo}
+                      onChange={(logo) => setDraft({ ...draft, logo })}
+                      disabled={busy || readonly}
+                    />
+                  </section>
+                  <section className="card padded brand-kit-usage">
+                    <h3>Where your brand is used</h3>
+                    <div className="list-row">
+                      <Code2 size={18} />
+                      <div>
+                        <strong>Website widgets</strong>
+                        <p>Display name, logo-ready identity, accent colour, and typography.</p>
+                      </div>
+                    </div>
+                    <div className="list-row">
+                      <Instagram size={18} />
+                      <div>
+                        <strong>Social templates</strong>
+                        <p>Display name, logo, and accent colour seed new reusable designs.</p>
+                      </div>
+                    </div>
+                    <p className="muted">
+                      Layout-specific choices stay with each widget or social template so this page
+                      does not duplicate those editors.
+                    </p>
+                  </section>
                 </div>
               )}
               {tab === 'integrations' && (
@@ -1808,28 +2115,18 @@ export function Dashboard({
                       </p>
                       <div className="notice subtle">
                         {pubVersion
-                          ? `Revision ${pubVersion} published. Copy an embed snippet to install.`
-                          : 'No published hours yet. Publish your first update to activate your widgets.'}
+                          ? `Three widgets configured · revision ${pubVersion} published. Installation on your website is not verified.`
+                          : 'Three widget types are available. Publish your first update before installing them.'}
                       </div>
-                      <Button variant="outline" onClick={() => switchTab('widgets')}>
-                        Add to your website <ArrowRight size={16} />
+                      <Button variant="outline" onClick={() => switchTab('website')}>
+                        View website instructions <ArrowRight size={16} />
                       </Button>
                     </section>
-                    <section className="card padded social-card">
-                      <div className="section-heading">
-                        <Instagram size={28} />
-                        <Facebook size={28} />
-                        <span className="pill">Ready to create</span>
-                      </div>
-                      <h2>Posts &amp; stories</h2>
-                      <p className="muted">
-                        Turn your hours or a custom announcement into an Instagram or Facebook
-                        image. Publish to a connected account or download it to share yourself.
-                      </p>
-                      <Button variant="outline" onClick={() => switchTab('social')}>
-                        Open Social posts <ArrowRight size={16} />
-                      </Button>
-                    </section>
+                    <SocialConnections
+                      locationId={demo ? 'demo' : selected}
+                      demo={demo}
+                      readonly={readonly}
+                    />
                   </div>
                 </>
               )}
@@ -1841,13 +2138,17 @@ export function Dashboard({
                   locationId={demo ? 'demo' : selected}
                   demo={demo}
                   readonly={readonly}
+                  onManageConnections={() => switchTab('integrations')}
                 />
               )}
               {tab === 'activity' && (
                 <>
                   <section className="card">
                     <div className="card-heading">
-                      <h3>Publication outcomes</h3>
+                      <div>
+                        <h3>Publication outcomes</h3>
+                        <p>Each destination is tracked independently.</p>
+                      </div>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1855,7 +2156,7 @@ export function Dashboard({
                         onClick={() =>
                           act(async () => {
                             await refresh();
-                            notify('History refreshed');
+                            notify('Activity refreshed');
                           })
                         }
                       >
@@ -1863,8 +2164,33 @@ export function Dashboard({
                         Refresh
                       </Button>
                     </div>
-                    {detail?.jobs.length ? (
-                      detail.jobs.map((j) => (
+                    <div className="activity-filters" aria-label="Activity filters">
+                      <label>
+                        Status
+                        <select
+                          value={activityFilter}
+                          onChange={(event) => setActivityFilter(event.target.value)}
+                        >
+                          <option value="all">All activity</option>
+                          <option value="pending">Pending</option>
+                          <option value="published">Published</option>
+                          <option value="failed">Failed</option>
+                        </select>
+                      </label>
+                      <label>
+                        Destination
+                        <select
+                          value={destinationFilter}
+                          onChange={(event) => setDestinationFilter(event.target.value)}
+                        >
+                          <option value="all">All destinations</option>
+                          <option value="website">Website widgets</option>
+                          <option value="google">Google Business Profile</option>
+                        </select>
+                      </label>
+                    </div>
+                    {filteredJobs.length ? (
+                      filteredJobs.map((j) => (
                         <div className="list-row" key={j.id}>
                           <span
                             className={`provider-icon ${['failed', 'retry'].includes(j.status) ? 'orange' : ['published', 'accepted'].includes(j.status) ? 'green' : 'blue'}`}
@@ -1908,9 +2234,11 @@ export function Dashboard({
                     ) : (
                       <div className="empty-state small">
                         <p>
-                          {demo
-                            ? 'Demo publications update the local preview only.'
-                            : 'Your publication results will appear here.'}
+                          {detail?.jobs.length
+                            ? 'No publication outcomes match these filters.'
+                            : demo
+                              ? 'Demo publications update the local preview only.'
+                              : 'Your publication results will appear here.'}
                         </p>
                       </div>
                     )}
@@ -2020,7 +2348,7 @@ export function Dashboard({
                         key={p.id}
                       >
                         <span className="eyebrow">
-                          {p.name} {p.id === 'pro' && <ProBadge />}
+                          {p.id === 'pro' && <ProBadge />} {p.name}
                         </span>
                         <h2>
                           ${p.price}
@@ -2103,6 +2431,30 @@ export function Dashboard({
                       Add a staff member
                     </Button>
                   </section>
+                  {demo && (
+                    <section className="card padded restart-setup-card">
+                      <h3>Restart setup</h3>
+                      <p className="muted">
+                        Restarting clears this browser&apos;s demo hours, announcements, widget
+                        choices, saved publication history, and onboarding progress.
+                      </p>
+                      <Button
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            confirm(
+                              'Restart setup and clear all demo changes saved in this browser?',
+                            )
+                          )
+                            startDemoOnboarding();
+                        }}
+                      >
+                        <RotateCcw size={15} />
+                        Restart demo setup
+                      </Button>
+                    </section>
+                  )}
                 </div>
               )}
               {tab === 'account' && (
@@ -2184,7 +2536,11 @@ export function Dashboard({
                     ],
                     [
                       'How do I install a widget?',
-                      'Open Add to your website, choose a type, and copy the embed snippet into an HTML block on your website. Publish your first revision before testing. Published updates appear within about 45 seconds.',
+                      'Open Connections, choose Your website, and copy the embed bundle from the website instructions. It includes placements for the announcement banner, business hours, and live status, plus one shared script. Add each placement to the matching part of your site, then publish your first revision before testing. Published updates appear within about 45 seconds.',
+                    ],
+                    [
+                      'Where do I add the widget on my website platform?',
+                      'Use a Custom HTML block in WordPress, Embed Code → Embed HTML in Wix, a Code block with HTML enabled in Squarespace, or a Custom Liquid section in Shopify. On a custom website, paste the snippet where you want the widget to appear. Some website plans restrict custom scripts; if yours does, use the iframe alternative in the website instructions.',
                     ],
                     [
                       'Why hasn’t Google changed yet?',
@@ -2257,6 +2613,7 @@ export function Dashboard({
       )}
       {modal && (
         <Modal
+          wide={modal === 'Post announcement' || modal.startsWith('announcement:')}
           onClose={() => {
             if (!busy) setModal('');
           }}
@@ -2278,8 +2635,16 @@ export function Dashboard({
           ) : modal === 'Post announcement' || modal.startsWith('announcement:') ? (
             <AnnouncementForm
               draft={draft}
+              paid={plan !== 'free'}
               existing={draft.announcements.find((a) => `announcement:${a.id}` === modal)}
-              onSubmit={goPublish}
+              onSubmit={(value) => {
+                setDraft(value);
+                setModal('');
+                void act(async () => {
+                  await save(value);
+                  notify('Announcement saved to Drafts.');
+                });
+              }}
               onCancel={() => setModal('')}
             />
           ) : modal === 'publish' ? (
@@ -2290,6 +2655,7 @@ export function Dashboard({
               locationId={demo ? 'demo' : selected}
               demo={demo}
               readonly={readonly}
+              paid={plan !== 'free'}
               google={
                 !demo &&
                 ['hours', 'special', 'all'].includes(publishScope) &&
