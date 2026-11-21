@@ -120,7 +120,7 @@ export function Widget({
   }
   return (
     <section
-      className={`widget ${w.theme} ${w.compact ? 'compact' : ''}`}
+      className={`widget widget-type-${type} ${w.theme} ${w.compact ? 'compact' : ''}`}
       style={style}
       aria-label={`${data.name} opening hours`}
     >
@@ -135,7 +135,12 @@ export function Widget({
           style={{ objectFit: 'contain', marginBottom: 12 }}
         />
       )}
-      {w.showName && <div className="widget-name">{data.name}</div>}
+      <div className="widget-heading">
+        {w.showName && <div className="widget-name">{data.name}</div>}
+        <a className="widget-credit" href="/" target="_blank" rel="noopener">
+          Powered by <b>OpenSync</b>
+        </a>
+      </div>
       <div className="widget-status">
         <span className={`status-dot ${status.open ? 'green' : 'gray'}`} />
         <strong>{status.open ? 'Open now' : 'Closed now'}</strong>
@@ -179,14 +184,11 @@ export function Widget({
           )}
         </>
       )}
-      <div className="widget-footer">
-        {type === 'hours' && (
+      {type === 'hours' && (
+        <div className="widget-footer">
           <div className="widget-zone">Times in {data.timezone.replaceAll('_', ' ')}</div>
-        )}
-        <a className="widget-credit" href="/" target="_blank" rel="noopener">
-          Powered by <b>OpenSync</b>
-        </a>
-      </div>
+        </div>
+      )}
     </section>
   );
 }

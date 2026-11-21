@@ -129,3 +129,14 @@ it('does not render a widget that is disabled in published settings', () => {
     renderToStaticMarkup(<Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />),
   ).toBe('');
 });
+it('renders the status credit beside the business name in a responsive status card', () => {
+  const s = defaultSchedule('Responsive Coffee');
+  const html = renderToStaticMarkup(
+    <Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('widget widget-type-status');
+  expect(html).toContain(
+    '<div class="widget-heading"><div class="widget-name">Responsive Coffee</div><a class="widget-credit"',
+  );
+  expect(html).not.toContain('class="widget-footer"');
+});

@@ -648,7 +648,9 @@ export function PublishWizard({
                     </label>
                   )}
                   <label>
-                    Title
+                    <span className="field-label">
+                      Title <span>(optional)</span>
+                    </span>
                     <input
                       maxLength={100}
                       value={designs[current.id].title}
@@ -656,7 +658,9 @@ export function PublishWizard({
                     />
                   </label>
                   <label>
-                    Message
+                    <span className="field-label">
+                      Message <span>(optional)</span>
+                    </span>
                     <textarea
                       rows={4}
                       maxLength={1500}
@@ -700,7 +704,9 @@ export function PublishWizard({
                   </fieldset>
                   {designs[current.id].showHeaderText && (
                     <label>
-                      Header text
+                      <span className="field-label">
+                        Header text <span>(optional)</span>
+                      </span>
                       <input
                         maxLength={98}
                         value={designs[current.id].headerText || ''}
@@ -871,7 +877,9 @@ export function PublishWizard({
                   </fieldset>
                   {current.format === 'post' && (
                     <label>
-                      Caption
+                      <span className="field-label">
+                        Caption <span>(optional)</span>
+                      </span>
                       <textarea
                         rows={2}
                         maxLength={2200}

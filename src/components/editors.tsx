@@ -187,6 +187,7 @@ export function WeeklyEditor({
 export function BusinessFields({
   draft,
   onChange,
+  onLogoChange,
   disabled = false,
   showLogo = true,
 }: {
@@ -194,6 +195,7 @@ export function BusinessFields({
   showLogo?: boolean;
   draft: Schedule;
   onChange: (s: Schedule) => void;
+  onLogoChange?: (logo: string) => void;
 }) {
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
@@ -262,14 +264,18 @@ export function BusinessFields({
         <small>UTC offsets reflect daylight saving time where applicable.</small>
       </label>
       <label className="span-two">
-        Address <span>optional</span>
+        <span className="field-label">
+          Address <span>(optional)</span>
+        </span>
         <input
           value={draft.address}
           onChange={(e) => onChange({ ...draft, address: e.target.value })}
         />
       </label>
       <label>
-        Website <span>optional</span>
+        <span className="field-label">
+          Website <span>(optional)</span>
+        </span>
         <input
           type="text"
           inputMode="url"
@@ -292,7 +298,7 @@ export function BusinessFields({
       {showLogo && (
         <LogoUpload
           value={draft.logo}
-          onChange={(logo) => onChange({ ...draft, logo })}
+          onChange={(logo) => (onLogoChange ? onLogoChange(logo) : onChange({ ...draft, logo }))}
           disabled={disabled}
         />
       )}
@@ -385,7 +391,9 @@ export function ExceptionForm({
           />
         </label>
         <label className="span-two">
-          Reason or label
+          <span className="field-label">
+            Reason or label <span>(optional)</span>
+          </span>
           <input
             value={label}
             placeholder="Holiday, weather, special event…"
@@ -677,7 +685,7 @@ export function AnnouncementForm({
         <div className="form-grid announcement-settings">
           <label className={!paid ? 'pro-locked' : undefined}>
             <span className="pro-field-label">
-              <ProBadge /> Start <span>(blank = now)</span>
+              <ProBadge /> Start <span>(optional)</span>
             </span>
             <input
               type="datetime-local"
@@ -685,6 +693,7 @@ export function AnnouncementForm({
               disabled={!paid}
               onChange={(e) => setStart(e.target.value)}
             />
+            <small>Leave blank to start immediately.</small>
           </label>
           <label className={!paid ? 'pro-locked' : undefined}>
             <span className="pro-field-label">
@@ -728,7 +737,9 @@ export function AnnouncementForm({
                 {editing === 'title' ? (
                   <div className="announcement-inline-field">
                     <label>
-                      Title <span>(optional)</span>
+                      <span className="field-label">
+                        Title <span>(optional)</span>
+                      </span>
                       <input
                         autoFocus
                         value={title}

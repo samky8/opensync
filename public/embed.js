@@ -13,13 +13,21 @@
     frame.src = origin + '/embed/' + encodeURIComponent(id) + '?type=' + type;
     frame.title = type === 'banner' ? 'Business announcement' : 'Business opening hours';
     frame.loading = 'lazy';
-    frame.style.cssText = 'width:100%;border:0;display:block;min-width:0;';
-    frame.height = type === 'hours' ? '590' : type === 'banner' ? '180' : '130';
+    frame.style.cssText = 'width:100%;max-width:100%;border:0;display:block;min-width:0;';
+    frame.height = type === 'hours' ? '590' : type === 'banner' ? '180' : '110';
     frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-    window.addEventListener('message', function(event) {
-      if(event.origin !== origin || event.source !== frame.contentWindow || !event.data || event.data.type !== 'opensync:resize' || event.data.id !== id) return;
+    window.addEventListener('message', function (event) {
+      if (
+        event.origin !== origin ||
+        event.source !== frame.contentWindow ||
+        !event.data ||
+        event.data.type !== 'opensync:resize' ||
+        event.data.id !== id
+      )
+        return;
       var height = event.data.height;
-      if(typeof height === 'number' && Number.isFinite(height) && height >= 0 && height <= 4000) frame.height = String(Math.ceil(height));
+      if (typeof height === 'number' && Number.isFinite(height) && height >= 0 && height <= 4000)
+        frame.height = String(Math.ceil(height));
     });
     el.appendChild(frame);
   });

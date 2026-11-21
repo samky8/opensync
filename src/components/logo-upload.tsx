@@ -30,7 +30,9 @@ export function LogoUpload({
   return (
     <div className="logo-upload">
       <label>
-        Business logo <span>optional</span>
+        <span className="field-label">
+          Business logo <span>(optional)</span>
+        </span>
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp"
@@ -76,7 +78,7 @@ export function LogoUpload({
         />
       </label>
       <small className="muted">
-        PNG, JPEG, or WebP, up to 5 MB. Save business details to keep your logo.
+        PNG, JPEG, or WebP, up to 5 MB. Your logo saves automatically after upload.
       </small>
       {loading && <p role="status">Preparing logo…</p>}
       {error && <p role="alert">{error}</p>}

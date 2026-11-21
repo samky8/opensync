@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { HeroShader } from '@/components/hero-shader';
+import { RevealHeading } from '@/components/reveal-heading';
 import { Widget } from '@/components/widget';
 import { demoSchedule } from '@/lib/demo';
 import { authConfigured, supabase } from '@/lib/supabase';
@@ -58,15 +59,11 @@ export default async function Home() {
       <main id="main-content">
         <section className="hero">
           <HeroShader />
-          <span className="hero-kicker">
-            <span className="status-dot green" />
-            For the businesses that make a neighbourhood.
-          </span>
-          <h1>
+          <RevealHeading>
             Change your hours once.
             <br />
             <em>Update everywhere.</em>
-          </h1>
+          </RevealHeading>
           <p>
             Your hours, holiday closures, and little heads-ups.
             <br />

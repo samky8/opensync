@@ -12,6 +12,7 @@ export function AuthForm({
   mode: 'login' | 'signup' | 'reset' | 'update';
   google: boolean;
 }) {
+  const hasStoryBackdrop = mode === 'login' || mode === 'signup';
   const router = useRouter();
   const [error, setError] = useState(''),
     [message, setMessage] = useState(''),
@@ -44,14 +45,13 @@ export function AuthForm({
     }
   }
   return (
-    <div className={`auth-layout${mode === 'signup' ? ' auth-layout-signup' : ''}`}>
+    <div className={`auth-layout${hasStoryBackdrop ? ' auth-layout-story-backdrop' : ''}`}>
       <aside className="auth-story">
-        {mode === 'signup' && <SignupBackdrop />}
+        {hasStoryBackdrop && <SignupBackdrop />}
         <Link href="/" className="brand auth-story-content">
           <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
         </Link>
         <div className="auth-story-content">
-          <span className="eyebrow">A LITTLE LESS ADMIN. A LOT MORE BUSINESS.</span>
           <h1>
             Your time belongs
             <br />

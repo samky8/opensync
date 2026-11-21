@@ -528,7 +528,9 @@ export function SocialComposer({
             </select>
           </label>
           <label>
-            Preset name
+            <span className="field-label">
+              Preset name <span>(optional)</span>
+            </span>
             <input
               maxLength={60}
               value={presetName}
@@ -774,10 +776,12 @@ export function SocialComposer({
                           </label>
                           {showHeaderText && (
                             <label className="social-header-text">
-                              Header text
+                              <span className="field-label">
+                                Header text <span>(optional)</span>
+                              </span>
                               <input
                                 autoFocus
-                                aria-label="Header text"
+                                aria-label="Header text (optional)"
                                 maxLength={98}
                                 value={design.headerText || ''}
                                 onChange={(event) => update({ headerText: event.target.value })}
@@ -866,10 +870,16 @@ export function SocialComposer({
                       {editing === `${format}:${key}` ? (
                         <div className="social-inline-field">
                           <label>
-                            {label}
+                            {key === 'message' ? (
+                              label
+                            ) : (
+                              <span className="field-label">
+                                {label} <span>(optional)</span>
+                              </span>
+                            )}
                             <textarea
                               autoFocus
-                              aria-label={label}
+                              aria-label={key === 'message' ? label : `${label} (optional)`}
                               rows={key === 'message' ? 4 : 2}
                               maxLength={limit}
                               value={design[key]}

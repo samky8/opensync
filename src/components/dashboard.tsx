@@ -473,6 +473,21 @@ export function Dashboard({
     setStep(nextStep);
     return resultSave.location.draftVersion as number;
   }
+  const businessSave = useRef<Promise<void> | null>(null);
+  async function autosaveBusiness(d = draft) {
+    if (readonly) return;
+    if (businessSave.current) {
+      await businessSave.current;
+      return;
+    }
+    const pending = save(d).then(() => undefined);
+    businessSave.current = pending;
+    try {
+      await pending;
+    } finally {
+      if (businessSave.current === pending) businessSave.current = null;
+    }
+  }
   const [publishScope, setPublishScope] = useState<PublishScope>('all');
   function openPublish(scope?: string) {
     const pageScope = scope ?? new URLSearchParams(window.location.search).get('tab') ?? tab;
@@ -536,7 +551,19 @@ export function Dashboard({
       setError('Clipboard unavailable. Select the code and copy it manually.');
     }
   }
-  function switchTab(next: string) {
+  async function switchTab(next: string) {
+    if (next !== tab && tab === 'settings' && dirty && !readonly) {
+      setBusy(true);
+      setError('');
+      try {
+        await autosaveBusiness();
+      } catch (cause) {
+        setError((cause as Error).message);
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    }
     if (demo) setOnboarding(false);
     if (next !== tab) {
       const url = new URL(window.location.href);
@@ -564,7 +591,11 @@ export function Dashboard({
     setModal('');
     setError('');
     setToast('');
-    switchTab('overview');
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', 'overview');
+    window.history.pushState(null, '', url);
+    setTab('overview');
+    setMobile(false);
     setStep(1);
     setOnboarding(true);
   }
@@ -1854,7 +1885,7 @@ Implementation requirements:
 <iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=hours" title="Business hours" style="width:100%;height:590px;border:0" loading="lazy"></iframe>
 
 <!-- Place in the site footer -->
-<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=status" title="Business status" style="width:100%;height:130px;border:0" loading="lazy"></iframe>`}</pre>
+<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=status" title="Business status" style="width:100%;height:110px;border:0" loading="lazy"></iframe>`}</pre>
                       <p className="muted">
                         Allow {origin} in your site’s frame-src and script-src policies. For a top
                         banner, install above your header. For floating placement, put the embed
@@ -2402,21 +2433,17 @@ Implementation requirements:
                       key={selected}
                       draft={draft}
                       onChange={setDraft}
+                      onLogoChange={(logo) => {
+                        const updated = { ...draft, logo };
+                        setDraft(updated);
+                        void act(async () => {
+                          await autosaveBusiness(updated);
+                          notify('Business profile saved automatically.');
+                        });
+                      }}
                       disabled={busy || readonly}
                     />
-                    <div className="modal-actions">
-                      <Button
-                        disabled={busy || readonly}
-                        onClick={() =>
-                          act(async () => {
-                            await save();
-                            notify('Business profile saved to draft. Publish to update widgets.');
-                          })
-                        }
-                      >
-                        Save business details
-                      </Button>
-                    </div>
+                    <p className="muted">Changes save automatically when you leave this page.</p>
                   </section>
                   <section className="card padded">
                     <h3>Locations & team</h3>
