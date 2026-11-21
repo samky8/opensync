@@ -9,7 +9,7 @@ test('profile dropdown keeps creation below profiles and dismisses with Escape',
   await page.getByRole('button', { name: 'Switch business location' }).click();
   const popup = page.locator('.profile-dropdown');
   await expect(popup).toBeVisible();
-  const create = popup.getByRole('link', { name: 'Create new profile' });
+  const create = popup.getByRole('link', { name: 'Create your workspace' });
   await expect(create).toHaveAttribute('href', '/signup');
   const list = await popup.locator('.profile-list').boundingBox();
   const footer = await create.boundingBox();

@@ -13,15 +13,15 @@ const props = {
   onCreate: () => true,
 };
 
-it('shows a disabled creation button with a crown for Free accounts', () => {
+it('shows a disabled creation button with a crown without a Business plan', () => {
   const html = renderToStaticMarkup(<ProfileMenu {...props} paid={false} />);
-  expect(html).toContain('disabled="" title="Requires Pro"');
+  expect(html).toContain('disabled="" title="Requires Business"');
   expect(html).toContain('lucide-crown');
-  expect(html).toContain('Create new profile');
+  expect(html).toContain('Create new workspace');
   expect(html).not.toContain('href=');
 });
 
-it('links paid accounts to fresh setup scoped to the selected profile', () => {
+it('links Business accounts to fresh workspace setup from the selected profile', () => {
   const html = renderToStaticMarkup(<ProfileMenu {...props} paid />);
   expect(html).toContain('href="/onboarding?source=profile-1"');
   expect(html).not.toContain('lucide-crown');
@@ -30,6 +30,6 @@ it('links paid accounts to fresh setup scoped to the selected profile', () => {
 it('keeps profile switching available for paid accounts without creation permission', () => {
   const html = renderToStaticMarkup(<ProfileMenu {...props} paid canCreate={false} />);
   expect(html).toContain('data-profile-id="profile-1"');
-  expect(html).toContain('Only an owner or admin can create profiles');
+  expect(html).toContain('Only an owner or admin can create workspaces');
   expect(html).not.toContain('href=');
 });

@@ -10,6 +10,30 @@ it('renders escaped business content, current status and schedule', () => {
   expect(html).toContain('&lt;script&gt;');
   expect(html).not.toContain('<script>');
 });
+it('places the hours credit in the footer opposite the time zone', () => {
+  const html = renderToStaticMarkup(
+    <Widget schedule={defaultSchedule()} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain(
+    '<div class="widget-footer"><div class="widget-zone">Times in America/Toronto</div><a class="widget-credit"',
+  );
+  expect(html).not.toContain(
+    '<div class="widget-heading"><div class="widget-name">Your business</div><a',
+  );
+});
+it('can hide optional hours content while keeping a non-collapsible week visible', () => {
+  const schedule = defaultSchedule();
+  schedule.widget.showStatus = false;
+  schedule.widget.highlightToday = false;
+  schedule.widget.collapsible = false;
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).not.toContain('class="widget-status"');
+  expect(html).not.toContain('class="widget-today"');
+  expect(html).not.toContain('class="widget-expand"');
+  expect(html).toContain('class="widget-week"');
+});
 it('does not render an expired banner', () => {
   const s = defaultSchedule();
   s.announcements = [
@@ -129,7 +153,7 @@ it('does not render a widget that is disabled in published settings', () => {
     renderToStaticMarkup(<Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />),
   ).toBe('');
 });
-it('renders the status credit beside the business name in a responsive status card', () => {
+it('renders the status credit in the top heading beside the business name', () => {
   const s = defaultSchedule('Responsive Coffee');
   const html = renderToStaticMarkup(
     <Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />,
@@ -139,4 +163,26 @@ it('renders the status credit beside the business name in a responsive status ca
     '<div class="widget-heading"><div class="widget-name">Responsive Coffee</div><a class="widget-credit"',
   );
   expect(html).not.toContain('class="widget-footer"');
+});
+it('applies custom widget typography, font size and background colour', () => {
+  const s = defaultSchedule('Styled Coffee');
+  s.widget.font = 'mono';
+  s.widget.fontSize = 18;
+  s.widget.background = '#f0f1f2';
+  const html = renderToStaticMarkup(
+    <Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('font-family:ui-monospace');
+  expect(html).toContain('font-size:18px');
+  expect(html).toContain('--widget-background:#f0f1f2');
+});
+it('leaves automatic widget typography and font size inheritable', () => {
+  const s = defaultSchedule();
+  s.widget.font = 'auto';
+  s.widget.fontSize = 'auto';
+  const html = renderToStaticMarkup(
+    <Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('font-family:inherit');
+  expect(html).toContain('font-size:inherit');
 });

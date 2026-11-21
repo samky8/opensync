@@ -31,6 +31,14 @@ const announcementStyles = {
     Icon: CalendarClock,
   },
 } as const;
+const widgetFontFamilies: Record<Schedule['widget']['font'], string> = {
+  auto: 'inherit',
+  system: 'Arial, Helvetica, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  rounded: 'ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif',
+  humanist: '"Trebuchet MS", Candara, Calibri, sans-serif',
+  mono: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+};
 export function Widget({
   schedule,
   type = 'hours',
@@ -71,10 +79,17 @@ export function Widget({
   const w = data.widget;
   const style = {
     '--widget-accent': w.accent,
+    '--widget-background': w.background !== 'auto' ? w.background : undefined,
     borderRadius: w.radius,
     textAlign: w.alignment,
-    fontFamily: w.font === 'serif' ? 'Georgia, serif' : 'inherit',
+    fontFamily: widgetFontFamilies[w.font] || 'inherit',
+    fontSize: w.fontSize === 'auto' || w.fontSize == null ? 'inherit' : `${w.fontSize}px`,
   } as CSSProperties;
+  const credit = (
+    <a className="widget-credit" href="/" target="_blank" rel="noopener">
+      Powered by <b>OpenSync</b>
+    </a>
+  );
   if (data.widgetVisibility?.[type] === false) return null;
   if (unavailable)
     return (
@@ -135,32 +150,38 @@ export function Widget({
           style={{ objectFit: 'contain', marginBottom: 12 }}
         />
       )}
-      <div className="widget-heading">
-        {w.showName && <div className="widget-name">{data.name}</div>}
-        <a className="widget-credit" href="/" target="_blank" rel="noopener">
-          Powered by <b>OpenSync</b>
-        </a>
-      </div>
-      <div className="widget-status">
-        <span className={`status-dot ${status.open ? 'green' : 'gray'}`} />
-        <strong>{status.open ? 'Open now' : 'Closed now'}</strong>
-        <span className="widget-next">{status.nextLabel}</span>
-      </div>
+      {(w.showName || type === 'status') && (
+        <div className="widget-heading">
+          {w.showName && <div className="widget-name">{data.name}</div>}
+          {type === 'status' && credit}
+        </div>
+      )}
+      {(type === 'status' || w.showStatus !== false) && (
+        <div className="widget-status">
+          <span className={`status-dot ${status.open ? 'green' : 'gray'}`} />
+          <strong>{status.open ? 'Open now' : 'Closed now'}</strong>
+          <span className="widget-next">{status.nextLabel}</span>
+        </div>
+      )}
       {type === 'hours' && (
         <>
-          <div className="widget-today">
-            <Clock size={16} />
-            <span>Today</span>
-            <strong>{formatIntervals(status.today)}</strong>
-          </div>
-          <button
-            className="widget-expand"
-            onClick={() => setExpanded(!expanded)}
-            aria-expanded={expanded}
-          >
-            Business hours <ChevronDown size={16} />
-          </button>
-          {expanded && (
+          {w.highlightToday !== false && (
+            <div className="widget-today">
+              <Clock size={16} />
+              <span>Today</span>
+              <strong>{formatIntervals(status.today)}</strong>
+            </div>
+          )}
+          {w.collapsible !== false && (
+            <button
+              className="widget-expand"
+              onClick={() => setExpanded(!expanded)}
+              aria-expanded={expanded}
+            >
+              Business hours <ChevronDown size={16} />
+            </button>
+          )}
+          {(w.collapsible === false || expanded) && (
             <div className="widget-week">
               {days.map((d, i) => (
                 <div key={d}>
@@ -187,6 +208,7 @@ export function Widget({
       {type === 'hours' && (
         <div className="widget-footer">
           <div className="widget-zone">Times in {data.timezone.replaceAll('_', ' ')}</div>
+          {credit}
         </div>
       )}
     </section>

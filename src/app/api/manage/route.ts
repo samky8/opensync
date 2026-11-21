@@ -54,8 +54,21 @@ export async function POST(req: Request) {
             ),
           );
         if (source && !member) throw new Error('Location not found or access denied');
-        let org = member?.organizationId;
-        if (org) {
+        let org: string;
+        if (source && member) {
+          const sourceOrg = member.organizationId;
+          await tx.execute(sql`select id from organizations where id=${sourceOrg} for update`);
+          if (!['owner', 'admin'].includes(member.role))
+            throw new Error('Only an owner or admin can create workspaces');
+          if ((await planFor(sourceOrg, tx)) !== 'business')
+            throw new Error('Creating another workspace requires Business');
+          const [workspace] = await tx.insert(t.organizations).values({ name }).returning();
+          org = workspace.id;
+          await tx
+            .insert(t.memberships)
+            .values({ organizationId: org, userId: user.id, role: 'owner' });
+        } else if (member) {
+          org = member.organizationId;
           await tx.execute(sql`select id from organizations where id=${org} for update`);
           if (!['owner', 'admin'].includes(member.role))
             throw new Error('Only an owner or admin can add locations');
@@ -195,7 +208,7 @@ export async function POST(req: Request) {
       const [fresh] = await tx.select().from(t.locations).where(eq(t.locations.id, id));
       if (op === 'save') {
         const draft = scheduleSchema.parse(body.draft);
-        validateEntitlements(draft, fresh.draft, plan);
+        validateEntitlements(draft, scheduleSchema.parse(fresh.draft), plan);
         if (z.number().int().parse(body.version) !== fresh.draftVersion)
           throw new Error('This location changed in another tab. Refresh before saving');
         const [saved] = await tx
@@ -234,8 +247,10 @@ export async function POST(req: Request) {
         .where(
           and(eq(t.revisions.locationId, id), eq(t.revisions.version, fresh.publishedVersion)),
         );
-      const snapshot = scheduleSchema.parse(scopedSchedule(fresh.draft, previous?.snapshot, scope));
-      validateEntitlements(snapshot, previous?.snapshot ?? fresh.draft, plan);
+      const currentDraft = scheduleSchema.parse(fresh.draft);
+      const previousSnapshot = previous ? scheduleSchema.parse(previous.snapshot) : null;
+      const snapshot = scheduleSchema.parse(scopedSchedule(currentDraft, previousSnapshot, scope));
+      validateEntitlements(snapshot, previousSnapshot ?? currentDraft, plan);
       const version = fresh.publishedVersion + 1;
       const [revision] = await tx
         .insert(t.revisions)

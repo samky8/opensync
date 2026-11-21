@@ -20,6 +20,21 @@ describe('business-local schedules', () => {
       status: true,
     });
   });
+  it('adds automatic visual defaults when parsing legacy widget settings', () => {
+    const schedule = defaultSchedule();
+    const legacyWidget: Partial<typeof schedule.widget> = { ...schedule.widget };
+    delete legacyWidget.background;
+    delete legacyWidget.fontSize;
+    delete legacyWidget.showStatus;
+    delete legacyWidget.highlightToday;
+    delete legacyWidget.collapsible;
+    const parsed = scheduleSchema.parse({ ...schedule, widget: legacyWidget });
+    expect(parsed.widget.background).toBe('auto');
+    expect(parsed.widget.fontSize).toBe('auto');
+    expect(parsed.widget.showStatus).toBe(true);
+    expect(parsed.widget.highlightToday).toBe(true);
+    expect(parsed.widget.collapsible).toBe(true);
+  });
   it('does not invent a closing at the edge of the lookup window', () => {
     const s = defaultSchedule();
     s.weekly = s.weekly.map(() => [

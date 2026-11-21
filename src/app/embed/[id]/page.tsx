@@ -7,6 +7,7 @@ import { EmbedBridge } from '@/components/embed-bridge';
 import { headers } from 'next/headers';
 import { createHash } from 'node:crypto';
 import { rateLimit } from '@/lib/server';
+import { scheduleSchema } from '@/lib/domain';
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
 export default async function Page({
@@ -40,7 +41,7 @@ export default async function Page({
         ),
       )
       .where(eq(locations.id, id));
-    schedule = row?.schedule;
+    schedule = row ? scheduleSchema.parse(row.schedule) : undefined;
   } catch {
     /* No private details in public errors. */
   }

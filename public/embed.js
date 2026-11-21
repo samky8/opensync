@@ -16,15 +16,33 @@
     frame.style.cssText = 'width:100%;max-width:100%;border:0;display:block;min-width:0;';
     frame.height = type === 'hours' ? '590' : type === 'banner' ? '180' : '110';
     frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    var sendHostStyles = function () {
+      if (!frame.contentWindow) return;
+      var hostStyle = window.getComputedStyle(el);
+      frame.contentWindow.postMessage(
+        {
+          type: 'opensync:style',
+          id: id,
+          fontFamily: hostStyle.fontFamily,
+          fontSize: hostStyle.fontSize,
+        },
+        origin,
+      );
+    };
+    frame.addEventListener('load', sendHostStyles);
     window.addEventListener('message', function (event) {
       if (
         event.origin !== origin ||
         event.source !== frame.contentWindow ||
         !event.data ||
-        event.data.type !== 'opensync:resize' ||
         event.data.id !== id
       )
         return;
+      if (event.data.type === 'opensync:ready') {
+        sendHostStyles();
+        return;
+      }
+      if (event.data.type !== 'opensync:resize') return;
       var height = event.data.height;
       if (typeof height === 'number' && Number.isFinite(height) && height >= 0 && height <= 4000)
         frame.height = String(Math.ceil(height));

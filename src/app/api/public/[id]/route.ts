@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db';
 import { locations, revisions } from '@/db/schema';
-import { getStatus } from '@/lib/domain';
+import { getStatus, scheduleSchema } from '@/lib/domain';
 import { rateLimit } from '@/lib/server';
 import { createHash } from 'node:crypto';
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -25,8 +25,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       )
       .where(eq(locations.id, id));
     if (!row) return Response.json({ error: 'No published hours yet' }, { status: 404 });
+    const schedule = scheduleSchema.parse(row.schedule);
     return Response.json(
-      { ...row, status: getStatus(row.schedule) },
+      { ...row, schedule, status: getStatus(schedule) },
       {
         headers: {
           'Access-Control-Allow-Origin': '*',

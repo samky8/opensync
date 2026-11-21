@@ -91,15 +91,15 @@ export function ProfileMenu({
               }}
             >
               <Plus size={16} />
-              Create new profile
+              {demo ? 'Create your workspace' : 'Create new workspace'}
             </Link>
           ) : (
             <button
               disabled
-              title={paid ? 'Only an owner or admin can create profiles' : 'Requires Pro'}
+              title={paid ? 'Only an owner or admin can create workspaces' : 'Requires Business'}
             >
               <Crown size={16} aria-hidden="true" />
-              Create new profile
+              {demo ? 'Create your workspace' : 'Create new workspace'}
             </button>
           )}
         </div>

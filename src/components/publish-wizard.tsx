@@ -217,6 +217,7 @@ export function PublishWizard({
   readonly,
   paid = false,
   google,
+  onSaveDraft,
   onPublish,
   onClose,
   onBusy,
@@ -231,6 +232,7 @@ export function PublishWizard({
   readonly: boolean;
   paid?: boolean;
   google: boolean;
+  onSaveDraft: () => Promise<void>;
   onPublish: (google: boolean) => Promise<void>;
   onClose: () => void;
   onBusy: (busy: boolean) => void;
@@ -247,6 +249,7 @@ export function PublishWizard({
   const [loading, setLoading] = useState(!demo);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
   const [running, setRunning] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [presets, setPresets] = useState<SocialPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -460,6 +463,15 @@ export function PublishWizard({
       setRunning(false);
       onBusy(false);
       inFlight.current = false;
+    }
+  }
+  async function saveDraft() {
+    if (savingDraft || readonly) return;
+    setSavingDraft(true);
+    try {
+      await onSaveDraft();
+    } finally {
+      setSavingDraft(false);
     }
   }
   return (
@@ -919,9 +931,14 @@ export function PublishWizard({
               {step ? 'Back' : 'Keep editing'}
             </Button>
             {step === lastStep ? (
-              <Button disabled={readonly} onClick={publish}>
-                Publish <ArrowRight size={16} />
-              </Button>
+              <>
+                <Button variant="outline" disabled={readonly || savingDraft} onClick={saveDraft}>
+                  {savingDraft ? 'Saving…' : 'Save draft'}
+                </Button>
+                <Button disabled={readonly || savingDraft} onClick={publish}>
+                  Publish <ArrowRight size={16} />
+                </Button>
+              </>
             ) : (
               <Button
                 disabled={

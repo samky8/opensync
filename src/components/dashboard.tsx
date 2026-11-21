@@ -803,7 +803,7 @@ Implementation requirements:
           logo={draft.logo}
           locations={locations}
           selected={selected}
-          paid={plan !== 'free'}
+          paid={demo || plan === 'business'}
           disabled={busy}
           canCreate={demo || detail?.role === 'owner' || detail?.role === 'admin'}
           demo={demo}
@@ -821,7 +821,7 @@ Implementation requirements:
               setSelected(id);
             }
           }}
-          onCreate={() => !dirty || confirm('Discard unsaved changes and create a new profile?')}
+          onCreate={() => !dirty || confirm('Discard unsaved changes and create a new workspace?')}
         />
         {[
           { label: 'Overview', items: navigation.slice(0, 1), hideLabel: true },
@@ -1228,22 +1228,13 @@ Implementation requirements:
                 {['hours', 'special', 'widgets', 'brand', 'settings'].includes(tab) ||
                 (tab === 'overview' && (dirty || unpublished)) ? (
                   <div className="heading-actions">
-                    {dirty && (
-                      <Button
-                        variant="outline"
-                        disabled={busy || readonly}
-                        onClick={() =>
-                          act(async () => {
-                            await save();
-                            notify('Draft saved. Publish when you’re ready.');
-                          })
-                        }
-                      >
-                        Save draft
-                      </Button>
-                    )}
                     <Button
-                      disabled={busy || readonly || (tab === 'hours' && !hoursHaveChanges)}
+                      disabled={
+                        busy ||
+                        readonly ||
+                        (!dirty && !unpublished) ||
+                        (tab === 'hours' && !hoursHaveChanges)
+                      }
                       onClick={() => openPublish()}
                     >
                       <Send size={16} />
@@ -1569,6 +1560,24 @@ Implementation requirements:
               )}
               {tab === 'widgets' && (
                 <div className="two-columns widget-config">
+                  <div
+                    className="widget-type-tabs"
+                    role="group"
+                    aria-label="Choose a widget to customise"
+                    data-selected={widgetType}
+                  >
+                    {(['hours', 'banner', 'status'] as WidgetType[]).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        aria-pressed={widgetType === type}
+                        className={widgetType === type ? 'selected' : ''}
+                        onClick={() => setWidgetType(type)}
+                      >
+                        {type === 'hours' ? 'Hours' : type === 'banner' ? 'Banner' : 'Status'}
+                      </button>
+                    ))}
+                  </div>
                   <div>
                     <section className="card padded">
                       <h3 className="pro-feature-title">
@@ -1577,49 +1586,36 @@ Implementation requirements:
                       <p className="muted">
                         Customise with Pro, or use the included Free defaults.
                       </p>
-                      <div className="segmented">
-                        {(['hours', 'banner', 'status'] as WidgetType[]).map((t) => (
-                          <button
-                            key={t}
-                            className={widgetType === t ? 'selected' : ''}
-                            onClick={() => setWidgetType(t)}
-                          >
-                            {t === 'hours' ? 'Hours' : t === 'banner' ? 'Banner' : 'Status'}
-                          </button>
-                        ))}
-                      </div>
                       <fieldset className="widget-visibility">
                         <legend>Visible on your website</legend>
-                        {(['hours', 'banner', 'status'] as WidgetType[]).map((type) => (
-                          <label className="check-label" key={type}>
-                            <input
-                              type="checkbox"
-                              checked={draft.widgetVisibility?.[type] ?? true}
-                              disabled={readonly}
-                              onChange={(event) =>
-                                setDraft({
-                                  ...draft,
-                                  widgetVisibility: {
-                                    ...(draft.widgetVisibility || {
-                                      hours: true,
-                                      banner: true,
-                                      status: true,
-                                    }),
-                                    [type]: event.target.checked,
-                                  },
-                                })
-                              }
-                            />
-                            {type === 'hours'
-                              ? 'Business hours'
-                              : type === 'banner'
-                                ? 'Announcement banner'
-                                : 'Live status'}
-                          </label>
-                        ))}
+                        <label className="check-label">
+                          <input
+                            type="checkbox"
+                            checked={draft.widgetVisibility?.[widgetType] ?? true}
+                            disabled={readonly}
+                            onChange={(event) =>
+                              setDraft({
+                                ...draft,
+                                widgetVisibility: {
+                                  ...(draft.widgetVisibility || {
+                                    hours: true,
+                                    banner: true,
+                                    status: true,
+                                  }),
+                                  [widgetType]: event.target.checked,
+                                },
+                              })
+                            }
+                          />
+                          {widgetType === 'hours'
+                            ? 'Show business hours'
+                            : widgetType === 'banner'
+                              ? 'Show announcement banner'
+                              : 'Show live status'}
+                        </label>
                         <p className="muted">
-                          Install all three once. Disabled widgets collapse automatically on the
-                          live site after you publish.
+                          Disabled widgets collapse automatically on your live site after you
+                          publish.
                         </p>
                       </fieldset>
                       <div className="form-grid">
@@ -1662,6 +1658,49 @@ Implementation requirements:
                         </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
+                            <ProBadge /> Background colour
+                          </span>
+                          <div className="widget-colour-control">
+                            <select
+                              aria-label="Background colour mode"
+                              disabled={readonly || plan === 'free'}
+                              value={draft.widget.background === 'auto' ? 'auto' : 'custom'}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  widget: {
+                                    ...draft.widget,
+                                    background:
+                                      e.target.value === 'auto'
+                                        ? 'auto'
+                                        : draft.widget.theme === 'dark'
+                                          ? '#222735'
+                                          : '#ffffff',
+                                  },
+                                })
+                              }
+                            >
+                              <option value="auto">Auto · use appearance</option>
+                              <option value="custom">Custom</option>
+                            </select>
+                            {draft.widget.background !== 'auto' && (
+                              <input
+                                type="color"
+                                aria-label="Custom background colour"
+                                disabled={readonly || plan === 'free'}
+                                value={draft.widget.background}
+                                onChange={(e) =>
+                                  setDraft({
+                                    ...draft,
+                                    widget: { ...draft.widget, background: e.target.value },
+                                  })
+                                }
+                              />
+                            )}
+                          </div>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
                             <ProBadge /> Typography
                           </span>
                           <select
@@ -1672,13 +1711,43 @@ Implementation requirements:
                                 ...draft,
                                 widget: {
                                   ...draft.widget,
-                                  font: e.target.value as 'system' | 'serif',
+                                  font: e.target.value as Schedule['widget']['font'],
                                 },
                               })
                             }
                           >
+                            <option value="auto">Auto · inherit website</option>
                             <option value="system">Modern sans</option>
                             <option value="serif">Classic serif</option>
+                            <option value="rounded">Friendly rounded</option>
+                            <option value="humanist">Humanist sans</option>
+                            <option value="mono">Monospace</option>
+                          </select>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            <ProBadge /> Font size
+                          </span>
+                          <select
+                            disabled={readonly || plan === 'free'}
+                            value={String(draft.widget.fontSize)}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                widget: {
+                                  ...draft.widget,
+                                  fontSize:
+                                    e.target.value === 'auto' ? 'auto' : Number(e.target.value),
+                                },
+                              })
+                            }
+                          >
+                            <option value="auto">Auto · inherit website</option>
+                            {[10, 11, 12, 13, 14, 16, 18, 20, 24].map((size) => (
+                              <option key={size} value={size}>
+                                {size}px
+                              </option>
+                            ))}
                           </select>
                         </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
@@ -1754,6 +1823,55 @@ Implementation requirements:
                         />
                         Show business name
                       </label>
+                      {widgetType === 'hours' && (
+                        <fieldset className="widget-visibility widget-content-options">
+                          <legend>
+                            <ProBadge /> Full hours content
+                          </legend>
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={draft.widget.highlightToday !== false}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  widget: { ...draft.widget, highlightToday: e.target.checked },
+                                })
+                              }
+                            />
+                            Highlight today&apos;s hours
+                          </label>
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={draft.widget.showStatus !== false}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  widget: { ...draft.widget, showStatus: e.target.checked },
+                                })
+                              }
+                            />
+                            Show current status
+                          </label>
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={draft.widget.collapsible !== false}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(e) =>
+                                setDraft({
+                                  ...draft,
+                                  widget: { ...draft.widget, collapsible: e.target.checked },
+                                })
+                              }
+                            />
+                            Let visitors collapse hours
+                          </label>
+                        </fieldset>
+                      )}
                       <Button
                         className="widget-reset"
                         variant="outline"
@@ -1960,8 +2078,12 @@ Implementation requirements:
                             })
                           }
                         >
-                          <option value="system">Clean sans-serif</option>
+                          <option value="auto">Auto · inherit website</option>
+                          <option value="system">Modern sans</option>
                           <option value="serif">Classic serif</option>
+                          <option value="rounded">Friendly rounded</option>
+                          <option value="humanist">Humanist sans</option>
+                          <option value="mono">Monospace</option>
                         </select>
                       </label>
                     </div>
@@ -2689,6 +2811,13 @@ Implementation requirements:
                 detail?.connection?.status === 'connected' &&
                 !!detail.connection.remoteId &&
                 plan !== 'free'
+              }
+              onSaveDraft={() =>
+                act(async () => {
+                  await save();
+                  notify('Draft saved. Publish when you’re ready.');
+                  setModal('');
+                })
               }
               onPublish={publish}
               onClose={() => setModal('')}

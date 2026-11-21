@@ -10,6 +10,7 @@ export default async function Page({
   const { source } = await searchParams;
   if (!source) redirect('/dashboard');
   const profile = await detail(source);
-  if (profile.plan === 'free' || !['owner', 'admin'].includes(profile.role)) redirect('/dashboard');
+  if (profile.plan !== 'business' || !['owner', 'admin'].includes(profile.role))
+    redirect('/dashboard');
   return <Dashboard sourceLocationId={source} now={new Date().toISOString()} />;
 }

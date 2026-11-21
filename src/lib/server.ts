@@ -3,7 +3,7 @@ import { and, eq, desc, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import * as t from '@/db/schema';
 import { requireUser } from './supabase';
-import type { Plan } from './domain';
+import { scheduleSchema, type Plan } from './domain';
 import type { ProTrial } from './trial';
 import { bearerToken } from './mobile-auth';
 export const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -83,7 +83,13 @@ export async function dashboardData() {
       ),
     )
     .orderBy(t.locations.createdAt);
-  return { email: user.email, locations: rows.map((x) => x.location) };
+  return {
+    email: user.email,
+    locations: rows.map((x) => ({
+      ...x.location,
+      draft: scheduleSchema.parse(x.location.draft),
+    })),
+  };
 }
 export async function detail(id: string) {
   const { location, role } = await locationAccess(id);
@@ -120,8 +126,8 @@ export async function detail(id: string) {
       .limit(1),
   ]);
   return {
-    location,
-    published: publication[0]?.snapshot ?? null,
+    location: { ...location, draft: scheduleSchema.parse(location.draft) },
+    published: publication[0] ? scheduleSchema.parse(publication[0].snapshot) : null,
     role,
     history,
     jobs: destinations,

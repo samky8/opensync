@@ -169,6 +169,41 @@ describe('real SQL application flows', () => {
       /requires Business/,
     );
   });
+  it('creates a separate workspace owned by the same signed-in account', async () => {
+    const originalOrganization = (
+      await pg.query<{ organization_id: string }>(
+        'select organization_id from locations where id=$1',
+        [id],
+      )
+    ).rows[0].organization_id;
+    await pg.query(
+      "insert into subscriptions(organization_id,plan,status) values($1,'business','active')",
+      [originalOrganization],
+    );
+    try {
+      const result = await post({
+        op: 'create',
+        sourceLocationId: id,
+        name: 'Second business',
+        timezone: 'America/Toronto',
+      });
+      expect(result.status, JSON.stringify(result.body)).toBe(200);
+      const workspace = (
+        await pg.query<{ organization_id: string; user_id: string; role: string }>(
+          `select l.organization_id,m.user_id,m.role
+           from locations l
+           join memberships m on m.organization_id=l.organization_id
+           where l.id=$1`,
+          [result.body.location.id],
+        )
+      ).rows[0];
+      expect(workspace.organization_id).not.toBe(originalOrganization);
+      expect(workspace.user_id).toBe(shared.user);
+      expect(workspace.role).toBe('owner');
+    } finally {
+      await pg.query('delete from subscriptions where organization_id=$1', [originalOrganization]);
+    }
+  });
   it('rejects cross-origin writes', async () => {
     const response = await POST(
       new Request('http://localhost:3000/api/manage', {
