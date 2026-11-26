@@ -67,6 +67,7 @@ import { ProTrialCard } from './pro-trial';
 import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
 import {
+  announcementStyleColours,
   defaultSchedule,
   customizeWidget,
   widgetAppearanceFor,
@@ -338,6 +339,13 @@ export function Dashboard({
       ? announcementDrafts.find((announcement) => announcement.id === liveAnnouncement.id)
       : undefined;
   const widgetSettings = widgetAppearanceFor(draft.widget, widgetType);
+  const previewAnnouncement = status.announcement ?? demoSchedule.announcements[0];
+  const previewAnnouncementColours =
+    announcementStyleColours[previewAnnouncement?.type ?? 'information'];
+  const bannerFontColour =
+    draft.widget.overrides?.banner?.accent ??
+    previewAnnouncement?.fontColour ??
+    previewAnnouncementColours.font;
   const activeWidgetStudioTab =
     widgetType === 'banner' && widgetStudioTab === 'content' ? 'appearance' : widgetStudioTab;
   const widgetVisible = draft.widgetVisibility?.[widgetType] !== false;
@@ -357,19 +365,52 @@ export function Dashboard({
     const shared = {
       modern: { font: 'system', fontSize: 'auto', radius: 12, alignment: 'left' },
       minimal: { font: 'auto', fontSize: 'auto', radius: 4, alignment: 'left' },
-      card: { font: 'system', fontSize: 'auto', radius: 14, alignment: 'left' },
+      card: { font: 'serif', fontSize: 16, radius: 24, alignment: 'left' },
       dark: { font: 'system', fontSize: 'auto', radius: 12, alignment: 'left' },
     }[preset] as Partial<typeof widgetSettings>;
     const settings =
       widgetType === 'banner'
-        ? shared
+        ? ({
+            ...shared,
+            ...(preset === 'modern'
+              ? {
+                  accent: '#2563eb',
+                  theme: 'light',
+                  background: '#f5f9ff',
+                  borderColour: '#2563eb',
+                  borderWidth: 3,
+                }
+              : preset === 'minimal'
+                ? {
+                    accent: '#181b1a',
+                    theme: 'light',
+                    background: 'none',
+                    borderColour: 'auto',
+                    borderWidth: 0,
+                  }
+                : preset === 'card'
+                  ? {
+                      accent: '#181b1a',
+                      theme: 'light',
+                      background: '#ffffff',
+                      borderColour: '#e7e9ee',
+                      borderWidth: 1,
+                    }
+                  : {
+                      accent: '#f5f7ff',
+                      theme: 'dark',
+                      background: '#222735',
+                      borderColour: '#a99cff',
+                      borderWidth: 3,
+                    }),
+          } as Partial<typeof widgetSettings>)
         : ({
             ...shared,
-            accent: preset === 'dark' ? '#a99cff' : '#6a56ff',
+            accent: preset === 'dark' ? '#a99cff' : preset === 'card' ? '#7c3aed' : '#6a56ff',
             theme: preset === 'dark' ? 'dark' : 'light',
-            background: preset === 'card' ? '#ffffff' : 'auto',
-            borderColour: preset === 'card' ? '#dfe1ec' : 'auto',
-            borderWidth: preset === 'minimal' ? 0 : 1,
+            background: preset === 'card' ? '#faf7ff' : 'auto',
+            borderColour: preset === 'card' ? '#d8ccf2' : 'auto',
+            borderWidth: preset === 'minimal' ? 0 : preset === 'card' ? 2 : 1,
             compact: preset === 'minimal',
           } as Partial<typeof widgetSettings>);
     setWidgetPreset(preset);
@@ -397,6 +438,9 @@ export function Dashboard({
         ],
       }
     : draft;
+  const readonly = !demo && detail?.role === 'viewer';
+  const isBannerPreview = widgetType === 'banner';
+  const PreviewActionIcon = isBannerPreview ? Megaphone : Clock;
   const widgetPreview = tab === 'widgets' && (
     <div className="preview-panel sticky">
       <div className="widget-preview-heading">
@@ -425,7 +469,12 @@ export function Dashboard({
           type="button"
           variant="outline"
           size="sm"
+          disabled={isBannerPreview && readonly}
           onClick={() => {
+            if (isBannerPreview) {
+              setModal('Post announcement');
+              return;
+            }
             if (
               dirty &&
               !window.confirm(
@@ -436,8 +485,8 @@ export function Dashboard({
             void switchTab('hours');
           }}
         >
-          <Clock size={14} />
-          Edit hours
+          <PreviewActionIcon size={14} aria-hidden="true" />
+          {isBannerPreview ? 'Create banner' : 'Edit hours'}
         </Button>
       </div>
       <div className={`browser-preview preview-device-${previewDevice}`}>
@@ -452,16 +501,15 @@ export function Dashboard({
           {!widgetVisible && <p className="muted">Hidden after publishing.</p>}
         </div>
       </div>
-      {publishedSchedule && (
+      {!demo && publishedSchedule && (
         <details className="published-demo">
-          <summary>{demo ? 'View last published demo' : 'View published version'}</summary>
+          <summary>View published version</summary>
           <Widget schedule={publishedSchedule} type={widgetType} now={now} />
         </details>
       )}
     </div>
   );
-  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1),
-    readonly = !demo && detail?.role === 'viewer';
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
   async function refresh(resetDraft = false) {
     if (demo) return;
     const res = await fetch(`/api/manage?id=${selected}`, { cache: 'no-store' });
@@ -1925,146 +1973,160 @@ Implementation requirements:
                           ))}
                       </div>
                       <div className="form-grid" hidden={activeWidgetStudioTab !== 'appearance'}>
-                        {widgetType !== 'banner' && (
-                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                            <span className="pro-field-label">
-                              {plan === 'free' && <ProBadge />} Accent colour
-                            </span>
-                            <div className="widget-accent-control">
-                              <input
-                                type="color"
-                                disabled={readonly || plan === 'free'}
-                                value={widgetSettings.accent}
-                                onChange={(e) => updateWidgetAppearance({ accent: e.target.value })}
-                              />
-                              <span>{widgetSettings.accent.toUpperCase()}</span>
-                            </div>
-                          </label>
-                        )}
-                        {widgetType !== 'banner' && (
-                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                            <span className="pro-field-label">
-                              {plan === 'free' && <ProBadge />} Appearance
-                            </span>
-                            <select
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />}{' '}
+                            {widgetType === 'banner' ? 'Font colour' : 'Accent colour'}
+                          </span>
+                          <div className="widget-accent-control">
+                            <input
+                              type="color"
+                              aria-label={widgetType === 'banner' ? 'Font colour' : 'Accent colour'}
                               disabled={readonly || plan === 'free'}
-                              value={widgetSettings.theme}
+                              value={
+                                widgetType === 'banner' ? bannerFontColour : widgetSettings.accent
+                              }
+                              onChange={(e) => updateWidgetAppearance({ accent: e.target.value })}
+                            />
+                            <span>
+                              {(widgetType === 'banner'
+                                ? bannerFontColour
+                                : widgetSettings.accent
+                              ).toUpperCase()}
+                            </span>
+                          </div>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />} Appearance
+                          </span>
+                          <select
+                            disabled={readonly || plan === 'free'}
+                            value={widgetSettings.theme}
+                            onChange={(e) => {
+                              const theme = e.target.value as 'light' | 'dark';
+                              updateWidgetAppearance(
+                                widgetType === 'banner'
+                                  ? theme === 'dark'
+                                    ? {
+                                        theme,
+                                        accent: '#f5f7ff',
+                                        background: '#222735',
+                                        borderColour: '#a99cff',
+                                      }
+                                    : {
+                                        theme,
+                                        accent: '#2563eb',
+                                        background: '#f5f9ff',
+                                        borderColour: '#2563eb',
+                                      }
+                                  : { theme },
+                              );
+                            }}
+                          >
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                          </select>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />} Background colour
+                          </span>
+                          <div className="widget-colour-control">
+                            <select
+                              aria-label="Background colour mode"
+                              disabled={readonly || plan === 'free'}
+                              value={
+                                widgetSettings.background === 'auto' ||
+                                widgetSettings.background === 'none'
+                                  ? widgetSettings.background
+                                  : 'custom'
+                              }
                               onChange={(e) =>
                                 updateWidgetAppearance({
-                                  theme: e.target.value as 'light' | 'dark',
+                                  background:
+                                    e.target.value === 'auto'
+                                      ? 'auto'
+                                      : e.target.value === 'none'
+                                        ? 'none'
+                                        : widgetSettings.theme === 'dark'
+                                          ? '#222735'
+                                          : '#ffffff',
                                 })
                               }
                             >
-                              <option value="light">Light</option>
-                              <option value="dark">Dark</option>
+                              <option value="auto">Auto · use appearance</option>
+                              <option value="none">None · transparent</option>
+                              <option value="custom">Custom</option>
                             </select>
-                          </label>
-                        )}
-                        {widgetType !== 'banner' && (
-                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                            <span className="pro-field-label">
-                              {plan === 'free' && <ProBadge />} Background colour
-                            </span>
-                            <div className="widget-colour-control">
-                              <select
-                                aria-label="Background colour mode"
-                                disabled={readonly || plan === 'free'}
-                                value={
-                                  widgetSettings.background === 'auto' ||
-                                  widgetSettings.background === 'none'
-                                    ? widgetSettings.background
-                                    : 'custom'
-                                }
-                                onChange={(e) =>
-                                  updateWidgetAppearance({
-                                    background:
-                                      e.target.value === 'auto'
-                                        ? 'auto'
-                                        : e.target.value === 'none'
-                                          ? 'none'
-                                          : widgetSettings.theme === 'dark'
-                                            ? '#222735'
-                                            : '#ffffff',
-                                  })
-                                }
-                              >
-                                <option value="auto">Auto · use appearance</option>
-                                <option value="none">None · transparent</option>
-                                <option value="custom">Custom</option>
-                              </select>
-                              {widgetSettings.background !== 'auto' &&
-                                widgetSettings.background !== 'none' && (
-                                  <input
-                                    type="color"
-                                    aria-label="Custom background colour"
-                                    disabled={readonly || plan === 'free'}
-                                    value={widgetSettings.background}
-                                    onChange={(e) =>
-                                      updateWidgetAppearance({ background: e.target.value })
-                                    }
-                                  />
-                                )}
-                            </div>
-                          </label>
-                        )}
-                        {widgetType !== 'banner' && (
-                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                            <span className="pro-field-label">
-                              {plan === 'free' && <ProBadge />} Border colour
-                            </span>
-                            <div className="widget-colour-control">
-                              <select
-                                aria-label="Border colour mode"
-                                disabled={readonly || plan === 'free'}
-                                value={widgetSettings.borderColour === 'auto' ? 'auto' : 'custom'}
-                                onChange={(e) =>
-                                  updateWidgetAppearance({
-                                    borderColour:
-                                      e.target.value === 'auto'
-                                        ? 'auto'
-                                        : widgetSettings.theme === 'dark'
-                                          ? '#343b4d'
-                                          : '#e7e9ee',
-                                  })
-                                }
-                              >
-                                <option value="auto">Auto · use appearance</option>
-                                <option value="custom">Custom</option>
-                              </select>
-                              {widgetSettings.borderColour !== 'auto' && (
+                            {widgetSettings.background !== 'auto' &&
+                              widgetSettings.background !== 'none' && (
                                 <input
                                   type="color"
-                                  aria-label="Custom border colour"
+                                  aria-label="Custom background colour"
                                   disabled={readonly || plan === 'free'}
-                                  value={widgetSettings.borderColour}
+                                  value={widgetSettings.background}
                                   onChange={(e) =>
-                                    updateWidgetAppearance({ borderColour: e.target.value })
+                                    updateWidgetAppearance({ background: e.target.value })
                                   }
                                 />
                               )}
-                            </div>
-                          </label>
-                        )}
-                        {widgetType !== 'banner' && (
-                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                            <span className="pro-field-label">
-                              {plan === 'free' && <ProBadge />} Border thickness
-                            </span>
+                          </div>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />} Border colour
+                          </span>
+                          <div className="widget-colour-control">
                             <select
+                              aria-label="Border colour mode"
                               disabled={readonly || plan === 'free'}
-                              value={String(widgetSettings.borderWidth)}
+                              value={widgetSettings.borderColour === 'auto' ? 'auto' : 'custom'}
                               onChange={(e) =>
-                                updateWidgetAppearance({ borderWidth: Number(e.target.value) })
+                                updateWidgetAppearance({
+                                  borderColour:
+                                    e.target.value === 'auto'
+                                      ? 'auto'
+                                      : widgetSettings.theme === 'dark'
+                                        ? '#343b4d'
+                                        : '#e7e9ee',
+                                })
                               }
                             >
-                              {Array.from({ length: 9 }, (_, width) => (
-                                <option key={width} value={width}>
-                                  {width === 0 ? 'None' : `${width}px`}
-                                </option>
-                              ))}
+                              <option value="auto">Auto · use appearance</option>
+                              <option value="custom">Custom</option>
                             </select>
-                          </label>
-                        )}
+                            {widgetSettings.borderColour !== 'auto' && (
+                              <input
+                                type="color"
+                                aria-label="Custom border colour"
+                                disabled={readonly || plan === 'free'}
+                                value={widgetSettings.borderColour}
+                                onChange={(e) =>
+                                  updateWidgetAppearance({ borderColour: e.target.value })
+                                }
+                              />
+                            )}
+                          </div>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />} Border thickness
+                          </span>
+                          <select
+                            disabled={readonly || plan === 'free'}
+                            value={String(widgetSettings.borderWidth)}
+                            onChange={(e) =>
+                              updateWidgetAppearance({ borderWidth: Number(e.target.value) })
+                            }
+                          >
+                            {Array.from({ length: 9 }, (_, width) => (
+                              <option key={width} value={width}>
+                                {width === 0 ? 'None' : `${width}px`}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
                             {plan === 'free' && <ProBadge />} Typography
@@ -2176,6 +2238,20 @@ Implementation requirements:
                             Show section dividers
                           </label>
                         )}
+                        {widgetType === 'banner' && (
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            {plan === 'free' && <ProBadge />}
+                            <input
+                              type="checkbox"
+                              checked={widgetSettings.scrollText !== false}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ scrollText: event.target.checked })
+                              }
+                            />
+                            Scroll long text
+                          </label>
+                        )}
                       </div>
                       {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
                         <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
@@ -2187,6 +2263,18 @@ Implementation requirements:
                             onChange={(e) => updateWidgetAppearance({ showName: e.target.checked })}
                           />
                           Show business name
+                        </label>
+                      )}
+                      {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
+                        <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                          {plan === 'free' && <ProBadge />}
+                          <input
+                            type="checkbox"
+                            checked={widgetSettings.showLogo !== false}
+                            disabled={readonly || plan === 'free'}
+                            onChange={(e) => updateWidgetAppearance({ showLogo: e.target.checked })}
+                          />
+                          Show business logo
                         </label>
                       )}
                       {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (

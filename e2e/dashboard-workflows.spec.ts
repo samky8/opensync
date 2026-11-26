@@ -1,4 +1,75 @@
 import { test, expect } from '@playwright/test';
+import { demoSchedule } from '../src/lib/demo';
+
+test('the banner preview opens the announcement editor', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  await expect(page.getByRole('button', { name: 'Edit hours', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Banner', exact: true }).click();
+  const createBanner = page.getByRole('button', { name: 'Create banner', exact: true });
+  await expect(createBanner.locator('.lucide-megaphone')).toBeVisible();
+  await createBanner.click();
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: 'Create a website update' }),
+  ).toBeVisible();
+});
+
+test('banner scrolls only overflowing text and can publish the setting off', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  const selectBannerLayout = async () => {
+    await page.getByRole('button', { name: 'Banner', exact: true }).click();
+    await page.getByRole('button', { name: 'Layout', exact: true }).click();
+  };
+  const toggle = page.getByRole('checkbox', { name: 'Scroll long text' });
+  const preview = page.locator('.preview-body .announcement-widget');
+  const track = preview.locator('.announcement-scroll-track');
+  const seedBanner = async (message: string) => {
+    await page.evaluate(
+      ({ schedule, message }) => {
+        Object.assign(schedule.announcements[0], {
+          title: 'Update',
+          message,
+          start: '2020-01-01T00:00:00Z',
+          end: '',
+        });
+        localStorage.setItem(
+          'opensync-demo-v1',
+          JSON.stringify({ draft: schedule, published: schedule, version: 1, history: [] }),
+        );
+      },
+      { schedule: demoSchedule, message },
+    );
+    await page.reload();
+    await selectBannerLayout();
+  };
+
+  await seedBanner('Hello.');
+  await expect(toggle).toBeChecked();
+  await expect(track).toHaveCSS('animation-name', 'none');
+
+  await seedBanner('Check our opening hours before your next visit. '.repeat(9).trim());
+  await expect(track).toHaveCSS('animation-name', 'announcement-scroll');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(track).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(track).toHaveCSS('animation-name', 'announcement-scroll');
+
+  await toggle.uncheck();
+  await expect(track).toHaveCount(0);
+  await expect(preview.getByText(/Check our opening hours/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Widget changes saved to your draft.');
+  await page.goto('/demo?tab=overview');
+  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  const published = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('opensync-demo-v1')!).published,
+  );
+  expect(published.widget.overrides.banner.scrollText).toBe(false);
+});
 
 test('Home opens a simple website message form with a publish review', async ({ page }) => {
   await page.goto('/demo');

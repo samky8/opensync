@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   CalendarClock,
   ChevronDown,
@@ -41,6 +41,46 @@ const widgetFontFamilies: Record<Schedule['widget']['font'], string> = {
   humanist: '"Trebuchet MS", Candara, Calibri, sans-serif',
   mono: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',
 };
+
+function ScrollingAnnouncement({ children }: { children: ReactNode }) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [distance, setDistance] = useState(0);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    if (!viewport || !track) return;
+    const measure = () => setDistance(Math.max(0, track.offsetWidth - viewport.clientWidth));
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    observer.observe(track);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      className={`announcement-scroll${distance ? ' is-scrolling' : ''}`}
+      ref={viewportRef}
+      tabIndex={distance ? 0 : undefined}
+    >
+      <div
+        className="announcement-scroll-track"
+        ref={trackRef}
+        style={
+          {
+            '--announcement-scroll-end': `${-distance}px`,
+            '--announcement-scroll-duration': `${Math.max(4, distance / 20)}s`,
+          } as CSSProperties
+        }
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function Widget({
   schedule,
   type = 'hours',
@@ -118,28 +158,43 @@ export function Widget({
     const announcementStyle = announcementStyles[a.type];
     const AnnouncementIcon = announcementStyle.Icon;
     const defaultColours = announcementStyleColours[a.type];
+    const bannerOverrides = data.widget.overrides?.banner;
+    const bannerBackground =
+      bannerOverrides?.background === 'none'
+        ? 'transparent'
+        : bannerOverrides?.background && bannerOverrides.background !== 'auto'
+          ? bannerOverrides.background
+          : a.backgroundColour || defaultColours.background;
     const bannerStyle = {
       ...style,
-      '--announcement-font-colour': a.fontColour || defaultColours.font,
-      '--announcement-background-colour': a.backgroundColour || defaultColours.background,
-      '--announcement-border-colour': a.borderColour || defaultColours.border,
+      '--announcement-font-colour': bannerOverrides?.accent || a.fontColour || defaultColours.font,
+      '--announcement-background-colour': bannerBackground,
+      '--announcement-border-colour':
+        bannerOverrides?.borderColour && bannerOverrides.borderColour !== 'auto'
+          ? bannerOverrides.borderColour
+          : a.borderColour || defaultColours.border,
+      borderLeftWidth:
+        bannerOverrides?.borderWidth == null ? undefined : `${bannerOverrides.borderWidth}px`,
     } as CSSProperties;
+    const content = (
+      <div
+        className={`announcement-widget-content ${a.messageVisible !== false && a.messagePosition !== 'below' ? 'is-inline' : ''}`}
+      >
+        {(AnnouncementIcon || a.title) && (
+          <div className="announcement-widget-heading">
+            {AnnouncementIcon && <AnnouncementIcon size={17} aria-hidden="true" />}
+            {a.title && <strong>{a.title}</strong>}
+          </div>
+        )}
+        {a.messageVisible !== false && a.message && <RichText value={a.message} />}
+      </div>
+    );
     return (
       <div
         className={`widget announcement-widget announcement-${announcementStyle.className} ${w.theme}${w.alignment === 'center' ? ' is-centered' : ''}`}
         style={bannerStyle}
       >
-        <div
-          className={`announcement-widget-content ${a.messageVisible !== false && a.messagePosition !== 'below' ? 'is-inline' : ''}`}
-        >
-          {(AnnouncementIcon || a.title) && (
-            <div className="announcement-widget-heading">
-              {AnnouncementIcon && <AnnouncementIcon size={17} aria-hidden="true" />}
-              {a.title && <strong>{a.title}</strong>}
-            </div>
-          )}
-          {a.messageVisible !== false && a.message && <RichText value={a.message} />}
-        </div>
+        {w.scrollText !== false ? <ScrollingAnnouncement>{content}</ScrollingAnnouncement> : content}
         {a.ctaText && a.ctaUrl && (
           <a href={a.ctaUrl} target="_blank" rel="noopener noreferrer">
             {a.ctaText} <ExternalLink size={13} />
@@ -154,7 +209,7 @@ export function Widget({
       style={style}
       aria-label={`${data.name} opening hours`}
     >
-      {data.logo && (
+      {w.showLogo !== false && data.logo && (
         <Image
           className="widget-logo"
           src={data.logo}

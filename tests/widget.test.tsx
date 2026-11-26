@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Widget } from '../src/components/widget';
-import { defaultSchedule } from '../src/lib/domain';
+import { customizeWidget, defaultSchedule, scheduleSchema } from '../src/lib/domain';
 it('renders escaped business content, current status and schedule', () => {
   const s = defaultSchedule('<script>alert(1)</script>');
   const html = renderToStaticMarkup(<Widget schedule={s} now="2026-11-02T15:00:00Z" />);
@@ -21,9 +21,7 @@ it('hides normal hours during an active multi-day closure', () => {
       intervals: [],
     },
   ];
-  const html = renderToStaticMarkup(
-    <Widget schedule={schedule} now="2026-11-02T15:00:00Z" />,
-  );
+  const html = renderToStaticMarkup(<Widget schedule={schedule} now="2026-11-02T15:00:00Z" />);
   expect(html).toContain('Closed for the season');
   expect(html).toContain('Nov 1, 2026');
   expect(html).toContain('Nov 20, 2026');
@@ -64,6 +62,24 @@ it.each(['hours', 'status'] as const)('can hide the OpenSync credit in the %s wi
   );
   expect(html).not.toContain('widget-credit');
   expect(html).toContain('Open now');
+});
+it.each(['hours', 'status'] as const)('can hide the business logo only in the %s widget', (type) => {
+  const schedule = defaultSchedule();
+  schedule.logo = 'https://example.com/logo.png';
+  const legacyWidget = { ...schedule.widget, showLogo: undefined };
+  const saved = scheduleSchema.parse({
+    ...schedule,
+    widget: customizeWidget(schedule.widget, type, { showLogo: false }),
+  });
+  const otherType = type === 'hours' ? 'status' : 'hours';
+  const render = (data: typeof schedule, widgetType: 'hours' | 'status') =>
+    renderToStaticMarkup(<Widget schedule={data} type={widgetType} now="2026-11-02T15:00:00Z" />);
+
+  expect(render(scheduleSchema.parse({ ...schedule, widget: legacyWidget }), type)).toContain(
+    'class="widget-logo"',
+  );
+  expect(render(saved, type)).not.toContain('class="widget-logo"');
+  expect(render(saved, otherType)).toContain('class="widget-logo"');
 });
 it('can hide optional hours content while keeping a non-collapsible week visible', () => {
   const schedule = defaultSchedule();
@@ -189,6 +205,35 @@ it('renders an announcement message inline or hides it based on its layout setti
   );
   expect(hidden).toContain('Customer update');
   expect(hidden).not.toContain('Beside the title');
+});
+it('lets banner appearance override announcement colours and border thickness', () => {
+  const s = defaultSchedule();
+  s.announcements = [
+    {
+      id: 'styled-banner',
+      title: 'Customer update',
+      message: 'Please note this change.',
+      start: '2026-01-01T00:00:00Z',
+      end: '',
+      type: 'warning',
+      enabled: true,
+      ctaText: '',
+      ctaUrl: '',
+    },
+  ];
+  s.widget = customizeWidget(s.widget, 'banner', {
+    accent: '#123456',
+    background: '#abcdef',
+    borderColour: '#654321',
+    borderWidth: 5,
+  });
+  const html = renderToStaticMarkup(
+    <Widget schedule={scheduleSchema.parse(s)} type="banner" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('--announcement-font-colour:#123456');
+  expect(html).toContain('--announcement-background-colour:#abcdef');
+  expect(html).toContain('--announcement-border-colour:#654321');
+  expect(html).toContain('border-left-width:5px');
 });
 it('does not render a widget that is disabled in published settings', () => {
   const s = defaultSchedule();

@@ -35,11 +35,13 @@ const widgetAppearance = z.object({
   borderWidth: z.number().int().min(0).max(8),
   radius: z.number().min(0).max(32),
   showName: z.boolean(),
+  showLogo: z.boolean(),
   showBranding: z.boolean(),
   showStatus: z.boolean(),
   highlightToday: z.boolean(),
   collapsible: z.boolean(),
   showDividers: z.boolean(),
+  scrollText: z.boolean(),
   compact: z.boolean(),
   font: z.enum(['auto', 'system', 'serif', 'rounded', 'humanist', 'mono']),
   fontSize: z.union([z.literal('auto'), z.number().int().min(10).max(24)]),
@@ -48,10 +50,16 @@ const widgetAppearance = z.object({
 type WidgetAppearance = z.infer<typeof widgetAppearance>;
 export type WidgetType = 'hours' | 'banner' | 'status';
 const bannerAppearance = widgetAppearance.pick({
+  accent: true,
+  background: true,
+  borderColour: true,
+  borderWidth: true,
+  theme: true,
   font: true,
   fontSize: true,
   radius: true,
   alignment: true,
+  scrollText: true,
 });
 export const scheduleSchema = z
   .object({
@@ -133,19 +141,27 @@ export const scheduleSchema = z
       background: widgetAppearance.shape.background.default('auto'),
       borderColour: widgetAppearance.shape.borderColour.default('auto'),
       borderWidth: widgetAppearance.shape.borderWidth.default(1),
+      showLogo: widgetAppearance.shape.showLogo.default(true),
       showBranding: widgetAppearance.shape.showBranding.default(true),
       showStatus: widgetAppearance.shape.showStatus.default(true),
       highlightToday: widgetAppearance.shape.highlightToday.default(true),
       collapsible: widgetAppearance.shape.collapsible.default(true),
       showDividers: widgetAppearance.shape.showDividers.default(true),
+      scrollText: widgetAppearance.shape.scrollText.default(true),
       fontSize: widgetAppearance.shape.fontSize.default('auto'),
       placement: z.enum(['inline', 'top', 'floating']),
       overrides: z
         .object({
-          hours: widgetAppearance.partial().optional(),
+          hours: widgetAppearance.omit({ scrollText: true }).partial().optional(),
           banner: bannerAppearance.partial().optional(),
           status: widgetAppearance
-            .omit({ showStatus: true, highlightToday: true, collapsible: true, showDividers: true })
+            .omit({
+              showStatus: true,
+              highlightToday: true,
+              collapsible: true,
+              showDividers: true,
+              scrollText: true,
+            })
             .partial()
             .optional(),
         })
@@ -177,7 +193,10 @@ export const scheduleSchema = z
       });
   });
 export type Schedule = z.infer<typeof scheduleSchema>;
-export function widgetAppearanceFor(widget: Schedule['widget'], type: WidgetType): WidgetAppearance {
+export function widgetAppearanceFor(
+  widget: Schedule['widget'],
+  type: WidgetType,
+): WidgetAppearance {
   return { ...widget, ...widget.overrides?.[type] };
 }
 
@@ -246,6 +265,8 @@ export const defaultSchedule = (
     borderWidth: 1,
     radius: 16,
     showName: true,
+    showLogo: true,
+    scrollText: true,
     showBranding: true,
     showStatus: true,
     highlightToday: true,

@@ -24,7 +24,9 @@ test('widget selector layout', async ({ page }) => {
   await hoursVisibility.click();
   await expect(hoursVisibility).not.toBeChecked();
   await expect(page.locator('.preview-body .widget-type-hours')).toHaveCount(0);
-  await expect(page.getByText('Customise with Pro, or use the included Free defaults.')).toHaveCount(0);
+  await expect(
+    page.getByText('Customise with Pro, or use the included Free defaults.'),
+  ).toHaveCount(0);
   expect((await selector.boundingBox())!.y).toBeLessThan((await appearance.boundingBox())!.y);
   await page.getByRole('button', { name: 'Status', exact: true }).click();
   const visibility = page.getByRole('switch', { name: 'Show live status' });
@@ -81,11 +83,24 @@ test('widget selector layout', async ({ page }) => {
   }
   await expect(page.getByRole('combobox', { name: 'Layout', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Show business name')).toHaveCount(0);
-  await expect(page.getByLabel('Background colour mode')).toHaveCount(0);
+  await expect(page.getByLabel('Font colour')).toBeVisible();
+  await expect(page.getByLabel('Background colour mode')).toBeVisible();
+  await expect(page.getByLabel('Border colour mode')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Border thickness' })).toBeVisible();
   await expect(page.getByLabel('Typography')).toBeVisible();
+  await page.getByLabel('Font colour').fill('#123456');
+  await page.getByLabel('Background colour mode').selectOption('custom');
+  await page.getByLabel('Custom background colour').fill('#abcdef');
+  await page.getByLabel('Border colour mode').selectOption('custom');
+  await page.getByLabel('Custom border colour').fill('#654321');
+  await page.getByRole('combobox', { name: 'Border thickness' }).selectOption('5');
   await page.getByRole('combobox', { name: 'Font size', exact: true }).selectOption('18');
   const draftBanner = bannerPreview.locator('.preview-body .announcement-widget');
   await expect(draftBanner).toHaveCSS('font-size', '18px');
+  await expect(draftBanner).toHaveCSS('color', 'rgb(18, 52, 86)');
+  await expect(draftBanner).toHaveCSS('background-color', 'rgb(171, 205, 239)');
+  await expect(draftBanner).toHaveCSS('border-left-color', 'rgb(101, 67, 33)');
+  await expect(draftBanner).toHaveCSS('border-left-width', '5px');
   await bannerVisibility.press('Space');
   await expect(bannerVisibility).not.toBeChecked();
   await expect(draftBanner).toHaveCount(0);

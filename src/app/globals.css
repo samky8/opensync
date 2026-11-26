@@ -2965,6 +2965,46 @@ button:not(.btn) {
 .announcement-widget-content > .rich-text-content {
   color: var(--announcement-font-colour);
 }
+.announcement-widget-content {
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .announcement-scroll {
+    overflow: hidden;
+  }
+  .announcement-scroll-track {
+    width: max-content;
+    min-width: 100%;
+    white-space: nowrap;
+  }
+  .announcement-scroll-track .rich-text-content {
+    white-space: pre;
+  }
+  .announcement-scroll.is-scrolling > .announcement-scroll-track {
+    animation: announcement-scroll var(--announcement-scroll-duration) linear infinite alternate;
+  }
+  .announcement-scroll.is-scrolling:focus-within {
+    overflow-x: auto;
+  }
+  .announcement-scroll.is-scrolling:focus-within > .announcement-scroll-track {
+    animation: none;
+  }
+  @keyframes announcement-scroll {
+    0%,
+    10% {
+      transform: translateX(0);
+    }
+    90%,
+    100% {
+      transform: translateX(var(--announcement-scroll-end));
+    }
+  }
+}
+@media (hover: hover) {
+  .announcement-scroll:hover > .announcement-scroll-track {
+    animation-play-state: paused;
+  }
+}
 .announcement-widget p {
   font-size: 0.917em;
   color: #646976;
@@ -7719,10 +7759,18 @@ fieldset.social-control-group {
 .widget-presets .preset-card .preset-preview {
   margin: 9px 7px 9px;
   height: 47px;
-  border: 1px solid #e2e4ec;
-  border-radius: 5px;
-  background: white;
-  box-shadow: 0 4px 10px #24294112;
+  border: 2px solid #d8ccf2;
+  border-radius: 12px;
+  background: #faf7ff;
+  box-shadow: 0 5px 12px #5b21b614;
+}
+
+.widget-presets .preset-card .preset-preview i {
+  background: #c7b9df;
+}
+
+.widget-presets .preset-card .preset-preview i:first-child {
+  background: #7c3aed;
 }
 
 .widget-presets .preset-dark {

@@ -12,9 +12,10 @@
     var frame = document.createElement('iframe');
     frame.src = origin + '/embed/' + encodeURIComponent(id) + '?type=' + type;
     frame.title = type === 'banner' ? 'Business announcement' : 'Business opening hours';
-    frame.loading = 'lazy';
+    frame.loading = type === 'banner' ? 'eager' : 'lazy';
     frame.style.cssText = 'width:100%;max-width:100%;border:0;display:block;min-width:0;';
-    frame.height = type === 'hours' ? '590' : type === 'banner' ? '180' : '110';
+    frame.height = type === 'hours' ? '590' : type === 'banner' ? '0' : '110';
+    if (type === 'banner') frame.style.visibility = 'hidden';
     frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     var sendHostStyles = function () {
       if (!frame.contentWindow) return;
@@ -44,8 +45,10 @@
       }
       if (event.data.type !== 'opensync:resize') return;
       var height = event.data.height;
-      if (typeof height === 'number' && Number.isFinite(height) && height >= 0 && height <= 4000)
+      if (typeof height === 'number' && Number.isFinite(height) && height >= 0 && height <= 4000) {
         frame.height = String(Math.ceil(height));
+        if (type === 'banner') frame.style.visibility = height > 0 ? 'visible' : 'hidden';
+      }
     });
     el.appendChild(frame);
   });

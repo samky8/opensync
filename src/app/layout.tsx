@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from 'next';
+import { GoogleAnalytics } from '@next/third-parties/google';
 import './globals.css';
 import { Pwa } from '@/components/pwa';
+
+const GOOGLE_ANALYTICS_ID = 'G-YEWELHFR22';
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: {
@@ -30,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <Pwa />
       </body>
+      <GoogleAnalytics gaId={GOOGLE_ANALYTICS_ID} />
     </html>
   );
 }
