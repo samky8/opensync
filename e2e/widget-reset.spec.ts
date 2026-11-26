@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('widget settings show Pro crowns and reset to included defaults', async ({ page }) => {
+test('Pro widget settings hide upgrade crowns and reset to included defaults', async ({ page }) => {
   await page.goto('/demo?tab=widgets');
-  await expect(page.getByRole('img', { name: 'Pro feature' }).first()).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Pro feature' })).toHaveCount(0);
   await page.getByLabel('Accent colour').fill('#ff0000');
   await page.getByLabel('Appearance', { exact: false }).selectOption('dark');
   await page.getByRole('button', { name: 'Reset to Free defaults', exact: true }).click();
@@ -11,7 +11,9 @@ test('widget settings show Pro crowns and reset to included defaults', async ({ 
   await expect(page.getByRole('status')).toContainText('Save or publish to apply');
 });
 
-test('reset is available directly in the banner and publish error', async ({ page }) => {
+test('reset is available directly in the banner and widget changes can be saved', async ({
+  page,
+}) => {
   const error = encodeURIComponent(
     'Widget customization requires Pro. Reset to Free defaults to save and publish.',
   );
@@ -25,15 +27,13 @@ test('reset is available directly in the banner and publish error', async ({ pag
   await expect(page.locator('.error-banner')).toHaveCount(0);
   await page.goto(`/demo?tab=widgets&error=${error}`);
   await page.getByLabel('Accent colour').fill('#ff0000');
-  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Reset to Free defaults' }).click();
-  await expect(dialog.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Demo published');
+  await page
+    .locator('.error-banner')
+    .getByRole('button', { name: 'Reset to Free defaults' })
+    .click();
+  await page.getByLabel('Accent colour').fill('#00ff00');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Widget changes saved');
   await page.reload();
-  await expect(page.getByLabel('Accent colour')).toHaveValue('#4f46e5');
+  await expect(page.getByLabel('Accent colour')).toHaveValue('#00ff00');
 });

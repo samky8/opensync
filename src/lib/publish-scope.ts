@@ -1,4 +1,10 @@
-import { defaultSchedule, days, formatIntervals, type Schedule } from './domain';
+import {
+  defaultSchedule,
+  days,
+  formatIntervals,
+  widgetAppearanceFor,
+  type Schedule,
+} from './domain';
 
 export const publishScopes = [
   'hours',
@@ -102,8 +108,41 @@ export function publishChanges(
         );
       }
     } else if (field === 'widget') {
-      for (const key of Object.keys(draft.widget) as (keyof Schedule['widget'])[])
-        add(key, String(published?.widget[key] ?? ''), String(draft.widget[key]));
+      for (const key of Object.keys(draft.widget) as (keyof Schedule['widget'])[]) {
+        if (key === 'overrides') continue;
+        if (key === 'showBranding')
+          add(
+            'OpenSync branding',
+            published?.widget.showBranding === false ? 'Hidden' : 'Visible',
+            draft.widget.showBranding === false ? 'Hidden' : 'Visible',
+          );
+        else add(key, String(published?.widget[key] ?? ''), String(draft.widget[key]));
+      }
+      const previous = published?.widget ?? defaultSchedule().widget;
+      for (const [type, name] of [
+        ['hours', 'Hours'],
+        ['banner', 'Banner'],
+        ['status', 'Status'],
+      ] as const) {
+        const before = widgetAppearanceFor(previous, type);
+        const after = widgetAppearanceFor(draft.widget, type);
+        const keys = new Set([
+          ...Object.keys(previous.overrides?.[type] ?? {}),
+          ...Object.keys(draft.widget.overrides?.[type] ?? {}),
+        ]);
+        for (const key of keys as Set<keyof typeof before>) {
+          if (key === 'showBranding')
+            add(
+              `${name} · OpenSync branding`,
+              before[key] === false ? 'Hidden' : 'Visible',
+              after[key] === false ? 'Hidden' : 'Visible',
+            );
+          else {
+            const label = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+            add(`${name} · ${label}`, String(before[key]), String(after[key]));
+          }
+        }
+      }
     } else if (field === 'widgetVisibility') {
       const defaults = defaultSchedule().widgetVisibility;
       const nextVisibility = draft.widgetVisibility || defaults;

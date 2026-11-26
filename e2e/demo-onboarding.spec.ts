@@ -11,7 +11,9 @@ test('demo onboarding starts fresh, completes locally, and can restart', async (
   const startOnboarding = async () => {
     if (testInfo.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Restart setup', exact: true }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Restart demo setup', exact: true }).click();
     await expect(page.getByText('Step 1 of 6', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /get started/ }).click();
     await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Your business');
@@ -41,7 +43,7 @@ test('demo onboarding starts fresh, completes locally, and can restart', async (
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.getByText('Step 6 of 6', { exact: true })).toBeHidden();
-  await expect(page.locator('.sidebar button[aria-label="Overview"]')).toHaveAttribute(
+  await expect(page.locator('.sidebar button[aria-label="Home"]')).toHaveAttribute(
     'aria-current',
     'page',
   );

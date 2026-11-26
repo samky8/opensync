@@ -24,16 +24,22 @@ describe('business-local schedules', () => {
     const schedule = defaultSchedule();
     const legacyWidget: Partial<typeof schedule.widget> = { ...schedule.widget };
     delete legacyWidget.background;
+    delete legacyWidget.borderColour;
+    delete legacyWidget.borderWidth;
     delete legacyWidget.fontSize;
     delete legacyWidget.showStatus;
     delete legacyWidget.highlightToday;
     delete legacyWidget.collapsible;
+    delete legacyWidget.showDividers;
     const parsed = scheduleSchema.parse({ ...schedule, widget: legacyWidget });
     expect(parsed.widget.background).toBe('auto');
+    expect(parsed.widget.borderColour).toBe('auto');
+    expect(parsed.widget.borderWidth).toBe(1);
     expect(parsed.widget.fontSize).toBe('auto');
     expect(parsed.widget.showStatus).toBe(true);
     expect(parsed.widget.highlightToday).toBe(true);
     expect(parsed.widget.collapsible).toBe(true);
+    expect(parsed.widget.showDividers).toBe(true);
   });
   it('does not invent a closing at the edge of the lookup window', () => {
     const s = defaultSchedule();
@@ -204,6 +210,12 @@ describe('entitlements and retries', () => {
       next = structuredClone(original);
     next.widget.accent = '#000000';
     expect(() => validateEntitlements(next, original, 'free')).toThrow(/requires Pro/);
+  });
+  it('requires Pro to turn off the default OpenSync credit', () => {
+    const previous = defaultSchedule();
+    const next = { ...previous, widget: { ...previous.widget, showBranding: false } };
+    expect(() => validateEntitlements(next, previous, 'free')).toThrow(/requires Pro/);
+    expect(() => validateEntitlements(next, previous, 'pro')).not.toThrow();
   });
   it('lets Free accounts control which installed widgets are visible', () => {
     const original = defaultSchedule(),

@@ -7,7 +7,7 @@ Social posts publishes image posts and photo stories on demand. There is no soci
 Run `npm run meta:check` first. It loads Next.js environment files and reports missing or malformed settings without printing credentials. To check production file precedence, set `NODE_ENV=production`. This is a local configuration check, not a check of deployed settings or Meta approval.
 
 1. Run `npm run db:migrate` against the deployment database to apply `004_social_publishing.sql`.
-2. Create/configure a Meta app for Facebook Login and the Pages/Instagram APIs. Set the valid OAuth redirect URI to `https://YOUR_DOMAIN/api/social/callback` (exact match).
+2. Create/configure a Meta app for Facebook Login and the Pages/Instagram APIs. Set the valid OAuth redirect URI to `https://opensync.ca/api/social/callback` (exact match).
 3. Set `META_APP_ID`, `META_APP_SECRET`, `META_GRAPH_VERSION` (default `v25.0`), `NEXT_PUBLIC_APP_URL` (the public HTTPS origin), and `TOKEN_ENCRYPTION_KEY` (64 hexadecimal characters). Keep the existing encryption key if Google or Meta tokens are already stored.
 4. Configure the app's website domain, privacy-policy URL and data-deletion instructions URL (`/privacy`, after completing the operator details). Follow Meta's current business verification and App Review requirements before connecting accounts outside app roles/test accounts. Request `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, and `instagram_content_publish` for this Facebook Login flow. Do not substitute Instagram Login permission names.
 5. Ensure `/api/social/media/*` is reachable by Meta without deployment protection, browser authentication, or a bot challenge. URLs contain a random capability and expire after 24 hours. Never expose a Vercel bypass token in a media URL.
@@ -44,12 +44,12 @@ One operator-owned Meta app serves all OpenSync customers. Customers authorize t
 
 | Setting                        | Value                                                   |
 | ------------------------------ | ------------------------------------------------------- |
-| Website URL                    | `https://YOUR_DOMAIN`                                   |
-| App domain                     | `YOUR_DOMAIN`                                           |
-| Valid OAuth Redirect URI       | `https://YOUR_DOMAIN/api/social/callback`               |
-| Privacy policy URL             | `https://YOUR_DOMAIN/privacy` (complete template first) |
-| Terms URL                      | `https://YOUR_DOMAIN/terms` (complete template first)   |
-| Data deletion instructions URL | `https://YOUR_DOMAIN/privacy`                           |
+| Website URL                    | `https://opensync.ca`                                   |
+| App domain                     | `opensync.ca`                                           |
+| Valid OAuth Redirect URI       | `https://opensync.ca/api/social/callback`               |
+| Privacy policy URL             | `https://opensync.ca/privacy` (complete template first) |
+| Terms URL                      | `https://opensync.ca/terms` (complete template first)   |
+| Data deletion instructions URL | `https://opensync.ca/privacy`                           |
 
 ### Environment and key handling
 

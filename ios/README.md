@@ -43,7 +43,7 @@ Deploy this repository's backend and finish its Supabase/PostgreSQL setup first.
 Create the ignored `ios/Config/Local.xcconfig`:
 
 ```xcconfig
-OPENSYNC_API_URL = https:/$()/your-real-domain.example
+OPENSYNC_API_URL = https:/$()/opensync.ca
 SUPABASE_URL = https:/$()/your-project.supabase.co
 SUPABASE_ANON_KEY = your-public-anon-key
 PRODUCT_BUNDLE_IDENTIFIER = your.company.opensync

@@ -45,7 +45,7 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(
-    page.locator('.sidebar .sidebar-text').filter({ hasText: /^Website widgets$/ }),
+    page.locator('.sidebar .sidebar-text').filter({ hasText: /^Schedule$/ }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(page.locator('.sidebar')).toBeHidden();
@@ -60,20 +60,35 @@ test('sidebar collapses, keeps navigation usable, and remembers the preference',
     .toBeGreaterThan(200);
 });
 
-test('sidebar separates management, customization, and publishing tasks', async ({
+test('sidebar groups dashboard links into Manage, Customize, and Publishing', async ({
   page,
 }, testInfo) => {
   await page.goto('/demo');
   if (testInfo.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
 
-  await expect(page.getByRole('navigation', { name: 'Manage' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Customize' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Publishing' })).toBeVisible();
+  for (const [section, buttons] of [
+    ['Home', ['Home']],
+    ['Manage', ['Schedule', 'Announcements']],
+    ['Customize', ['Website widgets', 'Social Studio']],
+    ['Publishing', ['Connections', 'Activity']],
+  ] as const) {
+    await expect(page.getByRole('navigation', { name: section, exact: true }).getByRole('button'))
+      .toHaveText([...buttons]);
+  }
   await expect(page.getByRole('button', { name: 'Activity', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restart setup', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'New update', exact: true })).toHaveCount(0);
 
+  await page.getByRole('button', { name: 'Social Studio', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Social Studio', exact: true, level: 1 })).toBeVisible();
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Connections', exact: true, level: 1 })).toBeVisible();
+  if (testInfo.project.name === 'mobile')
+    await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Brand kit', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Restart setup', exact: true })).toBeVisible();
 });

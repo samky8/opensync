@@ -31,5 +31,6 @@ it('keeps profile switching available for paid accounts without creation permiss
   const html = renderToStaticMarkup(<ProfileMenu {...props} paid canCreate={false} />);
   expect(html).toContain('data-profile-id="profile-1"');
   expect(html).toContain('Only an owner or admin can create workspaces');
+  expect(html).not.toContain('lucide-crown');
   expect(html).not.toContain('href=');
 });

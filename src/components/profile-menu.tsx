@@ -98,7 +98,7 @@ export function ProfileMenu({
               disabled
               title={paid ? 'Only an owner or admin can create workspaces' : 'Requires Business'}
             >
-              <Crown size={16} aria-hidden="true" />
+              {!paid && <Crown size={16} aria-hidden="true" />}
               {demo ? 'Create your workspace' : 'Create new workspace'}
             </button>
           )}

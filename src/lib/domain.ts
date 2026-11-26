@@ -27,6 +27,32 @@ export const announcementStyleColours = {
   'special hours': { font: '#7038b6', background: '#faf7ff', border: '#7038b6' },
 } as const;
 const colour = z.string().regex(/^#[a-fA-F0-9]{6}$/);
+const widgetAppearance = z.object({
+  accent: colour,
+  theme: z.enum(['light', 'dark']),
+  background: z.union([z.literal('auto'), z.literal('none'), colour]),
+  borderColour: z.union([z.literal('auto'), colour]),
+  borderWidth: z.number().int().min(0).max(8),
+  radius: z.number().min(0).max(32),
+  showName: z.boolean(),
+  showBranding: z.boolean(),
+  showStatus: z.boolean(),
+  highlightToday: z.boolean(),
+  collapsible: z.boolean(),
+  showDividers: z.boolean(),
+  compact: z.boolean(),
+  font: z.enum(['auto', 'system', 'serif', 'rounded', 'humanist', 'mono']),
+  fontSize: z.union([z.literal('auto'), z.number().int().min(10).max(24)]),
+  alignment: z.enum(['left', 'center']),
+});
+type WidgetAppearance = z.infer<typeof widgetAppearance>;
+export type WidgetType = 'hours' | 'banner' | 'status';
+const bannerAppearance = widgetAppearance.pick({
+  font: true,
+  fontSize: true,
+  radius: true,
+  alignment: true,
+});
 export const scheduleSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
@@ -103,20 +129,27 @@ export const scheduleSchema = z
         status: z.boolean(),
       })
       .default({ hours: true, banner: true, status: true }),
-    widget: z.object({
-      accent: colour,
-      theme: z.enum(['light', 'dark']),
-      background: z.union([z.literal('auto'), colour]).default('auto'),
-      radius: z.number().min(0).max(32),
-      showName: z.boolean(),
-      showStatus: z.boolean().default(true),
-      highlightToday: z.boolean().default(true),
-      collapsible: z.boolean().default(true),
-      compact: z.boolean(),
-      font: z.enum(['auto', 'system', 'serif', 'rounded', 'humanist', 'mono']),
-      fontSize: z.union([z.literal('auto'), z.number().int().min(10).max(24)]).default('auto'),
-      alignment: z.enum(['left', 'center']),
+    widget: widgetAppearance.extend({
+      background: widgetAppearance.shape.background.default('auto'),
+      borderColour: widgetAppearance.shape.borderColour.default('auto'),
+      borderWidth: widgetAppearance.shape.borderWidth.default(1),
+      showBranding: widgetAppearance.shape.showBranding.default(true),
+      showStatus: widgetAppearance.shape.showStatus.default(true),
+      highlightToday: widgetAppearance.shape.highlightToday.default(true),
+      collapsible: widgetAppearance.shape.collapsible.default(true),
+      showDividers: widgetAppearance.shape.showDividers.default(true),
+      fontSize: widgetAppearance.shape.fontSize.default('auto'),
       placement: z.enum(['inline', 'top', 'floating']),
+      overrides: z
+        .object({
+          hours: widgetAppearance.partial().optional(),
+          banner: bannerAppearance.partial().optional(),
+          status: widgetAppearance
+            .omit({ showStatus: true, highlightToday: true, collapsible: true, showDividers: true })
+            .partial()
+            .optional(),
+        })
+        .optional(),
     }),
   })
   .superRefine((s, ctx) => {
@@ -144,6 +177,27 @@ export const scheduleSchema = z
       });
   });
 export type Schedule = z.infer<typeof scheduleSchema>;
+export function widgetAppearanceFor(widget: Schedule['widget'], type: WidgetType): WidgetAppearance {
+  return { ...widget, ...widget.overrides?.[type] };
+}
+
+export function customizeWidget(
+  widget: Schedule['widget'],
+  type: WidgetType,
+  changes: Partial<WidgetAppearance>,
+): Schedule['widget'] {
+  const overrides = { ...widget.overrides };
+  const settings = { ...overrides[type], ...changes };
+  for (const key of Object.keys(settings) as (keyof WidgetAppearance)[]) {
+    if (settings[key] === widget[key]) delete settings[key];
+  }
+  if (Object.keys(settings).length) overrides[type] = settings;
+  else delete overrides[type];
+  const next = { ...widget };
+  if (Object.keys(overrides).length) next.overrides = overrides;
+  else delete next.overrides;
+  return next;
+}
 export function replaceException(
   schedule: Schedule,
   replacement: Schedule['exceptions'][number],
@@ -188,11 +242,15 @@ export const defaultSchedule = (
     accent: '#4f46e5',
     theme: 'light',
     background: 'auto',
+    borderColour: 'auto',
+    borderWidth: 1,
     radius: 16,
     showName: true,
+    showBranding: true,
     showStatus: true,
     highlightToday: true,
     collapsible: true,
+    showDividers: true,
     compact: false,
     font: 'system',
     fontSize: 'auto',

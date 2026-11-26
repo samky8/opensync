@@ -40,7 +40,9 @@
 
 ## Domain, legal, and business configuration required
 
-- [ ] Production domain, HTTPS, exact app origin, callback URLs, and webhook destination.
+- [x] Production domain acquired: `opensync.ca`.
+- [ ] Point `opensync.ca` at the production deployment, redirect `www.opensync.ca` to the apex domain, and verify HTTPS.
+- [ ] Set the exact app origin to `https://opensync.ca`; configure and test Supabase, Google, Meta, and Stripe callback/webhook URLs.
 - [ ] Replace legal templates with reviewed terms/privacy identifying the actual operator.
 - [ ] Define taxes, refunds, cancellation timing, jurisdiction, retention, and privacy contact.
 - [ ] Establish support ownership and review the persisted `support` table. The form saves requests; it does not silently email an unconfigured address.

@@ -9,7 +9,7 @@ test('social drafts restore and export correctly sized posts and stories', async
   async function openStudio() {
     if (info.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Social', exact: true }).click();
+    await page.getByRole('button', { name: 'Social Studio', exact: true }).click();
   }
   await openStudio();
   await page.getByRole('button', { name: 'Edit Message', exact: true }).click();
@@ -63,7 +63,7 @@ test('social background presets and custom uploads restore and export', async ({
   async function openStudio() {
     if (info.project.name === 'mobile')
       await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page.getByRole('button', { name: 'Social', exact: true }).click();
+    await page.getByRole('button', { name: 'Social Studio', exact: true }).click();
   }
   await openStudio();
   await page.getByLabel('Preset name', { exact: true }).fill('Seasonal update');

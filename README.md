@@ -68,7 +68,7 @@ Website features do not depend on Google.
 
 1. Obtain Google Business Profile API access/approval for your Cloud project. A client ID alone does not imply approval or usable quota.
 2. Enable the **My Business Account Management API** and **My Business Business Information API**. Configure the OAuth consent screen, authorized domains, privacy policy, terms, and appropriate verification/testing users.
-3. Create a Web OAuth client with redirect URI `https://YOUR_DOMAIN/api/google/callback` (and your localhost URI for development).
+3. Create a Web OAuth client with redirect URI `https://opensync.ca/api/google/callback` (and `http://localhost:3000/api/google/callback` for development).
 4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_BUSINESS_PROFILE_APPROVED=true`, and a 32-byte encryption key encoded as 64 hex characters in `TOKEN_ENCRYPTION_KEY`. Generate a unique random key locally; store it in a secret manager. Do not rotate it without a token migration or reconnect plan.
 5. Enable Pro or Business through a verified Stripe subscription. For **development only**, `DEV_PAID_FEATURES=true` unlocks paid actions. This override is explicitly ignored in production.
 6. Connect in Integrations, select a location, compare the imported hours, and explicitly confirm import if desired. Import changes the draft only. Review before publishing.
@@ -82,7 +82,7 @@ References: [location fields](https://developers.google.com/my-business/referenc
 
 1. Create two active recurring prices in **CAD**, billed every **one month**: Pro `900` cents and Business `1900` cents. Set `STRIPE_PRO_PRICE_ID` and `STRIPE_BUSINESS_PRICE_ID`.
 2. Set `STRIPE_SECRET_KEY`. Configure the Billing Portal to allow plan changes, payment updates, and cancellation for these prices.
-3. Add `https://YOUR_DOMAIN/api/billing/webhook` as a webhook endpoint for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Set its `STRIPE_WEBHOOK_SECRET`.
+3. Add `https://opensync.ca/api/billing/webhook` as a webhook endpoint for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Set its `STRIPE_WEBHOOK_SECRET`.
 4. Test with Stripe test-mode keys and test cards first. Locally, use Stripe CLI forwarding to `/api/billing/webhook` and its generated signing secret.
 5. A Checkout redirect never grants access. Only a signed webhook followed by current Stripe subscription lookup updates entitlements. Active/trialing subscriptions with the recognized CAD price qualify. Past-due/cancelled subscriptions restrict premium actions while preserving existing data and export.
 6. Confirm business/tax settings and the legal refund/cancellation policy before accepting live payments. Taxes are not automatically calculated by this implementation.
@@ -112,7 +112,7 @@ Copy a real snippet from Add to your website after creating your location:
 
 ```html
 <div data-opensync="YOUR_LOCATION_UUID" data-type="hours"></div>
-<script src="https://YOUR_DOMAIN/embed.js" defer></script>
+<script src="https://opensync.ca/embed.js" defer></script>
 ```
 
 Types: `hours`, `banner`, `status`. Multiple containers are supported. If custom scripts are blocked, use the iframe alternative shown in the configurator. The script adjusts frame heights; the plain iframe alternative uses a chosen fixed height.
@@ -162,8 +162,13 @@ Dependency notes: production audit was clean at verification. Development-only t
 
 1. Configure and migrate Supabase; test authentication locally.
 2. Import this repository into Vercel using the Next.js preset and Node.js 24. Use `npm ci` and `npm run build`.
-3. Add production environment variables in Vercel. Set `NEXT_PUBLIC_APP_URL` to the exact HTTPS origin, without a trailing slash. Public variables are baked into the build; rebuild after changing them.
-4. Add the domain and HTTPS, then update Supabase redirects, Google OAuth redirect, and the Stripe webhook URL to match. Preview deployments must use their own matching app URL/redirect allowlist; writes from an unmatched origin are rejected.
+3. Add production environment variables in Vercel. Set `NEXT_PUBLIC_APP_URL=https://opensync.ca` exactly, without a trailing slash. Public variables are baked into the build; rebuild after changing them.
+4. Add `opensync.ca` as the production domain and `www.opensync.ca` as a redirect to the apex domain. Apply the DNS records Vercel provides, wait for HTTPS issuance, then update Supabase redirects, Google OAuth redirects, Meta OAuth settings, and the Stripe webhook URL to the exact URLs below. Preview deployments must use their own matching app URL/redirect allowlist; writes from an unmatched origin are rejected.
+   - Supabase Site URL: `https://opensync.ca`
+   - Supabase redirect URLs: `https://opensync.ca/auth/callback` and `https://opensync.ca/auth/callback?next=/reset-password`
+   - Google OAuth redirect: `https://opensync.ca/api/google/callback`
+   - Meta OAuth redirect: `https://opensync.ca/api/social/callback`
+   - Stripe webhook: `https://opensync.ca/api/billing/webhook`
 5. Set a long random `CRON_SECRET` and verify authenticated minute-level invocations. Vercel sends the bearer secret to its cron endpoint.
 6. Configure provider approval, SMTP, billing products/portal, and production quotas. Leave unconfigured providers disabled.
 7. Finish legal/operator details, support operations, monitoring, backups/restore testing, data retention, and a staging acceptance pass.

@@ -10,6 +10,41 @@ it('renders escaped business content, current status and schedule', () => {
   expect(html).toContain('&lt;script&gt;');
   expect(html).not.toContain('<script>');
 });
+it('hides normal hours during an active multi-day closure', () => {
+  const schedule = defaultSchedule('Seasonal Cafe');
+  schedule.exceptions = [
+    {
+      id: 'seasonal-break',
+      start: '2026-11-01',
+      end: '2026-11-20',
+      label: 'Closed for the season',
+      intervals: [],
+    },
+  ];
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('Closed for the season');
+  expect(html).toContain('Nov 1, 2026');
+  expect(html).toContain('Nov 20, 2026');
+  expect(html).toContain('Opens Sat');
+  expect(html).not.toContain('class="widget-today"');
+  expect(html).not.toContain('class="widget-week"');
+  expect(html).not.toContain('class="widget-expand"');
+});
+it('uses semantic open and closed status treatments', () => {
+  const schedule = defaultSchedule();
+  const open = renderToStaticMarkup(
+    <Widget schedule={schedule} type="status" now="2026-11-02T15:00:00Z" />,
+  );
+  const closed = renderToStaticMarkup(
+    <Widget schedule={schedule} type="status" now="2026-11-02T23:00:00Z" />,
+  );
+  expect(open).toContain('widget-status open-now');
+  expect(open).toContain('status-dot green');
+  expect(closed).toContain('widget-status closed-now');
+  expect(closed).toContain('status-dot red');
+});
 it('places the hours credit in the footer opposite the time zone', () => {
   const html = renderToStaticMarkup(
     <Widget schedule={defaultSchedule()} type="hours" now="2026-11-02T15:00:00Z" />,
@@ -20,6 +55,15 @@ it('places the hours credit in the footer opposite the time zone', () => {
   expect(html).not.toContain(
     '<div class="widget-heading"><div class="widget-name">Your business</div><a',
   );
+});
+it.each(['hours', 'status'] as const)('can hide the OpenSync credit in the %s widget', (type) => {
+  const schedule = defaultSchedule();
+  schedule.widget.showBranding = false;
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} type={type} now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).not.toContain('widget-credit');
+  expect(html).toContain('Open now');
 });
 it('can hide optional hours content while keeping a non-collapsible week visible', () => {
   const schedule = defaultSchedule();
@@ -164,17 +208,29 @@ it('renders the status credit in the top heading beside the business name', () =
   );
   expect(html).not.toContain('class="widget-footer"');
 });
-it('applies custom widget typography, font size and background colour', () => {
+it('applies custom widget typography, font size, background and border', () => {
   const s = defaultSchedule('Styled Coffee');
   s.widget.font = 'mono';
   s.widget.fontSize = 18;
   s.widget.background = '#f0f1f2';
+  s.widget.borderColour = '#123456';
+  s.widget.borderWidth = 4;
   const html = renderToStaticMarkup(
     <Widget schedule={s} type="status" now="2026-11-02T15:00:00Z" />,
   );
   expect(html).toContain('font-family:ui-monospace');
   expect(html).toContain('font-size:18px');
   expect(html).toContain('--widget-background:#f0f1f2');
+  expect(html).toContain('--widget-border-colour:#123456');
+  expect(html).toContain('border-width:4px');
+});
+it('renders a none background as transparent', () => {
+  const s = defaultSchedule();
+  s.widget.background = 'none';
+  const html = renderToStaticMarkup(
+    <Widget schedule={s} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('--widget-background:transparent');
 });
 it('leaves automatic widget typography and font size inheritable', () => {
   const s = defaultSchedule();

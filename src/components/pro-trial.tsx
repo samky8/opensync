@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ArrowRight, Check, Gift, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { Button } from './ui/button';
-import { ProBadge } from './ui/pro-badge';
 import { proTrialFeatures, type ProTrial } from '@/lib/trial';
 
 export function ProTrialCard({
@@ -171,9 +170,9 @@ export function ProTrialCard({
               : 'Your 14 days of full Pro access start now. Here’s what you can enjoy:'}
           </p>
           <ul className="trial-feature-list">
-            {proTrialFeatures.map((feature, index) => (
+            {proTrialFeatures.map((feature) => (
               <li key={feature}>
-                {index < 2 ? <ProBadge /> : <Check size={17} />}
+                <Check size={17} />
                 <span>{feature}</span>
               </li>
             ))}

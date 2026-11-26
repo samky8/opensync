@@ -708,7 +708,7 @@ export function SocialComposer({
                 <Upload size={22} aria-hidden="true" />
               </span>
               <span className="social-background-upload-name">
-                <ProBadge /> Upload
+                {!paid && <ProBadge />} Upload
               </span>
             </button>
           </div>

@@ -15,7 +15,6 @@ import {
   History,
   Settings,
   HelpCircle,
-  ChevronsUpDown,
   Plus,
   Check,
   CheckCircle2,
@@ -31,9 +30,6 @@ import {
   LogOut,
   Menu,
   X,
-  Sun,
-  Sunset,
-  Moon,
   DoorOpen,
   Store,
   ArrowDownToLine,
@@ -45,6 +41,12 @@ import {
   Pencil,
   Trash2,
   UserRound,
+  Monitor,
+  Tablet,
+  Smartphone,
+  Paintbrush,
+  LayoutGrid,
+  ListChecks,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { ProfileMenu } from './profile-menu';
@@ -54,6 +56,7 @@ import { SocialComposer } from './social-composer';
 import { SocialConnections } from './social-connections';
 import { LogoUpload } from './logo-upload';
 import { PublishWizard } from './publish-wizard';
+import { TodayUpdate } from './today-update';
 import {
   publishChanges,
   scopedSchedule,
@@ -65,9 +68,12 @@ import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
 import {
   defaultSchedule,
+  customizeWidget,
+  widgetAppearanceFor,
   resetWidgetToDefaults,
   formatIntervals,
   getStatus,
+  localDate,
   scheduleSchema,
   type Schedule,
   type Plan,
@@ -104,25 +110,56 @@ type Detail = {
   googleConfigured: boolean;
   billingConfigured: boolean;
 };
+const sidebarSections = [
+  {
+    label: 'Home',
+    showLabel: false,
+    items: [{ id: 'overview', label: 'Home', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Manage',
+    showLabel: true,
+    items: [
+      { id: 'schedule', label: 'Schedule', icon: CalendarDays },
+      { id: 'announcements', label: 'Announcements', icon: Megaphone },
+    ],
+  },
+  {
+    label: 'Customize',
+    showLabel: true,
+    items: [
+      { id: 'widgets', label: 'Website widgets', icon: Code2 },
+      { id: 'social', label: 'Social Studio', icon: Instagram },
+    ],
+  },
+  {
+    label: 'Publishing',
+    showLabel: true,
+    items: [
+      { id: 'integrations', label: 'Connections', icon: Plug },
+      { id: 'activity', label: 'Activity', icon: History },
+    ],
+  },
+];
+const scheduleNavigation = [
+  { id: 'hours', label: 'Usual hours', icon: Clock },
+  { id: 'special', label: 'One-time hours', icon: CalendarDays },
+];
+const settingsNavigation = [{ id: 'brand', label: 'Brand kit', icon: Palette }];
 const navigation = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'hours', label: 'Regular hours', icon: Clock },
-  { id: 'special', label: 'Special hours', icon: CalendarDays },
-  { id: 'announcements', label: 'Announcements', icon: Megaphone },
-  { id: 'widgets', label: 'Website widgets', icon: Code2 },
-  { id: 'social', label: 'Social templates', icon: Instagram },
-  { id: 'brand', label: 'Brand kit', icon: Palette },
-  { id: 'integrations', label: 'Connections', icon: Plug },
-  { id: 'activity', label: 'Activity', icon: History },
+  ...sidebarSections.flatMap((section) => section.items),
+  ...scheduleNavigation,
+  ...settingsNavigation,
 ];
 const titles: Record<string, [string, string]> = {
-  overview: ['Overview', 'Manage your hours and updates.'],
+  overview: ['Home', 'Manage your hours and updates.'],
+  schedule: ['Schedule', 'View or change the hours customers see.'],
   hours: ['Regular hours', 'Set your regular weekly schedule.'],
-  special: ['Special hours', 'Set holiday hours and one-off closures.'],
+  special: ['One-time hours', 'Set holiday hours and one-off closures.'],
   announcements: ['Announcements', 'Share updates on your website.'],
   widgets: ['Website widgets', 'Customize and preview your reusable website widgets.'],
   website: ['Add to your website', 'Install your OpenSync widgets on your website.'],
-  social: ['Social templates', 'Save reusable post and story designs for future updates.'],
+  social: ['Social Studio', 'Create posts and stories or save designs to reuse later.'],
   brand: ['Brand kit', 'Manage reusable identity defaults for widgets and social templates.'],
   integrations: ['Connections', 'Manage publishing destinations and account access.'],
   activity: ['Activity', 'Monitor publishing outcomes and synchronization events.'],
@@ -133,6 +170,7 @@ const titles: Record<string, [string, string]> = {
   help: ['Help', 'Find answers or contact support.'],
 };
 const titleIcons = {
+  schedule: CalendarDays,
   hours: Clock,
   special: CalendarDays,
   announcements: Megaphone,
@@ -232,6 +270,11 @@ export function Dashboard({
     ),
     [step, setStep] = useState(initialLocations[0]?.onboardingStep || 1),
     [widgetType, setWidgetType] = useState<WidgetType>('hours'),
+    [widgetPreset, setWidgetPreset] = useState('modern'),
+    [widgetStudioTab, setWidgetStudioTab] = useState<'appearance' | 'layout' | 'content'>(
+      'appearance',
+    ),
+    [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop'),
     [origin, setOrigin] = useState(''),
     [googleLocations, setGoogleLocations] = useState<
       {
@@ -294,6 +337,129 @@ export function Dashboard({
     liveAnnouncementDraft = liveAnnouncement
       ? announcementDrafts.find((announcement) => announcement.id === liveAnnouncement.id)
       : undefined;
+  const widgetSettings = widgetAppearanceFor(draft.widget, widgetType);
+  const activeWidgetStudioTab =
+    widgetType === 'banner' && widgetStudioTab === 'content' ? 'appearance' : widgetStudioTab;
+  const widgetVisible = draft.widgetVisibility?.[widgetType] !== false;
+  const widgetVisibilityLabels = {
+    hours: 'Show business hours',
+    banner: 'Show announcement banner',
+    status: 'Show live status',
+  };
+  function updateWidgetAppearance(changes: Partial<typeof widgetSettings>) {
+    setWidgetPreset('custom');
+    setDraft((current) => ({
+      ...current,
+      widget: customizeWidget(current.widget, widgetType, changes),
+    }));
+  }
+  function applyWidgetPreset(preset: 'modern' | 'minimal' | 'card' | 'dark') {
+    const shared = {
+      modern: { font: 'system', fontSize: 'auto', radius: 12, alignment: 'left' },
+      minimal: { font: 'auto', fontSize: 'auto', radius: 4, alignment: 'left' },
+      card: { font: 'system', fontSize: 'auto', radius: 14, alignment: 'left' },
+      dark: { font: 'system', fontSize: 'auto', radius: 12, alignment: 'left' },
+    }[preset] as Partial<typeof widgetSettings>;
+    const settings =
+      widgetType === 'banner'
+        ? shared
+        : ({
+            ...shared,
+            accent: preset === 'dark' ? '#a99cff' : '#6a56ff',
+            theme: preset === 'dark' ? 'dark' : 'light',
+            background: preset === 'card' ? '#ffffff' : 'auto',
+            borderColour: preset === 'card' ? '#dfe1ec' : 'auto',
+            borderWidth: preset === 'minimal' ? 0 : 1,
+            compact: preset === 'minimal',
+          } as Partial<typeof widgetSettings>);
+    setWidgetPreset(preset);
+    setDraft((current) => ({
+      ...current,
+      widget: customizeWidget(current.widget, widgetType, settings),
+    }));
+  }
+  const showSampleBanner =
+    tab === 'widgets' &&
+    widgetType === 'banner' &&
+    draft.widgetVisibility?.banner !== false &&
+    !status.announcement;
+  const previewSchedule = showSampleBanner
+    ? {
+        ...draft,
+        announcements: [
+          {
+            ...demoSchedule.announcements[0],
+            title: 'A quick update',
+            message: 'Check our opening hours before your next visit.',
+            start: now,
+            end: '',
+          },
+        ],
+      }
+    : draft;
+  const widgetPreview = tab === 'widgets' && (
+    <div className="preview-panel sticky">
+      <div className="widget-preview-heading">
+        <span className="eyebrow">YOUR WIDGET · DRAFT PREVIEW</span>
+        <div className="preview-device-switcher" role="group" aria-label="Preview size">
+          {(
+            [
+              ['desktop', Monitor, 'Desktop'],
+              ['tablet', Tablet, 'Tablet'],
+              ['mobile', Smartphone, 'Mobile'],
+            ] as const
+          ).map(([device, Icon, label]) => (
+            <button
+              key={device}
+              type="button"
+              className={previewDevice === device ? 'active' : ''}
+              aria-label={`Preview on ${label.toLowerCase()}`}
+              aria-pressed={previewDevice === device}
+              onClick={() => setPreviewDevice(device)}
+            >
+              <Icon size={15} />
+            </button>
+          ))}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (
+              dirty &&
+              !window.confirm(
+                'You have unsaved widget changes. Continue to edit hours? Your changes will remain in this draft.',
+              )
+            )
+              return;
+            void switchTab('hours');
+          }}
+        >
+          <Clock size={14} />
+          Edit hours
+        </Button>
+      </div>
+      <div className={`browser-preview preview-device-${previewDevice}`}>
+        <div className="browser-chrome">
+          <i />
+          <i />
+          <i />
+          <span>yourwebsite.com</span>
+        </div>
+        <div className={`preview-body${widgetVisible ? '' : ' is-hidden'}`}>
+          <Widget schedule={previewSchedule} type={widgetType} now={now} />
+          {!widgetVisible && <p className="muted">Hidden after publishing.</p>}
+        </div>
+      </div>
+      {publishedSchedule && (
+        <details className="published-demo">
+          <summary>{demo ? 'View last published demo' : 'View published version'}</summary>
+          <Widget schedule={publishedSchedule} type={widgetType} now={now} />
+        </details>
+      )}
+    </div>
+  );
   const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1),
     readonly = !demo && detail?.role === 'viewer';
   async function refresh(resetDraft = false) {
@@ -489,6 +655,11 @@ export function Dashboard({
     }
   }
   const [publishScope, setPublishScope] = useState<PublishScope>('all');
+  const [todayUpdate, setTodayUpdate] = useState<{
+    schedule: Schedule;
+    date: string;
+    intervals: ReturnType<typeof getStatus>['today'];
+  }>();
   function openPublish(scope?: string) {
     const pageScope = scope ?? new URLSearchParams(window.location.search).get('tab') ?? tab;
     setPublishScope(
@@ -496,8 +667,10 @@ export function Dashboard({
     );
     setModal('publish');
   }
-  async function publish(includeGoogle: boolean) {
-    const v = dirty ? await save() : version;
+  async function publish(includeGoogle: boolean, value = draft, scope = publishScope) {
+    const hasUnsavedChanges = JSON.stringify(value) !== JSON.stringify(saved);
+    const v = hasUnsavedChanges ? await save(value) : version;
+    if (value !== draft) setDraft(value);
     if (demo) {
       const history = [
         {
@@ -507,19 +680,19 @@ export function Dashboard({
         },
         ...demoHistory,
       ];
-      const snapshot = scopedSchedule(draft, published, publishScope);
+      const snapshot = scopedSchedule(value, published, scope);
       setPublished(structuredClone(snapshot));
       setPubVersion(pubVersion + 1);
       setDemoHistory(history);
-      persistDemo(draft, snapshot, pubVersion + 1, history);
+      persistDemo(value, snapshot, pubVersion + 1, history);
       await new Promise((resolve) => setTimeout(resolve, 450));
     } else {
       const key =
         sessionStorage.getItem(
-          `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
+          `publish-${selected}-${v}-${pubVersion}-${scope}-${includeGoogle}`,
         ) || crypto.randomUUID();
       sessionStorage.setItem(
-        `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
+        `publish-${selected}-${v}-${pubVersion}-${scope}-${includeGoogle}`,
         key,
       );
       await request('/api/manage', {
@@ -527,14 +700,12 @@ export function Dashboard({
         id: selected,
         version: v,
         key,
-        scope: publishScope,
+        scope,
         google: includeGoogle,
         publishedVersion: pubVersion,
       });
       await refresh(true);
-      sessionStorage.removeItem(
-        `publish-${selected}-${v}-${pubVersion}-${publishScope}-${includeGoogle}`,
-      );
+      sessionStorage.removeItem(`publish-${selected}-${v}-${pubVersion}-${scope}-${includeGoogle}`);
     }
     setOnboarding(false);
     notify(
@@ -616,25 +787,31 @@ export function Dashboard({
     );
     return result.trial;
   }
+  const statusEmbedStyle = 'width:min(100%, 420px);border-radius:12px;overflow:hidden';
+  const statusPlacement =
+    'Place inside an existing footer column, below the business description if it fits there';
   const snippet = `<!-- Place directly above the site header -->
 <div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="banner"></div>
 
 <!-- Place in the business hours section -->
 <div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="hours"></div>
 
-<!-- Place in the site footer -->
-<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="status"></div>
+<!-- ${statusPlacement} -->
+<div data-opensync="${selected || 'YOUR_LOCATION_ID'}" data-type="status" style="${statusEmbedStyle}"></div>
 
 <!-- Load OpenSync once, after the three placements -->
 <script src="${origin}/embed.js" defer></script>`,
     aiIntegrationPrompt = `Integrate all three OpenSync website widgets into my existing website. You have access to the website's codebase, so inspect its framework, layout, components, and styling before making changes.
 
-Place the announcement banner directly above the site header, the business hours widget in the most useful hours or contact section, and the live status badge in the site footer. Preserve the existing visual design, responsiveness, accessibility, and site behavior. Use the exact OpenSync embed code below; do not change its location ID, data attributes, widget types, or script URL:
+Place the announcement banner directly above the site header and the business hours widget in the most useful hours or contact section. Integrate the live status badge inside the existing footer layout where it fits naturally—prefer the business identity, contact, hours, or utility column. It must read as a compact footer item, not as a new full-width band above or below the footer, and it must not sit below the copyright row. Preserve the existing visual design, responsiveness, accessibility, and site behavior. Use the exact OpenSync embed code below; do not change its location ID, data attributes, widget types, or script URL:
 
 ${snippet}
 
 Implementation requirements:
 - Keep the three embed containers in their appropriate site regions; they do not need to remain adjacent in the source code.
+- Keep the status container within the footer's existing content wrapper or grid. Reuse an existing footer column when possible; otherwise add a compact column that follows the footer's current spacing and alignment. Do not create a separate edge-to-edge section for it.
+- Preserve the status container's responsive width, rounded corners, and clipping. The embed supplies its own top spacing and transparent surround so the site's footer background can show through.
+- Reuse the existing status placement if OpenSync is already installed. Move it into the chosen footer column and remove any empty row left behind.
 - Load the OpenSync script only once, even if the site uses reusable components or client-side navigation.
 - Follow the website's existing conventions instead of introducing a new framework or styling system.
 - Ensure every placement works on mobile and desktop without covering navigation or important content.
@@ -662,8 +839,9 @@ Implementation requirements:
       window.location.href = result.url;
     });
   }
-  const upcoming = draft.exceptions
-    .filter((e) => e.end >= status.date)
+  const liveStatus = publishedSchedule && getStatus(publishedSchedule, new Date(now));
+  const upcoming = (publishedSchedule?.exceptions || [])
+    .filter((e) => e.end >= (liveStatus?.date ?? status.date))
     .sort((a, b) => a.start.localeCompare(b.start));
   const history = demo ? demoHistory : detail?.history || [],
     filteredJobs = (detail?.jobs || []).filter((job) => {
@@ -676,16 +854,51 @@ Implementation requirements:
         statusMatches && (destinationFilter === 'all' || job.destination === destinationFilter)
       );
     });
-  const localHour = Number(
-    new Intl.DateTimeFormat('en', {
-      hour: 'numeric',
-      hourCycle: 'h23',
-      timeZone: draft.timezone,
-    }).format(new Date(now)),
-  );
-  const greeting =
-    localHour < 12 ? 'Good morning' : localHour < 18 ? 'Good afternoon' : 'Good evening';
-  const GreetingIcon = localHour < 6 || localHour >= 22 ? Moon : localHour >= 18 ? Sunset : Sun;
+  const quickDisabled = busy || readonly || (!demo && detail?.location.id !== selected);
+  const googleHours =
+    !demo &&
+    detail?.connection?.status === 'connected' &&
+    !!detail.connection.remoteId &&
+    plan !== 'free';
+  const quickNeedsReview =
+    !!todayUpdate &&
+    (!publishedSchedule ||
+      todayUpdate.schedule.timezone !== publishedSchedule.timezone ||
+      publishChanges(todayUpdate.schedule, publishedSchedule, 'hours').length > 0 ||
+      publishChanges(todayUpdate.schedule, publishedSchedule, 'special').length > 0);
+  function openToday() {
+    setError('');
+    const today = getStatus(draft);
+    setTodayUpdate({
+      schedule: draft,
+      date: today.date,
+      intervals: today.today.sort((a, b) => a.open.localeCompare(b.open)),
+    });
+    setModal('today-update');
+  }
+  function confirmToday(value: Schedule, date: string) {
+    if (quickDisabled) return;
+    if (localDate(value.timezone) !== date) {
+      setError('The date has changed. Close this window and start a new update for today.');
+      return;
+    }
+    if (quickNeedsReview) {
+      setDraft(value);
+      openPublish(
+        publishedSchedule && value.timezone === publishedSchedule.timezone ? 'special' : 'all',
+      );
+      return;
+    }
+    void act(async () => {
+      await publish(googleHours, value, 'special');
+      setModal('');
+      notify(
+        demo
+          ? 'Demo published. Today’s hours were updated in your preview.'
+          : 'Today’s hours were published to your website widgets. Check Activity for delivery status.',
+      );
+    });
+  }
   const PageIcon = titleIcons[tab as keyof typeof titleIcons];
   const goPublish = (value: Schedule) => {
     setDraft(value);
@@ -823,22 +1036,23 @@ Implementation requirements:
           }}
           onCreate={() => !dirty || confirm('Discard unsaved changes and create a new workspace?')}
         />
-        {[
-          { label: 'Overview', items: navigation.slice(0, 1), hideLabel: true },
-          { label: 'Manage', items: navigation.slice(1, 4) },
-          { label: 'Customize', items: navigation.slice(4, 7) },
-          { label: 'Publishing', items: navigation.slice(7) },
-        ].map((group) => (
-          <div className="nav-group" key={group.label}>
-            {!group.hideLabel && <div className="nav-label">{group.label}</div>}
-            <nav aria-label={group.label}>
-              {group.items.map((item) => (
+        {sidebarSections.map((section) => (
+          <div className="nav-group" key={section.label}>
+            {section.showLabel && <div className="nav-label">{section.label}</div>}
+            <nav aria-label={section.label}>
+              {section.items.map((item) => (
                 <button
                   key={item.id}
                   aria-label={item.label}
                   title={item.label}
                   aria-current={!onboarding && tab === item.id ? 'page' : undefined}
-                  className={`${!onboarding && tab === item.id ? 'active' : ''} nav-${item.id}`}
+                  className={`${
+                    !onboarding &&
+                    (tab === item.id ||
+                      (item.id === 'schedule' && ['hours', 'special'].includes(tab)))
+                      ? 'active'
+                      : ''
+                  } nav-${item.id}`}
                   onClick={() => switchTab(item.id)}
                 >
                   <item.icon size={18} />
@@ -850,16 +1064,6 @@ Implementation requirements:
         ))}
         <div className="sidebar-bottom">
           <nav aria-label="Account">
-            <button
-              aria-label="Plans & billing"
-              title="Plans & billing"
-              aria-current={tab === 'billing' ? 'page' : undefined}
-              className={tab === 'billing' ? 'active' : ''}
-              onClick={() => switchTab('billing')}
-            >
-              <CreditCard size={18} />
-              <span className="sidebar-text">Plans & billing</span>
-            </button>
             <button
               aria-label="Settings"
               title="Settings"
@@ -894,7 +1098,6 @@ Implementation requirements:
               <strong>{demo ? 'Jamie Davis' : email || 'Your account'}</strong>
               <small>{demo ? 'Demo workspace' : `${planLabel} plan`}</small>
             </div>
-            <ChevronsUpDown size={14} />
           </button>
         </div>
       </aside>
@@ -972,7 +1175,7 @@ Implementation requirements:
           </div>
         )}
         <main className="dashboard-main" id="main-content">
-          {error && (
+          {error && modal !== 'today-update' && (
             <div className="error-banner" role="alert">
               <AlertCircle size={18} />
               <span>{error}</span>
@@ -1228,18 +1431,33 @@ Implementation requirements:
                 {['hours', 'special', 'widgets', 'brand', 'settings'].includes(tab) ||
                 (tab === 'overview' && (dirty || unpublished)) ? (
                   <div className="heading-actions">
-                    <Button
-                      disabled={
-                        busy ||
-                        readonly ||
-                        (!dirty && !unpublished) ||
-                        (tab === 'hours' && !hoursHaveChanges)
-                      }
-                      onClick={() => openPublish()}
-                    >
-                      <Send size={16} />
-                      Publish changes
-                    </Button>
+                    {tab === 'widgets' ? (
+                      <Button
+                        disabled={busy || readonly || !dirty}
+                        onClick={() =>
+                          act(async () => {
+                            await save();
+                            notify('Widget changes saved to your draft.');
+                          })
+                        }
+                      >
+                        <Check size={16} />
+                        Save changes
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled={
+                          busy ||
+                          readonly ||
+                          (!dirty && !unpublished) ||
+                          (tab === 'hours' && !hoursHaveChanges)
+                        }
+                        onClick={() => openPublish()}
+                      >
+                        <Send size={16} />
+                        Publish changes
+                      </Button>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1271,22 +1489,20 @@ Implementation requirements:
               {tab === 'overview' && (
                 <section className={styles.panel} aria-label="Business overview">
                   <div className={styles.greeting}>
-                    <h1>
-                      {greeting}
-                      {demo ? ', Jamie' : ''} <GreetingIcon size={25} aria-hidden="true" />
-                    </h1>
-                    <p>Here&apos;s what&apos;s happening with your business today.</p>
+                    <h1>{draft.name}</h1>
                   </div>
                   <div className={styles.summaries}>
                     <section className={styles.summary}>
-                      <span>
-                        Business status{dirty || unpublished ? ' \u00b7 Draft preview' : ''}
-                      </span>
+                      <span>What customers see</span>
                       <strong>
-                        <CheckCircle2 size={16} className={status.open ? styles.open : ''} />
-                        {status.open ? 'Open now' : 'Closed now'}
+                        <CheckCircle2 size={16} className={liveStatus?.open ? styles.open : ''} />
+                        {liveStatus
+                          ? liveStatus.open
+                            ? 'Open now'
+                            : 'Closed now'
+                          : 'Hours haven’t been published'}
                       </strong>
-                      <p>{status.nextLabel}</p>
+                      {liveStatus && <p>{liveStatus.nextLabel}</p>}
                     </section>
                     <button className={styles.summary} onClick={() => switchTab('special')}>
                       <span>Next change</span>
@@ -1304,33 +1520,60 @@ Implementation requirements:
                               timeZone: 'UTC',
                             }).format(new Date(upcoming[0].start))}
                           </>
+                        ) : liveStatus ? (
+                          'Your usual hours apply'
                         ) : (
-                          'Your regular schedule applies'
+                          'No hours published yet'
                         )}
                       </p>
                     </button>
                   </div>
                   <section className={styles.actions}>
-                    <h2>Quick actions</h2>
+                    <h2>What changed?</h2>
                     <div className={styles.actionGrid}>
-                      <button onClick={() => switchTab('hours')} disabled={readonly}>
-                        <Clock size={20} />
-                        <span>Change hours</span>
-                      </button>
-                      <button onClick={() => setModal('Close early')} disabled={readonly}>
+                      <button
+                        className={styles.primaryAction}
+                        onClick={openToday}
+                        disabled={quickDisabled}
+                      >
                         <DoorOpen size={20} />
-                        <span>Close early</span>
+                        <span>
+                          Update today<small>Close early, open late, or close for the day</small>
+                        </span>
                       </button>
-                      <button onClick={() => setModal('Post announcement')} disabled={readonly}>
-                        <Megaphone size={20} />
-                        <span>Post an update</span>
-                      </button>
-                      <button onClick={() => setModal('Add special hours')} disabled={readonly}>
+                      <button
+                        onClick={() => setModal('Plan a future change')}
+                        disabled={quickDisabled}
+                      >
                         <CalendarDays size={20} />
-                        <span>Holiday hours</span>
+                        <span>
+                          Plan a future change
+                          <small>Holiday hours, vacations, or a one-time change</small>
+                        </span>
+                      </button>
+                      <button onClick={() => switchTab('hours')} disabled={quickDisabled}>
+                        <Clock size={20} />
+                        <span>
+                          Change usual hours<small>Edit your weekly schedule</small>
+                        </span>
+                      </button>
+                      <button onClick={() => setModal('quick-message')} disabled={quickDisabled}>
+                        <Megaphone size={20} />
+                        <span>
+                          Tell customers something<small>Put a message on your website</small>
+                        </span>
                       </button>
                     </div>
                   </section>
+                </section>
+              )}
+              {tab === 'schedule' && (
+                <section className={styles.actionGrid} aria-label="Schedule options">
+                  {scheduleNavigation.map((item) => (
+                    <button key={item.id} onClick={() => switchTab(item.id)}>
+                      <item.icon size={20} /> {item.label}
+                    </button>
+                  ))}
                 </section>
               )}
               {tab === 'hours' && (
@@ -1559,7 +1802,9 @@ Implementation requirements:
                 </div>
               )}
               {tab === 'widgets' && (
-                <div className="two-columns widget-config">
+                <div
+                  className={`two-columns widget-config${widgetType === 'banner' ? ' widget-config-banner' : ''}`}
+                >
                   <div
                     className="widget-type-tabs"
                     role="group"
@@ -1574,145 +1819,262 @@ Implementation requirements:
                         className={widgetType === type ? 'selected' : ''}
                         onClick={() => setWidgetType(type)}
                       >
-                        {type === 'hours' ? 'Hours' : type === 'banner' ? 'Banner' : 'Status'}
+                        {type === 'hours' ? (
+                          <>
+                            <CalendarDays size={15} /> Hours
+                          </>
+                        ) : type === 'banner' ? (
+                          <>
+                            <Megaphone size={15} /> Banner
+                          </>
+                        ) : (
+                          <>
+                            <Clock size={15} /> Status
+                          </>
+                        )}
                       </button>
                     ))}
                   </div>
                   <div>
-                    <section className="card padded">
-                      <h3 className="pro-feature-title">
-                        <ProBadge /> Widget appearance
-                      </h3>
-                      <p className="muted">
-                        Customise with Pro, or use the included Free defaults.
+                    <section className="card padded widget-studio-card">
+                      <div className="widget-settings-heading">
+                        <h3 className="pro-feature-title">
+                          {plan === 'free' && <ProBadge />} Design studio
+                          <span className="sr-only">Widget appearance</span>
+                        </h3>
+                        <button
+                          type="button"
+                          className="widget-visibility-switch"
+                          role="switch"
+                          aria-label={widgetVisibilityLabels[widgetType]}
+                          aria-checked={widgetVisible}
+                          disabled={readonly}
+                          onClick={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              widgetVisibility: {
+                                ...(current.widgetVisibility ?? {
+                                  hours: true,
+                                  banner: true,
+                                  status: true,
+                                }),
+                                [widgetType]: current.widgetVisibility?.[widgetType] === false,
+                              },
+                            }))
+                          }
+                        >
+                          <span className="widget-visibility-track" aria-hidden="true" />
+                          <span className="widget-visibility-state" aria-hidden="true">
+                            {widgetVisible ? 'Show' : 'Hide'}
+                          </span>
+                        </button>
+                      </div>
+                      <p className="widget-studio-intro">
+                        Customize the look and feel of your{' '}
+                        {widgetType === 'hours' ? 'hours' : widgetType} widget.
                       </p>
-                      <fieldset className="widget-visibility">
-                        <legend>Visible on your website</legend>
-                        <label className="check-label">
-                          <input
-                            type="checkbox"
-                            checked={draft.widgetVisibility?.[widgetType] ?? true}
-                            disabled={readonly}
-                            onChange={(event) =>
-                              setDraft({
-                                ...draft,
-                                widgetVisibility: {
-                                  ...(draft.widgetVisibility || {
-                                    hours: true,
-                                    banner: true,
-                                    status: true,
-                                  }),
-                                  [widgetType]: event.target.checked,
-                                },
-                              })
-                            }
-                          />
-                          {widgetType === 'hours'
-                            ? 'Show business hours'
-                            : widgetType === 'banner'
-                              ? 'Show announcement banner'
-                              : 'Show live status'}
-                        </label>
-                        <p className="muted">
-                          Disabled widgets collapse automatically on your live site after you
-                          publish.
-                        </p>
-                      </fieldset>
-                      <div className="form-grid">
-                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                          <span className="pro-field-label">
-                            <ProBadge /> Accent colour
-                          </span>
-                          <input
-                            type="color"
+                      <div className="widget-presets-heading">
+                        <div>
+                          <strong>Style presets</strong>
+                          <span>Quick starts you can customize.</span>
+                        </div>
+                      </div>
+                      <div className="widget-presets" role="group" aria-label="Style presets">
+                        {(['modern', 'minimal', 'card', 'dark'] as const).map((preset) => (
+                          <button
+                            type="button"
+                            key={preset}
+                            className={`preset-${preset}${widgetPreset === preset ? ' selected' : ''}`}
+                            aria-pressed={widgetPreset === preset}
                             disabled={readonly || plan === 'free'}
-                            value={draft.widget.accent}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: { ...draft.widget, accent: e.target.value },
-                              })
-                            }
-                          />
-                        </label>
-                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                          <span className="pro-field-label">
-                            <ProBadge /> Appearance
-                          </span>
-                          <select
-                            disabled={readonly || plan === 'free'}
-                            value={draft.widget.theme}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: {
-                                  ...draft.widget,
-                                  theme: e.target.value as 'light' | 'dark',
-                                },
-                              })
-                            }
+                            onClick={() => applyWidgetPreset(preset)}
                           >
-                            <option value="light">Light</option>
-                            <option value="dark">Dark</option>
-                          </select>
-                        </label>
-                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                          <span className="pro-field-label">
-                            <ProBadge /> Background colour
-                          </span>
-                          <div className="widget-colour-control">
+                            <span className="preset-preview" aria-hidden="true">
+                              <i />
+                              <i />
+                              <i />
+                            </span>
+                            <strong>{preset.charAt(0).toUpperCase() + preset.slice(1)}</strong>
+                            {widgetPreset === preset && <Check size={13} aria-hidden="true" />}
+                          </button>
+                        ))}
+                      </div>
+                      <div
+                        className="widget-studio-tabs"
+                        role="group"
+                        aria-label="Widget settings groups"
+                      >
+                        {(
+                          [
+                            ['appearance', Paintbrush, 'Appearance'],
+                            ['layout', LayoutGrid, 'Layout'],
+                            ['content', ListChecks, 'Content'],
+                          ] as const
+                        )
+                          .filter(([id]) => widgetType !== 'banner' || id !== 'content')
+                          .map(([id, Icon, label]) => (
+                            <button
+                              type="button"
+                              key={id}
+                              aria-pressed={activeWidgetStudioTab === id}
+                              className={activeWidgetStudioTab === id ? 'active' : ''}
+                              onClick={() => setWidgetStudioTab(id)}
+                            >
+                              <Icon size={14} /> {label}
+                            </button>
+                          ))}
+                      </div>
+                      <div className="form-grid" hidden={activeWidgetStudioTab !== 'appearance'}>
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Accent colour
+                            </span>
+                            <div className="widget-accent-control">
+                              <input
+                                type="color"
+                                disabled={readonly || plan === 'free'}
+                                value={widgetSettings.accent}
+                                onChange={(e) => updateWidgetAppearance({ accent: e.target.value })}
+                              />
+                              <span>{widgetSettings.accent.toUpperCase()}</span>
+                            </div>
+                          </label>
+                        )}
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Appearance
+                            </span>
                             <select
-                              aria-label="Background colour mode"
                               disabled={readonly || plan === 'free'}
-                              value={draft.widget.background === 'auto' ? 'auto' : 'custom'}
+                              value={widgetSettings.theme}
                               onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  widget: {
-                                    ...draft.widget,
-                                    background:
-                                      e.target.value === 'auto'
-                                        ? 'auto'
-                                        : draft.widget.theme === 'dark'
-                                          ? '#222735'
-                                          : '#ffffff',
-                                  },
+                                updateWidgetAppearance({
+                                  theme: e.target.value as 'light' | 'dark',
                                 })
                               }
                             >
-                              <option value="auto">Auto · use appearance</option>
-                              <option value="custom">Custom</option>
+                              <option value="light">Light</option>
+                              <option value="dark">Dark</option>
                             </select>
-                            {draft.widget.background !== 'auto' && (
-                              <input
-                                type="color"
-                                aria-label="Custom background colour"
+                          </label>
+                        )}
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Background colour
+                            </span>
+                            <div className="widget-colour-control">
+                              <select
+                                aria-label="Background colour mode"
                                 disabled={readonly || plan === 'free'}
-                                value={draft.widget.background}
+                                value={
+                                  widgetSettings.background === 'auto' ||
+                                  widgetSettings.background === 'none'
+                                    ? widgetSettings.background
+                                    : 'custom'
+                                }
                                 onChange={(e) =>
-                                  setDraft({
-                                    ...draft,
-                                    widget: { ...draft.widget, background: e.target.value },
+                                  updateWidgetAppearance({
+                                    background:
+                                      e.target.value === 'auto'
+                                        ? 'auto'
+                                        : e.target.value === 'none'
+                                          ? 'none'
+                                          : widgetSettings.theme === 'dark'
+                                            ? '#222735'
+                                            : '#ffffff',
                                   })
                                 }
-                              />
-                            )}
-                          </div>
-                        </label>
+                              >
+                                <option value="auto">Auto · use appearance</option>
+                                <option value="none">None · transparent</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                              {widgetSettings.background !== 'auto' &&
+                                widgetSettings.background !== 'none' && (
+                                  <input
+                                    type="color"
+                                    aria-label="Custom background colour"
+                                    disabled={readonly || plan === 'free'}
+                                    value={widgetSettings.background}
+                                    onChange={(e) =>
+                                      updateWidgetAppearance({ background: e.target.value })
+                                    }
+                                  />
+                                )}
+                            </div>
+                          </label>
+                        )}
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Border colour
+                            </span>
+                            <div className="widget-colour-control">
+                              <select
+                                aria-label="Border colour mode"
+                                disabled={readonly || plan === 'free'}
+                                value={widgetSettings.borderColour === 'auto' ? 'auto' : 'custom'}
+                                onChange={(e) =>
+                                  updateWidgetAppearance({
+                                    borderColour:
+                                      e.target.value === 'auto'
+                                        ? 'auto'
+                                        : widgetSettings.theme === 'dark'
+                                          ? '#343b4d'
+                                          : '#e7e9ee',
+                                  })
+                                }
+                              >
+                                <option value="auto">Auto · use appearance</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                              {widgetSettings.borderColour !== 'auto' && (
+                                <input
+                                  type="color"
+                                  aria-label="Custom border colour"
+                                  disabled={readonly || plan === 'free'}
+                                  value={widgetSettings.borderColour}
+                                  onChange={(e) =>
+                                    updateWidgetAppearance({ borderColour: e.target.value })
+                                  }
+                                />
+                              )}
+                            </div>
+                          </label>
+                        )}
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Border thickness
+                            </span>
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={String(widgetSettings.borderWidth)}
+                              onChange={(e) =>
+                                updateWidgetAppearance({ borderWidth: Number(e.target.value) })
+                              }
+                            >
+                              {Array.from({ length: 9 }, (_, width) => (
+                                <option key={width} value={width}>
+                                  {width === 0 ? 'None' : `${width}px`}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            <ProBadge /> Typography
+                            {plan === 'free' && <ProBadge />} Typography
                           </span>
                           <select
                             disabled={readonly || plan === 'free'}
-                            value={draft.widget.font}
+                            value={widgetSettings.font}
                             onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: {
-                                  ...draft.widget,
-                                  font: e.target.value as Schedule['widget']['font'],
-                                },
+                              updateWidgetAppearance({
+                                font: e.target.value as Schedule['widget']['font'],
                               })
                             }
                           >
@@ -1726,19 +2088,15 @@ Implementation requirements:
                         </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            <ProBadge /> Font size
+                            {plan === 'free' && <ProBadge />} Font size
                           </span>
                           <select
                             disabled={readonly || plan === 'free'}
-                            value={String(draft.widget.fontSize)}
+                            value={String(widgetSettings.fontSize)}
                             onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: {
-                                  ...draft.widget,
-                                  fontSize:
-                                    e.target.value === 'auto' ? 'auto' : Number(e.target.value),
-                                },
+                              updateWidgetAppearance({
+                                fontSize:
+                                  e.target.value === 'auto' ? 'auto' : Number(e.target.value),
                               })
                             }
                           >
@@ -1752,36 +2110,34 @@ Implementation requirements:
                         </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            <ProBadge /> Corner radius
+                            {plan === 'free' && <ProBadge />} Corner radius
                           </span>
-                          <input
-                            type="range"
-                            disabled={readonly || plan === 'free'}
-                            min={0}
-                            max={32}
-                            value={draft.widget.radius}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: { ...draft.widget, radius: Number(e.target.value) },
-                              })
-                            }
-                          />
+                          <div className="widget-range-control">
+                            <input
+                              type="range"
+                              disabled={readonly || plan === 'free'}
+                              min={0}
+                              max={32}
+                              value={widgetSettings.radius}
+                              onChange={(e) =>
+                                updateWidgetAppearance({ radius: Number(e.target.value) })
+                              }
+                            />
+                            <span>{widgetSettings.radius} px</span>
+                          </div>
                         </label>
+                      </div>
+                      <div className="form-grid" hidden={activeWidgetStudioTab !== 'layout'}>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
-                            <ProBadge /> Alignment
+                            {plan === 'free' && <ProBadge />} Alignment
                           </span>
                           <select
                             disabled={readonly || plan === 'free'}
-                            value={draft.widget.alignment}
+                            value={widgetSettings.alignment}
                             onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: {
-                                  ...draft.widget,
-                                  alignment: e.target.value as 'left' | 'center',
-                                },
+                              updateWidgetAppearance({
+                                alignment: e.target.value as 'left' | 'center',
                               })
                             }
                           >
@@ -1789,55 +2145,74 @@ Implementation requirements:
                             <option value="center">Centre</option>
                           </select>
                         </label>
-                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
-                          <span className="pro-field-label">
-                            <ProBadge /> Layout
-                          </span>
-                          <select
-                            disabled={readonly || plan === 'free'}
-                            value={draft.widget.compact ? 'compact' : 'full'}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                widget: { ...draft.widget, compact: e.target.value === 'compact' },
-                              })
-                            }
-                          >
-                            <option value="full">Full</option>
-                            <option value="compact">Compact</option>
-                          </select>
-                        </label>
+                        {widgetType !== 'banner' && (
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Layout
+                            </span>
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.compact ? 'compact' : 'full'}
+                              onChange={(e) =>
+                                updateWidgetAppearance({ compact: e.target.value === 'compact' })
+                              }
+                            >
+                              <option value="full">Full</option>
+                              <option value="compact">Compact</option>
+                            </select>
+                          </label>
+                        )}
+                        {widgetType === 'hours' && (
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            {plan === 'free' && <ProBadge />}
+                            <input
+                              type="checkbox"
+                              checked={widgetSettings.showDividers !== false}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ showDividers: event.target.checked })
+                              }
+                            />
+                            Show section dividers
+                          </label>
+                        )}
                       </div>
-                      <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
-                        <ProBadge />
-                        <input
-                          type="checkbox"
-                          checked={draft.widget.showName}
-                          disabled={readonly || plan === 'free'}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              widget: { ...draft.widget, showName: e.target.checked },
-                            })
-                          }
-                        />
-                        Show business name
-                      </label>
-                      {widgetType === 'hours' && (
+                      {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
+                        <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                          {plan === 'free' && <ProBadge />}
+                          <input
+                            type="checkbox"
+                            checked={widgetSettings.showName}
+                            disabled={readonly || plan === 'free'}
+                            onChange={(e) => updateWidgetAppearance({ showName: e.target.checked })}
+                          />
+                          Show business name
+                        </label>
+                      )}
+                      {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
+                        <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                          {plan === 'free' && <ProBadge />}
+                          <input
+                            type="checkbox"
+                            checked={widgetSettings.showBranding !== false}
+                            disabled={readonly || plan === 'free'}
+                            onChange={(event) =>
+                              updateWidgetAppearance({ showBranding: event.target.checked })
+                            }
+                          />
+                          Show OpenSync branding
+                        </label>
+                      )}
+                      {activeWidgetStudioTab === 'content' && widgetType === 'hours' && (
                         <fieldset className="widget-visibility widget-content-options">
-                          <legend>
-                            <ProBadge /> Full hours content
-                          </legend>
+                          <legend>{plan === 'free' && <ProBadge />} Full hours content</legend>
                           <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
                             <input
                               type="checkbox"
-                              checked={draft.widget.highlightToday !== false}
+                              checked={widgetSettings.highlightToday !== false}
                               disabled={readonly || plan === 'free'}
                               onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  widget: { ...draft.widget, highlightToday: e.target.checked },
-                                })
+                                updateWidgetAppearance({ highlightToday: e.target.checked })
                               }
                             />
                             Highlight today&apos;s hours
@@ -1845,13 +2220,10 @@ Implementation requirements:
                           <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
                             <input
                               type="checkbox"
-                              checked={draft.widget.showStatus !== false}
+                              checked={widgetSettings.showStatus !== false}
                               disabled={readonly || plan === 'free'}
                               onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  widget: { ...draft.widget, showStatus: e.target.checked },
-                                })
+                                updateWidgetAppearance({ showStatus: e.target.checked })
                               }
                             />
                             Show current status
@@ -1859,13 +2231,10 @@ Implementation requirements:
                           <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
                             <input
                               type="checkbox"
-                              checked={draft.widget.collapsible !== false}
+                              checked={widgetSettings.collapsible !== false}
                               disabled={readonly || plan === 'free'}
                               onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  widget: { ...draft.widget, collapsible: e.target.checked },
-                                })
+                                updateWidgetAppearance({ collapsible: e.target.checked })
                               }
                             />
                             Let visitors collapse hours
@@ -1890,44 +2259,7 @@ Implementation requirements:
                       )}
                     </section>
                   </div>
-                  <div className="preview-panel sticky">
-                    <span className="eyebrow">YOUR WIDGET · DRAFT PREVIEW</span>
-                    <div className="browser-preview">
-                      <div className="browser-chrome">
-                        <i />
-                        <i />
-                        <i />
-                        <span>yourwebsite.com</span>
-                      </div>
-                      <div className="preview-body">
-                        <Widget schedule={draft} type={widgetType} now={now} />
-                        {draft.widgetVisibility?.[widgetType] === false && (
-                          <p className="muted">
-                            This widget is hidden and will collapse on your live website after you
-                            publish.
-                          </p>
-                        )}
-                        {widgetType === 'banner' &&
-                          (draft.widgetVisibility?.banner ?? true) &&
-                          !status.announcement && (
-                            <p className="muted">
-                              Add an active announcement to preview your banner.
-                            </p>
-                          )}
-                      </div>
-                    </div>
-                    <small>
-                      Preview updates as you edit. Your live website updates when you publish.
-                    </small>
-                    {publishedSchedule && (
-                      <details className="published-demo">
-                        <summary>
-                          {demo ? 'View last published demo' : 'View published version'}
-                        </summary>
-                        <Widget schedule={publishedSchedule} type={widgetType} now={now} />
-                      </details>
-                    )}
-                  </div>
+                  {widgetPreview}
                 </div>
               )}
               {tab === 'website' && (
@@ -1941,7 +2273,8 @@ Implementation requirements:
                         <h2>Make it part of your website.</h2>
                         <p className="muted">
                           Install all three placements once. OpenSync will show or hide each one
-                          from your published widget settings.
+                          from your published widget settings. The live widgets also use your
+                          published appearance, including theme and density.
                         </p>
                       </div>
                     </div>
@@ -1954,7 +2287,8 @@ Implementation requirements:
                         <strong>Add each placement</strong>
                         <span>
                           Put the banner above your header, hours in your contact or hours section,
-                          and status in your footer.
+                          and status inside an existing footer column where it fits naturally—not in
+                          a separate full-width row.
                         </span>
                       </li>
                       <li>
@@ -2002,8 +2336,8 @@ Implementation requirements:
 <!-- Place in the business hours section -->
 <iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=hours" title="Business hours" style="width:100%;height:590px;border:0" loading="lazy"></iframe>
 
-<!-- Place in the site footer -->
-<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=status" title="Business status" style="width:100%;height:110px;border:0" loading="lazy"></iframe>`}</pre>
+<!-- ${statusPlacement} -->
+<iframe src="${origin}/embed/${selected || 'YOUR_LOCATION_ID'}?type=status" title="Business status" style="${statusEmbedStyle};display:block;height:110px;border:0" loading="lazy"></iframe>`}</pre>
                       <p className="muted">
                         Allow {origin} in your site’s frame-src and script-src policies. For a top
                         banner, install above your header. For floating placement, put the embed
@@ -2046,7 +2380,7 @@ Implementation requirements:
                       </label>
                       <label className={plan === 'free' ? 'pro-locked' : undefined}>
                         <span className="pro-field-label">
-                          <ProBadge /> Primary brand colour
+                          {plan === 'free' && <ProBadge />} Primary brand colour
                         </span>
                         <input
                           type="color"
@@ -2063,7 +2397,7 @@ Implementation requirements:
                       </label>
                       <label className={plan === 'free' ? 'pro-locked' : undefined}>
                         <span className="pro-field-label">
-                          <ProBadge /> Widget typography
+                          {plan === 'free' && <ProBadge />} Widget typography
                         </span>
                         <select
                           value={draft.widget.font}
@@ -2122,9 +2456,7 @@ Implementation requirements:
                     <section className="card padded">
                       <div className="section-heading">
                         <span className="google-g">G</span>
-                        <span className="pill">
-                          <ProBadge /> Pro
-                        </span>
+                        <span className="pill">{plan === 'free' && <ProBadge />} Pro</span>
                       </div>
                       <h2>Google Business Profile</h2>
                       <p className="muted">
@@ -2139,7 +2471,7 @@ Implementation requirements:
                             : 'Setup required: Google credentials and approved Business Profile API access.'}
                       </div>
                       <Button
-                        disabled={busy || (!demo && !detail?.googleConfigured)}
+                        disabled={plan === 'free' || busy || (!demo && !detail?.googleConfigured)}
                         onClick={connect}
                       >
                         {detail?.connection ? 'Reconnect Google' : 'Connect Google'}
@@ -2149,6 +2481,7 @@ Implementation requirements:
                         <>
                           <Button
                             variant="outline"
+                            disabled={plan === 'free' || busy}
                             onClick={() =>
                               act(async () => {
                                 const r = await fetch(`/api/google/locations?id=${selected}`);
@@ -2162,6 +2495,7 @@ Implementation requirements:
                           </Button>
                           <Button
                             variant="ghost"
+                            disabled={busy}
                             onClick={() => {
                               if (confirm('Disconnect Google and revoke this authorization?'))
                                 void act(async () => {
@@ -2189,7 +2523,7 @@ Implementation requirements:
                             </select>
                           </label>
                           <Button
-                            disabled={!remote || busy}
+                            disabled={plan === 'free' || !remote || busy}
                             onClick={() =>
                               act(async () => {
                                 await request('/api/google/locations', {
@@ -2220,6 +2554,7 @@ Implementation requirements:
                             </p>
                             <Button
                               variant="outline"
+                              disabled={plan === 'free'}
                               onClick={() => {
                                 const g = googleLocations.find((l) => l.name === remote);
                                 if (
@@ -2500,9 +2835,7 @@ Implementation requirements:
                         className={`card price-card ${p.id === 'pro' ? 'featured' : ''}`}
                         key={p.id}
                       >
-                        <span className="eyebrow">
-                          {p.id === 'pro' && <ProBadge />} {p.name}
-                        </span>
+                        <span className="eyebrow">{p.name}</span>
                         <h2>
                           ${p.price}
                           <small>CAD / month</small>
@@ -2511,11 +2844,7 @@ Implementation requirements:
                         <ul>
                           {p.features.map((f) => (
                             <li key={f}>
-                              {p.id === 'pro' && f !== 'Everything in Free' ? (
-                                <ProBadge />
-                              ) : (
-                                <Check size={15} />
-                              )}
+                              <Check size={15} />
                               {f}
                             </li>
                           ))}
@@ -2549,7 +2878,7 @@ Implementation requirements:
               )}
               {tab === 'settings' && (
                 <div className="settings-grid">
-                  <section className="card padded">
+                  <section className="card padded settings-profile-card">
                     <h3>Business profile</h3>
                     <BusinessFields
                       key={selected}
@@ -2567,19 +2896,33 @@ Implementation requirements:
                     />
                     <p className="muted">Changes save automatically when you leave this page.</p>
                   </section>
-                  <section className="card padded">
-                    <h3>Locations & team</h3>
-                    <p className="muted">
-                      Add locations with independent hours and time zones. Requires Pro.
-                    </p>
-                    <Button variant="outline" onClick={() => setModal('location')}>
-                      <Plus size={15} />
-                      Add a location
-                    </Button>
-                    <Button variant="ghost" onClick={() => setModal('team')}>
-                      Add a staff member
-                    </Button>
-                  </section>
+                  <div className="settings-side-column">
+                    <section className="card padded">
+                      <h3>Brand kit</h3>
+                      <p className="muted">
+                        Keep your logo, colours, and typography consistent across widgets and social
+                        posts.
+                      </p>
+                      <Button variant="outline" onClick={() => switchTab('brand')}>
+                        <Palette size={16} />
+                        Open brand kit
+                      </Button>
+                    </section>
+                    <section className="card padded">
+                      <h3>Locations & team</h3>
+                      <p className="muted">
+                        Add locations with independent hours and time zones, and manage staff
+                        access.
+                      </p>
+                      <Button variant="outline" onClick={() => setModal('location')}>
+                        <Plus size={15} />
+                        Add a location
+                      </Button>
+                      <Button variant="ghost" onClick={() => setModal('team')}>
+                        Add a staff member
+                      </Button>
+                    </section>
+                  </div>
                   {demo && (
                     <section className="card padded restart-setup-card">
                       <h3>Restart setup</h3>
@@ -2607,73 +2950,102 @@ Implementation requirements:
                 </div>
               )}
               {tab === 'account' && (
-                <section className="card padded">
-                  <h3>Your account</h3>
-                  <p className="muted">{demo ? 'Jamie Davis · Demo account' : email}</p>
-                  <Button variant="outline" onClick={() => switchTab('billing')}>
-                    Manage {planLabel} plan <ArrowUpRight size={15} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      if (demo) {
-                        router.push('/login');
-                        return;
-                      }
-                      void act(async () => {
-                        await request('/auth', { op: 'logout' });
-                        router.push('/login');
-                        router.refresh();
-                      });
-                    }}
-                  >
-                    <LogOut size={15} />
-                    Log out
-                  </Button>
-                  <hr />
-                  <h4>Export your data</h4>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (demo) {
-                        const a = document.createElement('a');
-                        a.href = URL.createObjectURL(
-                          new Blob([JSON.stringify({ demo: true, draft, published }, null, 2)], {
-                            type: 'application/json',
-                          }),
-                        );
-                        a.download = 'opensync-demo.json';
-                        a.click();
-                        URL.revokeObjectURL(a.href);
-                      } else {
-                        const a = document.createElement('a');
-                        a.href = '/api/export';
-                        a.download = 'opensync-export.json';
-                        a.click();
-                      }
-                    }}
-                  >
-                    <ArrowDownToLine size={15} />
-                    Export data
-                  </Button>
-                  {demo ? (
+                <div className="account-settings-grid">
+                  <section className="card padded account-identity-card">
+                    <h3>Your account</h3>
+                    <p className="muted">{demo ? 'Jamie Davis · Demo account' : email}</p>
                     <Button
-                      variant="ghost"
+                      variant="destructive"
                       onClick={() => {
-                        if (confirm('Reset this browser’s demo changes?')) {
-                          localStorage.removeItem('opensync-demo-v1');
-                          window.location.reload();
+                        if (demo) {
+                          router.push('/login');
+                          return;
                         }
+                        void act(async () => {
+                          await request('/auth', { op: 'logout' });
+                          router.push('/login');
+                          router.refresh();
+                        });
                       }}
                     >
-                      Reset demo
+                      <LogOut size={15} />
+                      Log out
                     </Button>
-                  ) : (
-                    <Button variant="destructive" onClick={() => setModal('delete')}>
-                      Delete account
+                  </section>
+                  <section className="card padded account-plan-card">
+                    <div className="account-plan-heading">
+                      <span className="account-plan-icon" aria-hidden="true">
+                        <CreditCard size={18} />
+                      </span>
+                      <div>
+                        <h3>Plans & billing</h3>
+                        <p className="muted">You&apos;re on the {planLabel} plan.</p>
+                      </div>
+                    </div>
+                    <p className="muted">
+                      {demo
+                        ? 'Compare plans and see what is included. Billing is disabled in the demo.'
+                        : detail?.billingConfigured
+                          ? 'Compare plans, change your subscription, or open the billing portal.'
+                          : 'Compare plans and subscription features. Billing setup is not available yet.'}
+                    </p>
+                    <Button variant="outline" onClick={() => switchTab('billing')}>
+                      Manage plans & billing <ArrowUpRight size={15} />
                     </Button>
-                  )}
-                </section>
+                  </section>
+                  <section className="card padded account-data-card">
+                    <h3>Your data</h3>
+                    <p className="muted">
+                      Download a copy of your OpenSync data or manage this account.
+                    </p>
+                    <div className="account-data-actions">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (demo) {
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(
+                              new Blob(
+                                [JSON.stringify({ demo: true, draft, published }, null, 2)],
+                                {
+                                  type: 'application/json',
+                                },
+                              ),
+                            );
+                            a.download = 'opensync-demo.json';
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                          } else {
+                            const a = document.createElement('a');
+                            a.href = '/api/export';
+                            a.download = 'opensync-export.json';
+                            a.click();
+                          }
+                        }}
+                      >
+                        <ArrowDownToLine size={15} />
+                        Export data
+                      </Button>
+                      {demo ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm('Reset this browser’s demo changes?')) {
+                              localStorage.removeItem('opensync-demo-v1');
+                              window.location.reload();
+                            }
+                          }}
+                        >
+                          Reset demo
+                        </Button>
+                      ) : (
+                        <Button variant="destructive" onClick={() => setModal('delete')}>
+                          Delete account
+                        </Button>
+                      )}
+                    </div>
+                  </section>
+                </div>
               )}
               {tab === 'help' && (
                 <section className="card padded help-card">
@@ -2681,7 +3053,7 @@ Implementation requirements:
                   {[
                     [
                       'How do I update today’s hours?',
-                      'Choose Close early on Overview, or Holiday hours for other one-off changes. Edit the times, review affected destinations, and publish. This creates an exception without changing your usual week.',
+                      'Choose Update today on Home and pick what changed. Use Plan a future change for holidays and other dates. Your usual weekly hours stay the same.',
                     ],
                     [
                       'How do I install a widget?',
@@ -2767,17 +3139,80 @@ Implementation requirements:
             if (!busy) setModal('');
           }}
         >
-          {[
-            'Close early',
-            'Open late',
-            'Closed today',
-            'Add special hours',
-            'Change today’s hours',
-          ].includes(modal) || modal.startsWith('exception:') ? (
+          {modal === 'today-update' && todayUpdate ? (
+            <TodayUpdate
+              schedule={todayUpdate.schedule}
+              date={todayUpdate.date}
+              existing={todayUpdate.intervals}
+              busy={busy}
+              error={error}
+              destination={
+                demo
+                  ? 'Updates your demo preview.'
+                  : googleHours
+                    ? 'Updates your website widgets and sends the hours to Google for syncing.'
+                    : 'Updates your website widgets.'
+              }
+              needsReview={quickNeedsReview}
+              onConfirm={confirmToday}
+              onCustom={() => setModal('Different hours today')}
+            />
+          ) : modal === 'quick-message' ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const message = String(
+                  new FormData(event.currentTarget).get('message') || '',
+                ).trim();
+                if (!message) return;
+                setDraft({
+                  ...draft,
+                  announcements: [
+                    ...draft.announcements,
+                    {
+                      id: crypto.randomUUID(),
+                      title: '',
+                      message,
+                      type: 'none',
+                      start: new Date().toISOString(),
+                      end: '',
+                      enabled: true,
+                      ctaText: '',
+                      ctaUrl: '',
+                    },
+                  ],
+                });
+                openPublish('announcements');
+              }}
+            >
+              <div className="modal-heading">
+                <div className="modal-icon" aria-hidden="true">
+                  <Megaphone size={23} />
+                </div>
+                <div>
+                  <h2>What should customers know?</h2>
+                  <p className="muted">This message appears on your website.</p>
+                </div>
+              </div>
+              <label>
+                Message
+                <textarea name="message" rows={4} maxLength={500} required />
+              </label>
+              <div className="modal-actions">
+                <Button type="button" variant="outline" onClick={() => setModal('')}>
+                  Cancel
+                </Button>
+                <Button type="submit">Review message</Button>
+              </div>
+            </form>
+          ) : ['Add special hours', 'Plan a future change', 'Different hours today'].includes(
+              modal,
+            ) || modal.startsWith('exception:') ? (
             <ExceptionForm
               draft={draft}
               kind={modal.startsWith('exception:') ? 'Edit special hours' : modal}
               existing={draft.exceptions.find((e) => `exception:${e.id}` === modal)}
+              fixedDate={modal === 'Different hours today' ? todayUpdate?.date : undefined}
               onSubmit={goPublish}
               onCancel={() => setModal('')}
             />
@@ -2791,6 +3226,7 @@ Implementation requirements:
                 setModal('');
                 void act(async () => {
                   await save(value);
+                  await switchTab('announcements');
                   notify('Announcement saved to Drafts.');
                 });
               }}

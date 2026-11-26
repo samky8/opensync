@@ -7,7 +7,7 @@ test('saved backgrounds enforce the five-image limit and deletion frees a slot',
   await page.goto('/demo');
   if (info.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page.getByRole('button', { name: 'Social', exact: true }).click();
+  await page.getByRole('button', { name: 'Social Studio', exact: true }).click();
 
   const buffer = await sharp({
     create: { width: 40, height: 40, channels: 3, background: '#2266aa' },

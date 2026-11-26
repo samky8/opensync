@@ -29,7 +29,6 @@ import {
   days,
   formatIntervals,
   localDate,
-  mins,
   replaceException,
   type Interval,
   type Schedule,
@@ -311,40 +310,31 @@ export function ExceptionForm({
   onSubmit,
   onCancel,
   existing,
+  fixedDate,
 }: {
   draft: Schedule;
   kind: string;
   onSubmit: (s: Schedule) => void;
   onCancel: () => void;
   existing?: Schedule['exceptions'][number];
+  fixedDate?: string;
 }) {
   const today = localDate(draft.timezone);
-  const date = new Date(`${today}T12:00:00Z`);
+  const future = kind === 'Plan a future change';
+  const tomorrow = Temporal.PlainDate.from(today).add({ days: 1 }).toString();
+  const initialDate = fixedDate || (future ? tomorrow : today);
+  const date = new Date(`${initialDate}T12:00:00Z`);
   const dow = (date.getUTCDay() + 6) % 7;
   const current =
-    draft.exceptions.find((e) => e.start <= today && e.end >= today)?.intervals ||
+    draft.exceptions.find((e) => e.start <= initialDate && e.end >= initialDate)?.intervals ||
     draft.weekly[dow];
   const initial = current.length ? structuredClone(current) : [{ open: '09:00', close: '17:00' }];
-  const clock = (n: number) =>
-    `${String(Math.floor((n % 1440) / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
-  if (kind === 'Close early') {
-    const last = initial[initial.length - 1],
-      open = mins(last.open),
-      end = mins(last.close) + (last.close < last.open ? 1440 : 0);
-    const suggested = 840 > open && 840 < end ? 840 : end - 60;
-    last.close = clock(Math.min(end - 1, Math.max(open + 1, suggested)));
-  }
-  if (kind === 'Open late') {
-    const first = initial[0],
-      end = mins(first.close) + (first.close < first.open ? 1440 : 0);
-    first.open = clock(Math.min(mins(first.open) + 60, end - 1));
-  }
-  const [start, setStart] = useState(existing?.start || today),
-    [end, setEnd] = useState(existing?.end || today),
-    [label, setLabel] = useState(existing?.label || (kind === 'Add special hours' ? '' : kind)),
-    [periods, setPeriods] = useState<Interval[]>(
-      existing?.intervals || (kind === 'Closed today' ? [] : initial),
-    );
+  const [start, setStart] = useState(existing?.start || initialDate),
+    [end, setEnd] = useState(existing?.end || initialDate),
+    [label, setLabel] = useState(
+      existing?.label || (future || kind === 'Add special hours' ? '' : kind),
+    ),
+    [periods, setPeriods] = useState<Interval[]>(existing?.intervals || initial);
   return (
     <form
       onSubmit={(e) => {
@@ -368,28 +358,33 @@ export function ExceptionForm({
         </div>
       </div>
       <div className="form-grid">
-        <label>
-          Start date
-          <input
-            type="date"
-            value={start}
-            required
-            onChange={(e) => {
-              setStart(e.target.value);
-              if (e.target.value > end) setEnd(e.target.value);
-            }}
-          />
-        </label>
-        <label>
-          End date
-          <input
-            type="date"
-            value={end}
-            min={start}
-            required
-            onChange={(e) => setEnd(e.target.value)}
-          />
-        </label>
+        {!fixedDate && (
+          <>
+            <label>
+              Start date
+              <input
+                type="date"
+                value={start}
+                min={future ? tomorrow : undefined}
+                required
+                onChange={(e) => {
+                  setStart(e.target.value);
+                  if (start === end || e.target.value > end) setEnd(e.target.value);
+                }}
+              />
+            </label>
+            <label>
+              End date
+              <input
+                type="date"
+                value={end}
+                min={start}
+                required
+                onChange={(e) => setEnd(e.target.value)}
+              />
+            </label>
+          </>
+        )}
         <label className="span-two">
           <span className="field-label">
             Reason or label <span>(optional)</span>
@@ -685,7 +680,7 @@ export function AnnouncementForm({
         <div className="form-grid announcement-settings">
           <label className={!paid ? 'pro-locked' : undefined}>
             <span className="pro-field-label">
-              <ProBadge /> Start <span>(optional)</span>
+              {!paid && <ProBadge />} Start <span>(optional)</span>
             </span>
             <input
               type="datetime-local"
@@ -697,7 +692,7 @@ export function AnnouncementForm({
           </label>
           <label className={!paid ? 'pro-locked' : undefined}>
             <span className="pro-field-label">
-              <ProBadge /> Expiry <span>(optional)</span>
+              {!paid && <ProBadge />} Expiry <span>(optional)</span>
             </span>
             <input
               type="datetime-local"

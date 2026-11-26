@@ -125,13 +125,32 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  min-height: 58px;
+  min-height: 66px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
   font-weight: 600;
   padding: 11px 14px;
   text-align: left;
+}
+.actionGrid button small {
+  display: block;
+  margin-top: 3px;
+  color: #656973;
+  font-size: 12px;
+  font-weight: 400;
+}
+.actionGrid button.primaryAction {
+  border-color: #bcbce6;
+  background: #f5f2ff;
+}
+.actionGrid button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.actionGrid button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
 }
 .actionGrid button > svg {
   box-sizing: content-box;
@@ -180,15 +199,13 @@
     font-size: 15px;
   }
   .actionGrid {
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   .actionGrid button {
-    flex-direction: column;
-    justify-content: center;
     gap: 10px;
-    padding: 16px 10px;
-    text-align: center;
-    font-size: 12px;
+    padding: 12px;
+    font-size: 14px;
   }
   .actionGrid button > svg {
     padding: 9px;

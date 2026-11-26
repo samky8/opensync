@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSchedule, formatIntervals } from '../src/lib/domain';
+import {
+  customizeWidget,
+  defaultSchedule,
+  formatIntervals,
+  scheduleSchema,
+  validateEntitlements,
+  widgetAppearanceFor,
+} from '../src/lib/domain';
 import { publishChanges, scopedSchedule } from '../src/lib/publish-scope';
 describe('page-specific publication', () => {
   it('publishes hours without including unrelated drafts', () => {
@@ -98,6 +105,22 @@ describe('page-specific publication', () => {
     expect(snapshot.widgetVisibility.banner).toBe(false);
     expect(publishChanges(draft, published, 'widgets')).toContainEqual({
       label: 'Banner widget',
+      before: 'Visible',
+      after: 'Hidden',
+    });
+  });
+  it('publishes widget-specific appearance without affecting other widgets', () => {
+    const published = defaultSchedule();
+    const draft = scheduleSchema.parse({
+      ...published,
+      widget: customizeWidget(published.widget, 'status', { showBranding: false }),
+    });
+    expect(() => validateEntitlements(draft, published, 'free')).toThrow(/requires Pro/);
+    const snapshot = scopedSchedule(draft, published, 'widgets');
+    expect(widgetAppearanceFor(snapshot.widget, 'status').showBranding).toBe(false);
+    expect(widgetAppearanceFor(snapshot.widget, 'hours').showBranding).toBe(true);
+    expect(publishChanges(draft, published, 'widgets')).toContainEqual({
+      label: 'Status · OpenSync branding',
       before: 'Visible',
       after: 'Hidden',
     });

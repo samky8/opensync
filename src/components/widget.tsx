@@ -15,11 +15,13 @@ import {
   days,
   formatIntervals,
   getStatus,
+  widgetAppearanceFor,
   type Schedule,
+  type WidgetType,
 } from '@/lib/domain';
 import Image from 'next/image';
 import { RichText } from './rich-text';
-export type WidgetType = 'hours' | 'banner' | 'status';
+export type { WidgetType } from '@/lib/domain';
 const announcementStyles = {
   none: { className: 'none', Icon: null },
   information: { className: 'information', Icon: Info },
@@ -76,16 +78,29 @@ export function Widget({
     return () => clearInterval(timer);
   }, [liveId]);
   const status = getStatus(data, new Date(now));
-  const w = data.widget;
+  const activeExtendedClosure = data.exceptions.find(
+    (exception) =>
+      exception.start < exception.end &&
+      exception.start <= status.date &&
+      exception.end >= status.date &&
+      exception.intervals.length === 0,
+  );
+  const w = widgetAppearanceFor(data.widget, type);
   const style = {
     '--widget-accent': w.accent,
-    '--widget-background': w.background !== 'auto' ? w.background : undefined,
+    '--widget-divider-colour':
+      type === 'hours' && w.showDividers === false ? 'transparent' : undefined,
+    '--widget-background':
+      w.background === 'none' ? 'transparent' : w.background !== 'auto' ? w.background : undefined,
+    '--widget-border-colour':
+      type !== 'banner' && w.borderColour !== 'auto' ? w.borderColour : undefined,
+    borderWidth: type !== 'banner' ? `${w.borderWidth}px` : undefined,
     borderRadius: w.radius,
     textAlign: w.alignment,
     fontFamily: widgetFontFamilies[w.font] || 'inherit',
     fontSize: w.fontSize === 'auto' || w.fontSize == null ? 'inherit' : `${w.fontSize}px`,
   } as CSSProperties;
-  const credit = (
+  const credit = w.showBranding !== false && (
     <a className="widget-credit" href="/" target="_blank" rel="noopener">
       Powered by <b>OpenSync</b>
     </a>
@@ -111,7 +126,7 @@ export function Widget({
     } as CSSProperties;
     return (
       <div
-        className={`widget announcement-widget announcement-${announcementStyle.className} ${w.theme}`}
+        className={`widget announcement-widget announcement-${announcementStyle.className} ${w.theme}${w.alignment === 'center' ? ' is-centered' : ''}`}
         style={bannerStyle}
       >
         <div
@@ -141,38 +156,47 @@ export function Widget({
     >
       {data.logo && (
         <Image
+          className="widget-logo"
           src={data.logo}
           alt=""
           width={40}
           height={40}
           unoptimized
           referrerPolicy="no-referrer"
-          style={{ objectFit: 'contain', marginBottom: 12 }}
         />
       )}
-      {(w.showName || type === 'status') && (
+      {(w.showName || (type === 'status' && credit)) && (
         <div className="widget-heading">
           {w.showName && <div className="widget-name">{data.name}</div>}
           {type === 'status' && credit}
         </div>
       )}
       {(type === 'status' || w.showStatus !== false) && (
-        <div className="widget-status">
-          <span className={`status-dot ${status.open ? 'green' : 'gray'}`} />
+        <div className={`widget-status ${status.open ? 'open-now' : 'closed-now'}`}>
+          <span className={`status-dot ${status.open ? 'green' : 'red'}`} aria-hidden="true" />
           <strong>{status.open ? 'Open now' : 'Closed now'}</strong>
           <span className="widget-next">{status.nextLabel}</span>
         </div>
       )}
       {type === 'hours' && (
         <>
-          {w.highlightToday !== false && (
+          {activeExtendedClosure ? (
+            <div className="widget-closure" role="status">
+              <strong>{activeExtendedClosure.label || 'Temporarily closed'}</strong>
+              <span>
+                {formatClosureDate(activeExtendedClosure.start)} –{' '}
+                {formatClosureDate(activeExtendedClosure.end)}
+              </span>
+              <small>Regular hours resume after this closure.</small>
+            </div>
+          ) : w.highlightToday !== false ? (
             <div className="widget-today">
               <Clock size={16} />
               <span>Today</span>
               <strong>{formatIntervals(status.today)}</strong>
             </div>
-          )}
-          {w.collapsible !== false && (
+          ) : null}
+          {!activeExtendedClosure && w.collapsible !== false && (
             <button
               className="widget-expand"
               onClick={() => setExpanded(!expanded)}
@@ -181,7 +205,7 @@ export function Widget({
               Business hours <ChevronDown size={16} />
             </button>
           )}
-          {(w.collapsible === false || expanded) && (
+          {!activeExtendedClosure && (w.collapsible === false || expanded) && (
             <div className="widget-week">
               {days.map((d, i) => (
                 <div key={d}>
@@ -213,4 +237,13 @@ export function Widget({
       )}
     </section>
   );
+}
+
+function formatClosureDate(date: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T12:00:00Z`));
 }

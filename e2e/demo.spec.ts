@@ -9,29 +9,30 @@ test('demo changes persist, publish, and render in the widget preview', async ({
     path: `test-results/overview-${testInfo.project.name}.png`,
     fullPage: true,
   });
-  await page.getByRole('button', { name: 'Close early', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Closed all day' }).check();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Review & publish', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: /^Update today/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Closing early', exact: true }).click();
+  await dialog.getByLabel('Closing time').fill('13:00');
+  await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(dialog.getByText(/1:00 PM/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Update now', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Demo published');
   await page.reload();
   const published = await page.evaluate(
     () => JSON.parse(localStorage.getItem('opensync-demo-v1')!).published,
   );
-  expect(
-    published.exceptions.some((item: { intervals: unknown[] }) => item.intervals.length === 0),
-  ).toBe(true);
+  expect(published.weekly).toEqual(demoSchedule.weekly);
+  expect(published.exceptions).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      label: 'Closing early',
+      intervals: [expect.objectContaining({ close: '13:00' })],
+    }),
+  ]));
   if (testInfo.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page.getByRole('button', { name: 'Website', exact: true }).click();
+  await page.getByRole('button', { name: 'Website widgets', exact: true }).click();
   await expect(page.getByText('YOUR WIDGET · DRAFT PREVIEW')).toBeVisible();
-  await expect(
-    page.locator('.browser-preview').getByText('Closed now', { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator('.browser-preview .widget')).toBeVisible();
   await page.screenshot({
     path: `test-results/widgets-${testInfo.project.name}.png`,
     fullPage: true,
@@ -43,11 +44,8 @@ test('demo changes persist, publish, and render in the widget preview', async ({
 test('all navigation screens work without placeholder actions', async ({ page }, testInfo) => {
   await page.goto('/demo');
   for (const name of [
-    'Regular hours',
-    'Special hours',
-    'Announcements',
-    'Connections',
-    'History',
+    'Schedule',
+    'Activity',
     'Settings',
   ]) {
     if (testInfo.project.name === 'mobile')
@@ -66,18 +64,13 @@ test('all navigation screens work without placeholder actions', async ({ page },
 test('header icon and business name return to overview', async ({ page }, testInfo) => {
   await page.goto('/demo');
   const openBusinessHours = async () => {
-    if (testInfo.project.name === 'mobile')
-      await page.getByRole('button', { name: 'Open navigation' }).click();
-    await page
-      .locator('.sidebar')
-      .getByRole('button', { name: 'Regular hours', exact: true })
-      .click();
+    await page.getByRole('button', { name: /^Change usual hours/ }).click();
     await expect(page).toHaveURL(/tab=hours/);
   };
 
   await openBusinessHours();
   await page.locator('.breadcrumb-business-name').click();
-  await expect(page.locator('.sidebar button[aria-label="Overview"]')).toHaveAttribute(
+  await expect(page.locator('.sidebar button[aria-label="Home"]')).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -86,7 +79,7 @@ test('header icon and business name return to overview', async ({ page }, testIn
   if (testInfo.project.name === 'desktop') {
     await openBusinessHours();
     await page.getByRole('button', { name: 'Go to overview' }).click();
-    await expect(page.locator('.sidebar button[aria-label="Overview"]')).toHaveAttribute(
+    await expect(page.locator('.sidebar button[aria-label="Home"]')).toHaveAttribute(
       'aria-current',
       'page',
     );
@@ -105,18 +98,16 @@ test('existing announcements can be edited and temporary-hour periods do not sub
   page,
 }, testInfo) => {
   await page.goto('/demo');
-  await page.getByRole('button', { name: 'Close early', exact: true }).click();
+  await page.getByRole('button', { name: /^Update today/ }).click();
+  await page.getByRole('button', { name: 'Different hours today', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Add period', exact: true }).click();
   await expect(
-    page.getByRole('dialog').getByRole('heading', { name: 'Close early', exact: true }),
+    page.getByRole('dialog').getByRole('heading', { name: 'Different hours today', exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close dialog' }).click();
   if (testInfo.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page
-    .locator('.sidebar')
-    .getByRole('button', { name: 'Announcements', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Announcements', exact: true }).click();
   const liveSection = page.locator('.announcement-section').filter({
     has: page.getByRole('heading', { name: 'Live announcements', exact: true }),
   });
