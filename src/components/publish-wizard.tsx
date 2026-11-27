@@ -19,7 +19,11 @@ import type { Schedule } from '@/lib/domain';
 import { publishChanges, scopeLabels, type PublishScope } from '@/lib/publish-scope';
 import {
   readSocialPresets,
+  scaledSocialText,
   socialBackgrounds,
+  socialCanvasFont,
+  socialPalette,
+  socialStyle,
   type SocialPreset,
   type SocialStyle,
 } from '@/lib/social-presets';
@@ -109,14 +113,8 @@ async function drawArtwork(
   canvas.width = 1080;
   canvas.height = channel.format === 'story' ? 1920 : 1080;
   const ctx = canvas.getContext('2d')!;
-  const rgb = design.accent
-    .slice(1)
-    .match(/.{2}/g)!
-    .map((value) => parseInt(value, 16));
-  const dark =
-    design.theme === 'dark' ||
-    (design.theme === 'accent' && rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114 < 150);
-  ctx.fillStyle = design.theme === 'accent' ? design.accent : dark ? '#182b27' : '#faf5eb';
+  const palette = socialPalette(design);
+  ctx.fillStyle = palette.background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const backgroundSource =
     design.background === 'custom'
@@ -134,20 +132,36 @@ async function drawArtwork(
       image.width * scale,
       image.height * scale,
     );
-    ctx.fillStyle = dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
+    ctx.fillStyle = palette.dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
-  ctx.fillStyle = design.fontColour || (dark ? '#faf5eb' : '#152823');
+  if (design.showFrame) {
+    ctx.strokeStyle = palette.frame;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(48, 48, canvas.width - 96, canvas.height - 96);
+  }
+  ctx.fillStyle = design.fontColour || palette.ink;
   ctx.textBaseline = 'top';
-  const write = (text: string, y: number, size: number, maxHeight: number, serif = false) => {
+  const align = design.alignment ?? 'left';
+  ctx.textAlign = align;
+  const write = (
+    text: string,
+    y: number,
+    size: number,
+    maxHeight: number,
+    bold = false,
+    x = 108,
+  ) => {
+    const width = 972 - x;
+    const anchor = x + (align === 'center' ? width / 2 : align === 'right' ? width : 0);
     let lines: string[] = [];
     do {
-      ctx.font = `${serif ? '600' : '400'} ${size}px ${serif ? 'Georgia' : 'Arial'}`;
+      ctx.font = socialCanvasFont(design.font, size, bold);
       lines = [];
       for (const paragraph of text.split('\n')) {
         let line = '';
         for (const char of paragraph) {
-          if (ctx.measureText(line + char).width > 864) {
+          if (ctx.measureText(line + char).width > width) {
             lines.push(line);
             line = '';
           }
@@ -158,7 +172,7 @@ async function drawArtwork(
       if (lines.length * size * 1.4 <= maxHeight) break;
       size -= 2;
     } while (size > 12);
-    lines.forEach((line, i) => ctx.fillText(line, 108, y + i * size * 1.4));
+    lines.forEach((line, i) => ctx.fillText(line, anchor, y + i * size * 1.4, width));
   };
   const header = [
     design.showBusinessName !== false ? schedule.name : '',
@@ -174,16 +188,11 @@ async function drawArtwork(
     ctx.drawImage(logo, 108, 90, logo.width * scale, logo.height * scale);
     headerX += 88;
   }
-  if (header) {
-    const originalWrite = write;
-    ctx.save();
-    ctx.translate(headerX - 108, 0);
-    originalWrite(header, 100, 30, 90);
-    ctx.restore();
-  }
-  write(design.title, 240, 76, 240, true);
-  write(design.message, 520, 38, canvas.height - 670);
-  if (design.footer) write(design.footer, canvas.height - 100, 24, 60);
+  if (header) write(header, 100, 30, 90, false, headerX);
+  write(design.title, 240, scaledSocialText(76, design.titleSize), 240, true);
+  write(design.message, 520, scaledSocialText(38, design.bodySize), canvas.height - 670);
+  if (design.showFooter !== false && design.footer)
+    write(design.footer, canvas.height - 100, 24, 60);
 }
 
 function Artwork({
@@ -629,7 +638,7 @@ export function PublishWizard({
                         onChange={(event) => {
                           const preset = presets.find((item) => item.id === event.target.value);
                           setSelectedPreset(event.target.value);
-                          if (preset) update(current.id, preset.style);
+                          if (preset) update(current.id, socialStyle(preset.style));
                         }}
                       >
                         <option value="">Current custom style</option>
@@ -664,6 +673,7 @@ export function PublishWizard({
                       Title <span>(optional)</span>
                     </span>
                     <input
+                      aria-label="Title"
                       maxLength={100}
                       value={designs[current.id].title}
                       onChange={(e) => update(current.id, { title: e.target.value })}
@@ -674,6 +684,7 @@ export function PublishWizard({
                       Message <span>(optional)</span>
                     </span>
                     <textarea
+                      aria-label="Message"
                       rows={4}
                       maxLength={1500}
                       value={designs[current.id].message}
@@ -752,7 +763,7 @@ export function PublishWizard({
                       Font colour
                       <input
                         type="color"
-                        value={designs[current.id].fontColour || '#ffffff'}
+                        value={designs[current.id].fontColour || socialPalette(designs[current.id]).ink}
                         onChange={(event) => update(current.id, { fontColour: event.target.value })}
                       />
                     </label>

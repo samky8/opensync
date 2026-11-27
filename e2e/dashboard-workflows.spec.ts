@@ -19,7 +19,7 @@ test('banner scrolls only overflowing text and can publish the setting off', asy
     await page.getByRole('button', { name: 'Banner', exact: true }).click();
     await page.getByRole('button', { name: 'Layout', exact: true }).click();
   };
-  const toggle = page.getByRole('checkbox', { name: 'Scroll long text' });
+  const longText = page.getByRole('combobox', { name: 'Long text' });
   const preview = page.locator('.preview-body .announcement-widget');
   const track = preview.locator('.announcement-scroll-track');
   const seedBanner = async (message: string) => {
@@ -43,19 +43,44 @@ test('banner scrolls only overflowing text and can publish the setting off', asy
   };
 
   await seedBanner('Hello.');
-  await expect(toggle).toBeChecked();
+  await expect(longText).toHaveValue('scroll');
   await expect(track).toHaveCSS('animation-name', 'none');
 
   await seedBanner('Check our opening hours before your next visit. '.repeat(9).trim());
   await expect(track).toHaveCSS('animation-name', 'announcement-scroll');
+  await expect(track).toHaveCSS('animation-direction', 'normal');
+  await expect(track.locator('.announcement-scroll-item')).toHaveCount(2);
+  await expect(track.locator('.announcement-scroll-item').nth(1)).toHaveAttribute(
+    'aria-hidden',
+    'true',
+  );
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(track).toHaveCSS('animation-name', 'none');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(track).toHaveCSS('animation-name', 'announcement-scroll');
 
-  await toggle.uncheck();
+  await longText.selectOption('wrap');
   await expect(track).toHaveCount(0);
   await expect(preview.getByText(/Check our opening hours/)).toBeVisible();
+  const height = page.getByRole('slider', { name: 'Height', exact: true });
+  const width = page.getByRole('slider', { name: 'Width', exact: true });
+  await expect(height).toHaveValue('23');
+  await expect(width).toHaveValue('100');
+  const fullWidthBanner = (await preview.boundingBox())!;
+  const demoScreen = (await page.locator('.preview-body').boundingBox())!;
+  expect(fullWidthBanner.x).toBeCloseTo(demoScreen.x, 0);
+  expect(fullWidthBanner.width).toBeCloseTo(demoScreen.width, 0);
+  await height.press('Home');
+  await expect(preview).toHaveCSS('padding-top', '8px');
+  const heightSlider = (await height.boundingBox())!;
+  await height.click({ position: { x: Math.floor(heightSlider.width) - 2, y: 16 } });
+  await expect(height).toHaveValue('40');
+  await expect(preview).toHaveCSS('padding-top', '40px');
+  await width.click({ position: { x: 2, y: 16 } });
+  await expect(width).toHaveValue('50');
+  await expect
+    .poll(async () => (await preview.boundingBox())!.width)
+    .toBeLessThan(fullWidthBanner.width);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Widget changes saved to your draft.');
   await page.goto('/demo?tab=overview');
@@ -68,7 +93,11 @@ test('banner scrolls only overflowing text and can publish the setting off', asy
   const published = await page.evaluate(
     () => JSON.parse(localStorage.getItem('opensync-demo-v1')!).published,
   );
-  expect(published.widget.overrides.banner.scrollText).toBe(false);
+  expect(published.widget.overrides.banner).toMatchObject({
+    scrollText: false,
+    verticalPadding: 40,
+    widthPercent: 50,
+  });
 });
 
 test('Home opens a simple website message form with a publish review', async ({ page }) => {
@@ -181,6 +210,8 @@ test('website instructions open from Connections and stay separate from widget s
   await expect(page.getByRole('heading', { name: 'Make it part of your website.' })).toHaveCount(0);
 
   await page.goto('/demo?tab=integrations');
+  await expect(page.getByRole('button', { name: 'Connect Google', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Manage manually on Google' })).toBeDisabled();
   await page.getByRole('button', { name: 'View website instructions' }).click();
   await expect(page).toHaveURL(/tab=website/);
   await expect(page.getByRole('heading', { name: 'Add to your website' })).toBeVisible();
@@ -192,6 +223,61 @@ test('website instructions open from Connections and stay separate from widget s
   await page.getByText('Iframe alternative & strict website policies', { exact: true }).click();
   await expect(page.locator('.installation details .code-block')).toContainText(footerStyle);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('hours presets restore their own content and layout settings', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  const preview = page.locator('.browser-preview .widget-type-hours');
+  const presets = page.getByRole('group', { name: 'Style presets' });
+  const selectPreset = (name: string) => presets.getByRole('button', { name, exact: true }).click();
+
+  await page.getByRole('button', { name: 'Content', exact: true }).click();
+  for (const preset of ['Modern', 'Card', 'Dark']) {
+    await selectPreset('Minimal');
+    await expect(preview.locator('.widget-logo, .widget-name, .widget-today')).toHaveCount(0);
+    await expect(preview.locator('.widget-status')).toBeVisible();
+    await expect(page.getByLabel('Default hours state')).toHaveValue('closed');
+    await expect(preview.locator('.widget-expand')).toHaveAttribute('aria-expanded', 'false');
+    await expect(preview.locator('.widget-week')).toHaveCount(0);
+    await preview.locator('.widget-expand').click();
+    await expect(preview.locator('.widget-week')).toBeVisible();
+    await page.getByLabel('Show current status').uncheck();
+
+    await selectPreset(preset);
+    await expect(preview.locator('.widget-logo')).toBeVisible();
+    await expect(preview.locator('.widget-name')).toBeVisible();
+    await expect(preview.locator('.widget-expand')).toBeVisible();
+    await expect(preview.locator('.widget-status')).toBeVisible();
+    await expect(page.getByLabel('Default hours state')).toHaveValue('open');
+    await expect(preview.locator('.widget-today')).toBeVisible();
+  }
+});
+
+test('default hours state persists and visitors can override it', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  const preview = page.locator('.browser-preview .widget-type-hours');
+  const toggle = preview.getByRole('button', { name: 'Business hours' });
+  const week = preview.locator('.widget-week');
+  const content = page.getByRole('button', { name: 'Content', exact: true });
+  const defaultState = page.getByLabel('Default hours state');
+
+  await content.click();
+  await defaultState.selectOption('closed');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(week).toHaveCount(0);
+  await toggle.click();
+  await expect(week).toBeVisible();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Widget changes saved');
+
+  await page.reload();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await content.click();
+  await expect(defaultState).toHaveValue('closed');
+  await page.getByLabel('Let visitors collapse hours').uncheck();
+  await expect(defaultState).toHaveCount(0);
+  await expect(toggle).toHaveCount(0);
+  await expect(week).toBeVisible();
 });
 
 test('widget typography, background and border controls update the preview', async ({ page }) => {

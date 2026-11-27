@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import styles from './dashboard-overview.module.css';
 import { useRouter } from 'next/navigation';
 import {
@@ -47,6 +48,8 @@ import {
   Paintbrush,
   LayoutGrid,
   ListChecks,
+  Info,
+  Layers3,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { ProfileMenu } from './profile-menu';
@@ -68,6 +71,7 @@ import type { ProTrial } from '@/lib/trial';
 import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
 import {
   announcementStyleColours,
+  bannerSizeControls,
   defaultSchedule,
   customizeWidget,
   widgetAppearanceFor,
@@ -362,6 +366,8 @@ export function Dashboard({
     }));
   }
   function applyWidgetPreset(preset: 'modern' | 'minimal' | 'card' | 'dark') {
+    const defaults = widgetAppearanceFor(defaultSchedule().widget, widgetType);
+    const minimalHours = widgetType === 'hours' && preset === 'minimal';
     const shared = {
       modern: { font: 'system', fontSize: 'auto', radius: 12, alignment: 'left' },
       minimal: { font: 'auto', fontSize: 'auto', radius: 4, alignment: 'left' },
@@ -372,6 +378,9 @@ export function Dashboard({
       widgetType === 'banner'
         ? ({
             ...shared,
+            scrollText: defaults.scrollText,
+            verticalPadding: defaults.verticalPadding,
+            widthPercent: defaults.widthPercent,
             ...(preset === 'modern'
               ? {
                   accent: '#2563eb',
@@ -412,6 +421,18 @@ export function Dashboard({
             borderColour: preset === 'card' ? '#d8ccf2' : 'auto',
             borderWidth: preset === 'minimal' ? 0 : preset === 'card' ? 2 : 1,
             compact: preset === 'minimal',
+            showLogo: !minimalHours && defaults.showLogo,
+            showName: !minimalHours && defaults.showName,
+            showBranding: defaults.showBranding,
+            ...(widgetType === 'hours'
+              ? {
+                  collapsible: defaults.collapsible,
+                  expandedByDefault: !minimalHours && defaults.expandedByDefault,
+                  highlightToday: !minimalHours && defaults.highlightToday,
+                  showStatus: defaults.showStatus,
+                  showDividers: defaults.showDividers,
+                }
+              : {}),
           } as Partial<typeof widgetSettings>);
     setWidgetPreset(preset);
     setDraft((current) => ({
@@ -424,6 +445,7 @@ export function Dashboard({
     widgetType === 'banner' &&
     draft.widgetVisibility?.banner !== false &&
     !status.announcement;
+  const useSampleCafeLogo = demo && draft.name === demoSchedule.name && !draft.logo;
   const previewSchedule = showSampleBanner
     ? {
         ...draft,
@@ -437,7 +459,9 @@ export function Dashboard({
           },
         ],
       }
-    : draft;
+    : useSampleCafeLogo
+      ? { ...draft, logo: '/images/juniper-oak-wordmark.webp' }
+      : draft;
   const readonly = !demo && detail?.role === 'viewer';
   const isBannerPreview = widgetType === 'banner';
   const PreviewActionIcon = isBannerPreview ? Megaphone : Clock;
@@ -496,7 +520,9 @@ export function Dashboard({
           <i />
           <span>yourwebsite.com</span>
         </div>
-        <div className={`preview-body${widgetVisible ? '' : ' is-hidden'}`}>
+        <div
+          className={`preview-body${widgetVisible ? '' : ' is-hidden'}${useSampleCafeLogo ? ' has-demo-wordmark' : ''}`}
+        >
           <Widget schedule={previewSchedule} type={widgetType} now={now} />
           {!widgetVisible && <p className="muted">Hidden after publishing.</p>}
         </div>
@@ -1021,7 +1047,9 @@ Implementation requirements:
     };
   }
   return (
-    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${tab === 'overview' ? 'overview-mode' : ''}`}
+    >
       <aside
         id="dashboard-sidebar"
         aria-label="Sidebar"
@@ -1061,7 +1089,7 @@ Implementation requirements:
         </button>
         <ProfileMenu
           name={draft.name}
-          logo={draft.logo}
+          logo={useSampleCafeLogo ? '/images/juniper-oak-logo-transparent.png' : draft.logo}
           locations={locations}
           selected={selected}
           paid={demo || plan === 'business'}
@@ -1373,7 +1401,7 @@ Implementation requirements:
                         : 'Google integration is not configured yet. Your website features will still work.'}
                     </div>
                     {detail?.googleConfigured && plan !== 'free' && (
-                      <Button onClick={connect} disabled={busy}>
+                      <Button onClick={connect} disabled={busy || demo}>
                         Connect Google
                       </Button>
                     )}
@@ -1510,18 +1538,27 @@ Implementation requirements:
                 ) : null}
               </div>
               {(dirty || unpublished) && (
-                <div className="draft-notice">
+                <div
+                  className={`draft-notice ${tab === 'integrations' ? 'connections-draft-notice' : ''}`}
+                >
                   <span className="status-dot orange" />
-                  {dirty
-                    ? 'Unsaved changes'
-                    : pubVersion
-                      ? 'Saved draft · not published'
-                      : 'Not published yet'}
+                  <strong>
+                    {dirty
+                      ? 'Unsaved changes'
+                      : pubVersion
+                        ? 'Saved draft · not published'
+                        : 'Not published yet'}
+                  </strong>
                   <span>
                     {pubVersion
                       ? 'Publish to update your website widgets.'
                       : 'Publish your hours to activate your widgets.'}
                   </span>
+                  {tab === 'integrations' && (
+                    <Button variant="outline" size="sm" onClick={() => openPublish()}>
+                      <Send size={14} /> Publish draft
+                    </Button>
+                  )}
                 </div>
               )}
               {tab === 'billing' && (demo || detail?.trial) && (
@@ -1537,13 +1574,14 @@ Implementation requirements:
               {tab === 'overview' && (
                 <section className={styles.panel} aria-label="Business overview">
                   <div className={styles.greeting}>
+                    <span>Welcome back,</span>
                     <h1>{draft.name}</h1>
+                    <p>Keep your hours, announcements, and social channels in sync — all in one place.</p>
                   </div>
                   <div className={styles.summaries}>
                     <section className={styles.summary}>
-                      <span>What customers see</span>
+                      <span className={styles.liveLabel}><i /> Live across 3 channels</span>
                       <strong>
-                        <CheckCircle2 size={16} className={liveStatus?.open ? styles.open : ''} />
                         {liveStatus
                           ? liveStatus.open
                             ? 'Open now'
@@ -1551,9 +1589,10 @@ Implementation requirements:
                           : 'Hours haven’t been published'}
                       </strong>
                       {liveStatus && <p>{liveStatus.nextLabel}</p>}
+                      <Store className={styles.storeArt} aria-hidden="true" />
                     </section>
                     <button className={styles.summary} onClick={() => switchTab('special')}>
-                      <span>Next change</span>
+                      <span className={styles.nextLabel}><CalendarDays size={15} /> Next change</span>
                       <strong>
                         {upcoming[0]?.label ||
                           (upcoming.length ? 'Holidays & exceptions' : 'No upcoming changes')}
@@ -1574,10 +1613,11 @@ Implementation requirements:
                           'No hours published yet'
                         )}
                       </p>
+                      <ChevronRight className={styles.summaryArrow} aria-hidden="true" />
                     </button>
                   </div>
                   <section className={styles.actions}>
-                    <h2>What changed?</h2>
+                    <h2>Quick actions</h2>
                     <div className={styles.actionGrid}>
                       <button
                         className={styles.primaryAction}
@@ -1613,6 +1653,89 @@ Implementation requirements:
                       </button>
                     </div>
                   </section>
+                  <div className={styles.dashboardGrid}>
+                    <section className={`${styles.card} ${styles.setupCard}`}>
+                      <div className={styles.cardHeading}>
+                        <h2>Setup progress</h2>
+                        <strong>75% complete</strong>
+                      </div>
+                      <div className={styles.progressTrack}><span /></div>
+                      <div className={styles.checklist}>
+                        {[
+                          ['Connect your accounts', 'Google, Facebook and Instagram are connected', 'integrations', true],
+                          ['Customize your website widgets', 'Your widgets are configured', 'widgets', true],
+                          ['Create your first announcement', 'Keep customers updated', 'announcements', true],
+                          ['Confirm your business details', 'Add logo, description and contact info', 'settings', false],
+                        ].map(([label, copy, destination, complete]) => (
+                          <button key={label as string} onClick={() => switchTab(destination as string)}>
+                            <span className={complete ? styles.checkDone : styles.checkPending}>
+                              {complete && <Check size={14} />}
+                            </span>
+                            <span><strong>{label}</strong><small>{copy}</small></span>
+                            <ChevronRight size={16} />
+                          </button>
+                        ))}
+                      </div>
+                      <div className={styles.recommendation}>
+                        <Sparkles size={19} />
+                        <span><strong>Recommended next step</strong><small>Finish your business details to make your widgets and posts more professional.</small></span>
+                        <button onClick={() => switchTab('settings')}>Complete setup <ArrowRight size={14} /></button>
+                      </div>
+                    </section>
+
+                    <div className={styles.middleColumn}>
+                      <section className={styles.card}>
+                        <div className={styles.cardHeading}>
+                          <h2>Connected channels</h2>
+                          <button onClick={() => switchTab('integrations')}>Manage</button>
+                        </div>
+                        <div className={styles.channels}>
+                          {[
+                            ['/images/google.svg', 'Google Business Profile', 'Hours sync + business updates'],
+                            ['/images/facebook.svg', 'Facebook', draft.name],
+                            ['/images/instagram.svg', 'Instagram', `@${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}`],
+                          ].map(([src, label, copy]) => (
+                            <div key={label}>
+                              <Image src={src} alt="" width={29} height={29} />
+                              <span><strong>{label}</strong><small>{copy}</small></span>
+                              <em><CheckCircle2 size={14} /> Connected</em>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                      <section className={`${styles.card} ${styles.healthCard}`}>
+                        <div><CheckCircle2 size={24} /><span><h2>System health</h2><strong>All systems running smoothly</strong></span></div>
+                        <div className={styles.healthMeta}>
+                          <span><CheckCircle2 size={14} /> Sync active</span>
+                          <span><CheckCircle2 size={14} /> No errors</span>
+                          <span><CheckCircle2 size={14} /> Last publish: {new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: saved.timezone }).format(new Date(now))}</span>
+                        </div>
+                      </section>
+                    </div>
+
+                    <div className={styles.rightColumn}>
+                      <section className={`${styles.card} ${styles.scheduleCard}`}>
+                        <div className={styles.cardHeading}>
+                          <h2><CalendarDays size={18} /> This week&apos;s schedule</h2>
+                          <button onClick={() => switchTab('hours')}>View / Edit</button>
+                        </div>
+                        <div className={styles.weekList}>
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
+                            <div key={day}><strong>{day}</strong><span>{formatIntervals(draft.weekly[index])}</span></div>
+                          ))}
+                        </div>
+                      </section>
+                      <section className={`${styles.card} ${styles.tipsCard}`}>
+                        <h2><HelpCircle size={19} /> Tips &amp; guidance</h2>
+                        <button onClick={() => switchTab('special')}>
+                          <span><CalendarDays size={20} /></span>
+                          <span><strong>Plan holiday or seasonal hours</strong><small>Set special hours (e.g., holidays, vacations) and schedule them to go live automatically.</small></span>
+                          <ChevronRight size={17} />
+                        </button>
+                        <div className={styles.dots}><i /><i /><i /></div>
+                      </section>
+                    </div>
+                  </div>
                 </section>
               )}
               {tab === 'schedule' && (
@@ -2239,19 +2362,58 @@ Implementation requirements:
                           </label>
                         )}
                         {widgetType === 'banner' && (
-                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
-                            {plan === 'free' && <ProBadge />}
-                            <input
-                              type="checkbox"
-                              checked={widgetSettings.scrollText !== false}
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            <span className="pro-field-label">
+                              {plan === 'free' && <ProBadge />} Long text
+                            </span>
+                            <select
                               disabled={readonly || plan === 'free'}
-                              onChange={(event) =>
-                                updateWidgetAppearance({ scrollText: event.target.checked })
+                              value={widgetSettings.scrollText !== false ? 'scroll' : 'wrap'}
+                              onChange={(e) =>
+                                updateWidgetAppearance({ scrollText: e.target.value === 'scroll' })
                               }
-                            />
-                            Scroll long text
+                            >
+                              <option value="scroll">Scroll continuously</option>
+                              <option value="wrap">Wrap onto multiple lines</option>
+                            </select>
                           </label>
                         )}
+                        {widgetType === 'banner' &&
+                          bannerSizeControls.map(({ key, label, min, max, unit }) => (
+                            <label key={key} className={plan === 'free' ? 'pro-locked' : undefined}>
+                              <span className="pro-field-label">
+                                {plan === 'free' && <ProBadge />} {label}
+                              </span>
+                              <div className="widget-range-control">
+                                <input
+                                  type="range"
+                                  className="banner-size-slider"
+                                  aria-label={label}
+                                  aria-valuetext={
+                                    key === 'verticalPadding'
+                                      ? `${widgetSettings[key]} pixels of padding per side`
+                                      : `${widgetSettings[key]} percent of available width`
+                                  }
+                                  disabled={readonly || plan === 'free'}
+                                  min={min}
+                                  max={max}
+                                  value={widgetSettings[key]}
+                                  style={
+                                    {
+                                      '--range-progress': `${((widgetSettings[key] - min) / (max - min)) * 100}%`,
+                                    } as CSSProperties
+                                  }
+                                  onChange={(e) =>
+                                    updateWidgetAppearance({ [key]: Number(e.target.value) })
+                                  }
+                                />
+                                <span>
+                                  {widgetSettings[key]}
+                                  {unit === 'px' ? ' px' : unit}
+                                </span>
+                              </div>
+                            </label>
+                          ))}
                       </div>
                       {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
                         <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
@@ -2327,6 +2489,23 @@ Implementation requirements:
                             />
                             Let visitors collapse hours
                           </label>
+                          {widgetSettings.collapsible && (
+                            <label>
+                              Default hours state
+                              <select
+                                value={widgetSettings.expandedByDefault ? 'open' : 'closed'}
+                                disabled={readonly || plan === 'free'}
+                                onChange={(event) =>
+                                  updateWidgetAppearance({
+                                    expandedByDefault: event.target.value === 'open',
+                                  })
+                                }
+                              >
+                                <option value="open">Open</option>
+                                <option value="closed">Closed</option>
+                              </select>
+                            </label>
+                          )}
                         </fieldset>
                       )}
                       <Button
@@ -2541,30 +2720,58 @@ Implementation requirements:
               {tab === 'integrations' && (
                 <>
                   <div className="integration-grid">
-                    <section className="card padded">
-                      <div className="section-heading">
-                        <span className="google-g">G</span>
-                        <span className="pill">{plan === 'free' && <ProBadge />} Pro</span>
+                    <section className="card padded connection-card connection-card-google">
+                      <div className="connection-card-heading">
+                        <span className="connection-brand google-brand" aria-hidden="true" />
+                        <h2>Google Business Profile</h2>
+                        <span className="connection-plan-pill">
+                          <ProBadge /> Pro
+                        </span>
                       </div>
-                      <h2>Google Business Profile</h2>
                       <p className="muted">
                         Automatic Google updates are paused. You can still manage your website
                         widgets and create social content.
                       </p>
-                      <div className="notice">
-                        {detail?.connection?.status === 'connected'
-                          ? 'Account connected. Automatic sync is paused; queued hours will not be delivered until a scheduler is enabled.'
-                          : detail?.googleConfigured
-                            ? 'Ready to connect with your Google account.'
-                            : 'Setup required: Google credentials and approved Business Profile API access.'}
+                      <div className="connection-detail-row">
+                        <Info size={18} />
+                        <span>
+                          <strong>
+                            {detail?.connection?.status === 'connected'
+                              ? 'Connected: '
+                              : detail?.googleConfigured
+                                ? 'Ready to connect: '
+                                : 'Setup required: '}
+                          </strong>
+                          {detail?.connection?.status === 'connected'
+                            ? 'Automatic sync is paused until a scheduler is enabled.'
+                            : detail?.googleConfigured
+                              ? 'Sign in with the Google account that manages this business.'
+                              : 'Google credentials and approved Business Profile API access.'}
+                        </span>
                       </div>
-                      <Button
-                        disabled={plan === 'free' || busy || (!demo && !detail?.googleConfigured)}
-                        onClick={connect}
-                      >
-                        {detail?.connection ? 'Reconnect Google' : 'Connect Google'}
-                        <ArrowUpRight size={16} />
-                      </Button>
+                      <div className="connection-card-actions">
+                        <Button
+                          disabled={demo || plan === 'free' || busy || !detail?.googleConfigured}
+                          onClick={connect}
+                        >
+                          {detail?.connection ? 'Reconnect Google' : 'Connect Google'}
+                          <ArrowRight size={16} />
+                        </Button>
+                        {demo ? (
+                          <button type="button" className="connection-manage-link" disabled>
+                            Manage manually on Google <ExternalLink size={14} />
+                          </button>
+                        ) : (
+                          <a
+                            className="connection-manage-link"
+                            href="https://business.google.com/"
+                            target="_blank"
+                            rel="noopener"
+                          >
+                            Manage manually on Google <ExternalLink size={14} />
+                          </a>
+                        )}
+                      </div>
                       {detail?.connection && (
                         <>
                           <Button
@@ -2671,32 +2878,40 @@ Implementation requirements:
                           </details>
                         </div>
                       )}
-                      <a
-                        className="text-link"
-                        href="https://business.google.com/"
-                        target="_blank"
-                        rel="noopener"
-                      >
-                        Manage manually on Google <ExternalLink size={14} />
-                      </a>
                     </section>
-                    <section className="card padded">
-                      <span className="provider-icon violet">
-                        <Code2 size={24} />
-                      </span>
-                      <h2>Your website</h2>
+                    <section className="card padded connection-card connection-card-website">
+                      <div className="connection-card-heading">
+                        <span className="connection-brand website-brand" aria-hidden="true">
+                          <Code2 size={24} />
+                        </span>
+                        <h2>Your website</h2>
+                      </div>
                       <p className="muted">
                         Your hours, status, and announcements. Three small additions that make a big
                         difference.
                       </p>
-                      <div className="notice subtle">
-                        {pubVersion
-                          ? `Three widgets configured · revision ${pubVersion} published. Installation on your website is not verified.`
-                          : 'Three widget types are available. Publish your first update before installing them.'}
+                      <div className="connection-detail-row">
+                        <Layers3 size={20} />
+                        <span>
+                          {pubVersion ? (
+                            <>
+                              <strong>Three widgets configured</strong> · revision {pubVersion}{' '}
+                              published.
+                              <br /> Installation on your website is not verified.
+                            </>
+                          ) : (
+                            <>
+                              <strong>Three widget types are available.</strong> Publish your first
+                              update before installing them.
+                            </>
+                          )}
+                        </span>
                       </div>
-                      <Button variant="outline" onClick={() => switchTab('website')}>
-                        View website instructions <ArrowRight size={16} />
-                      </Button>
+                      <div className="connection-card-actions">
+                        <Button variant="outline" onClick={() => switchTab('website')}>
+                          View website instructions <ArrowRight size={16} />
+                        </Button>
+                      </div>
                     </section>
                     <SocialConnections
                       locationId={demo ? 'demo' : selected}

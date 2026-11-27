@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Facebook, Instagram, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, Check, Flag, RefreshCw, UserRound } from 'lucide-react';
 import { Button } from './ui/button';
 
 type Account = {
@@ -98,10 +98,12 @@ export function SocialConnections({
 
   return (
     <>
-      <section className="card padded social-card connection-card">
-        <div className="section-heading">
-          <Facebook size={28} />
-          <span className="pill">
+      <section className="card padded social-card connection-card connection-card-facebook">
+        <div className="connection-card-heading">
+          <span className="connection-brand facebook-brand" aria-hidden="true" />
+          <h2>Facebook</h2>
+          <span className={`connection-status-pill ${accounts.length ? 'is-connected' : ''}`}>
+            {accounts.length > 0 && <Check size={14} />}
             {demo
               ? 'Demo only'
               : !status
@@ -111,22 +113,24 @@ export function SocialConnections({
                   : 'Not connected'}
           </span>
         </div>
-        <h2>Facebook</h2>
         <p className="muted">Publish feed images to connected Facebook Pages.</p>
-        <div className="notice subtle">
-          {demo
-            ? 'Connect a real workspace to manage Facebook Pages.'
-            : !status
-              ? 'Checking Meta connection status…'
-              : !status.configured
-                ? 'Meta publishing is not configured on this deployment.'
-                : accounts.length && !status.canPublish
-                  ? 'Connected accounts need attention. Reconnect Meta to restore publishing permissions.'
-                  : accounts.length
-                    ? accounts.map((account) => account.name).join(', ')
-                    : 'No Facebook Page is connected to this business.'}
+        <div className="connection-detail-row">
+          <Flag size={18} fill="currentColor" />
+          <span>
+            {demo
+              ? 'Connect a real workspace to manage Facebook Pages.'
+              : !status
+                ? 'Checking Meta connection status…'
+                : !status.configured
+                  ? 'Meta publishing is not configured on this deployment.'
+                  : accounts.length && !status.canPublish
+                    ? 'Connected accounts need attention. Reconnect Meta to restore publishing permissions.'
+                    : accounts.length
+                      ? accounts.map((account) => account.name).join(', ')
+                      : 'No Facebook Page is connected to this business.'}
+          </span>
         </div>
-        <div className="connection-actions">
+        <div className="connection-card-actions connection-actions">
           <Button variant="outline" disabled={connectDisabled} onClick={connect}>
             {accounts.length ? 'Reconnect Meta' : 'Connect Meta'} <ArrowUpRight size={16} />
           </Button>
@@ -145,10 +149,14 @@ export function SocialConnections({
           </Button>
         ))}
       </section>
-      <section className="card padded social-card connection-card">
-        <div className="section-heading">
-          <Instagram size={28} />
-          <span className="pill">
+      <section className="card padded social-card connection-card connection-card-instagram">
+        <div className="connection-card-heading">
+          <span className="connection-brand instagram-brand" aria-hidden="true" />
+          <h2>Instagram</h2>
+          <span
+            className={`connection-status-pill ${instagramAccounts.length ? 'is-connected' : ''}`}
+          >
+            {instagramAccounts.length > 0 && <Check size={14} />}
             {demo
               ? 'Demo only'
               : !status
@@ -158,27 +166,29 @@ export function SocialConnections({
                   : 'Not connected'}
           </span>
         </div>
-        <h2>Instagram</h2>
         <p className="muted">
           Publish posts and eligible stories through a linked professional account.
         </p>
-        <div className="notice subtle">
-          {demo
-            ? 'Connect a real workspace to manage Instagram accounts.'
-            : !status
-              ? 'Checking Meta connection status…'
-              : instagramAccounts.length && !status.canPublish
-                ? 'The linked Instagram account needs attention. Reconnect Meta to restore publishing permissions.'
-                : instagramAccounts.length
-                  ? instagramAccounts
-                      .map(
-                        (account) =>
-                          `@${account.instagramName || account.name}${account.instagramType ? ` · ${account.instagramType}` : ''}`,
-                      )
-                      .join(', ')
-                  : 'No eligible linked Instagram professional account was found.'}
+        <div className="connection-detail-row">
+          <UserRound size={19} />
+          <span>
+            {demo
+              ? 'Connect a real workspace to manage Instagram accounts.'
+              : !status
+                ? 'Checking Meta connection status…'
+                : instagramAccounts.length && !status.canPublish
+                  ? 'The linked Instagram account needs attention. Reconnect Meta to restore publishing permissions.'
+                  : instagramAccounts.length
+                    ? instagramAccounts
+                        .map(
+                          (account) =>
+                            `@${account.instagramName || account.name}${account.instagramType ? ` · ${account.instagramType}` : ''}`,
+                        )
+                        .join(', ')
+                    : 'No eligible linked Instagram professional account was found.'}
+          </span>
         </div>
-        <p className="muted">
+        <p className="muted connection-footnote">
           Instagram access is managed through the connected Facebook Page. Personal profiles are not
           supported.
         </p>

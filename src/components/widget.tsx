@@ -7,6 +7,7 @@ import {
   CircleX,
   Clock,
   ExternalLink,
+  Globe,
   Info,
   TriangleAlert,
 } from 'lucide-react';
@@ -45,37 +46,50 @@ const widgetFontFamilies: Record<Schedule['widget']['font'], string> = {
 function ScrollingAnnouncement({ children }: { children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-  const [distance, setDistance] = useState(0);
+  const itemRef = useRef<HTMLDivElement>(null);
+  const [loopDistance, setLoopDistance] = useState(0);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     const track = trackRef.current;
-    if (!viewport || !track) return;
-    const measure = () => setDistance(Math.max(0, track.offsetWidth - viewport.clientWidth));
+    const item = itemRef.current;
+    if (!viewport || !track || !item) return;
+    const measure = () => {
+      const contentWidth = item.scrollWidth;
+      const gap = Number.parseFloat(getComputedStyle(track).columnGap) || 0;
+      setLoopDistance(contentWidth > viewport.clientWidth ? contentWidth + gap : 0);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
-    observer.observe(track);
+    observer.observe(item);
     measure();
     return () => observer.disconnect();
   }, []);
 
   return (
     <div
-      className={`announcement-scroll${distance ? ' is-scrolling' : ''}`}
+      className={`announcement-scroll${loopDistance ? ' is-scrolling' : ''}`}
       ref={viewportRef}
-      tabIndex={distance ? 0 : undefined}
+      tabIndex={loopDistance ? 0 : undefined}
     >
       <div
         className="announcement-scroll-track"
         ref={trackRef}
         style={
           {
-            '--announcement-scroll-end': `${-distance}px`,
-            '--announcement-scroll-duration': `${Math.max(4, distance / 20)}s`,
+            '--announcement-scroll-end': `${-loopDistance}px`,
+            '--announcement-scroll-duration': `${Math.max(4, loopDistance / 20)}s`,
           } as CSSProperties
         }
       >
-        {children}
+        <div className="announcement-scroll-item" ref={itemRef}>
+          {children}
+        </div>
+        {loopDistance > 0 && (
+          <div className="announcement-scroll-item" aria-hidden="true">
+            {children}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -94,7 +108,10 @@ export function Widget({
 }) {
   const [data, setData] = useState(schedule),
     [now, setNow] = useState(initialNow || new Date().toISOString()),
-    [expanded, setExpanded] = useState(true),
+    [hoursDisclosure, setHoursDisclosure] = useState<{
+      expandedByDefault: boolean;
+      expanded: boolean;
+    } | null>(null),
     [unavailable, setUnavailable] = useState(false);
   useEffect(() => setData(schedule), [schedule]);
   useEffect(() => {
@@ -126,6 +143,12 @@ export function Widget({
       exception.intervals.length === 0,
   );
   const w = widgetAppearanceFor(data.widget, type);
+  const expandedByDefault = !w.collapsible || w.expandedByDefault !== false;
+  const disclosureMatchesDefault = hoursDisclosure?.expandedByDefault === expandedByDefault;
+  if (hoursDisclosure && (!w.collapsible || !disclosureMatchesDefault)) {
+    setHoursDisclosure(null);
+  }
+  const expanded = disclosureMatchesDefault ? hoursDisclosure.expanded : expandedByDefault;
   const style = {
     '--widget-accent': w.accent,
     '--widget-divider-colour':
@@ -167,6 +190,8 @@ export function Widget({
           : a.backgroundColour || defaultColours.background;
     const bannerStyle = {
       ...style,
+      '--announcement-vertical-padding': `${w.verticalPadding}px`,
+      '--announcement-width': `${w.widthPercent}%`,
       '--announcement-font-colour': bannerOverrides?.accent || a.fontColour || defaultColours.font,
       '--announcement-background-colour': bannerBackground,
       '--announcement-border-colour':
@@ -194,7 +219,11 @@ export function Widget({
         className={`widget announcement-widget announcement-${announcementStyle.className} ${w.theme}${w.alignment === 'center' ? ' is-centered' : ''}`}
         style={bannerStyle}
       >
-        {w.scrollText !== false ? <ScrollingAnnouncement>{content}</ScrollingAnnouncement> : content}
+        {w.scrollText !== false ? (
+          <ScrollingAnnouncement>{content}</ScrollingAnnouncement>
+        ) : (
+          content
+        )}
         {a.ctaText && a.ctaUrl && (
           <a href={a.ctaUrl} target="_blank" rel="noopener noreferrer">
             {a.ctaText} <ExternalLink size={13} />
@@ -254,7 +283,7 @@ export function Widget({
           {!activeExtendedClosure && w.collapsible !== false && (
             <button
               className="widget-expand"
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => setHoursDisclosure({ expandedByDefault, expanded: !expanded })}
               aria-expanded={expanded}
             >
               Business hours <ChevronDown size={16} />
@@ -286,12 +315,29 @@ export function Widget({
       )}
       {type === 'hours' && (
         <div className="widget-footer">
-          <div className="widget-zone">Times in {data.timezone.replaceAll('_', ' ')}</div>
+          <div className="widget-zone">
+            <Globe size={11} strokeWidth={1.6} aria-hidden="true" />
+            <span>{formatTimeZoneName(data.timezone)}</span>
+          </div>
           {credit}
         </div>
       )}
     </section>
   );
+}
+
+function formatTimeZoneName(timezone: string) {
+  const referenceDate = new Date('2026-01-15T12:00:00Z');
+  const name = (length: 'longGeneric' | 'shortGeneric') =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: timezone, timeZoneName: length })
+      .formatToParts(referenceDate)
+      .find((part) => part.type === 'timeZoneName')?.value;
+  const longName = name('longGeneric') || timezone.replaceAll('_', ' ');
+  const abbreviation = name('shortGeneric');
+
+  return abbreviation && abbreviation !== longName && !abbreviation.startsWith('GMT')
+    ? `${longName} (${abbreviation})`
+    : longName;
 }
 
 function formatClosureDate(date: string) {

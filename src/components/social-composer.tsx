@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Share2, Pencil, Check, Upload, Instagram, Facebook } from 'lucide-react';
+import {
+  Download,
+  Copy,
+  Share2,
+  Pencil,
+  Check,
+  Upload,
+  Instagram,
+  Facebook,
+  Maximize2,
+  X,
+} from 'lucide-react';
 import { ProBadge } from './ui/pro-badge';
 import { Button } from './ui/button';
 import { SocialPublishing } from './social-publishing';
@@ -9,8 +20,14 @@ import { SavedBackgroundOptions, useSavedBackgrounds } from './saved-backgrounds
 import { type Schedule } from '@/lib/domain';
 import {
   readSocialPresets,
+  quickSocialPresets,
+  scaledSocialText,
   socialBackgrounds,
+  socialCanvasFont,
+  socialFonts,
+  socialPalette,
   socialStyle,
+  socialTextSize,
   writeSocialPresets,
   type SocialPreset,
   type SocialStyle,
@@ -32,6 +49,14 @@ type Design = SocialStyle & {
   platform: 'Instagram' | 'Facebook';
   platforms?: ('Instagram' | 'Facebook')[];
   fontColour?: string;
+};
+
+const quickStyleDefaults: Partial<SocialStyle> = {
+  background: undefined,
+  fontColour: undefined,
+  titleSize: undefined,
+  bodySize: undefined,
+  alignment: undefined,
 };
 
 // Break long words as well as paragraphs so exports never run beyond the artwork.
@@ -66,6 +91,7 @@ function drawText(
   y: number,
   height: number,
   maxSize: number,
+  style: SocialStyle,
   bold = false,
   x = 108,
   width = 864,
@@ -73,12 +99,17 @@ function drawText(
   let size = maxSize;
   let wrapped: string[] = [];
   do {
-    ctx.font = `${bold ? '600' : '400'} ${size}px ${bold ? 'Georgia' : 'Arial'}`;
+    ctx.font = socialCanvasFont(style.font, size, bold);
     wrapped = lines(ctx, text, width);
     if (wrapped.length * size * 1.3 <= height) break;
     size--;
   } while (size > 12);
-  wrapped.forEach((line, i) => ctx.fillText(line, x, y + i * size * 1.3));
+  ctx.save();
+  const align = style.alignment ?? 'left';
+  ctx.textAlign = align;
+  const anchor = x + (align === 'center' ? width / 2 : align === 'right' ? width : 0);
+  wrapped.forEach((line, i) => ctx.fillText(line, anchor, y + i * size * 1.3, width));
+  ctx.restore();
 }
 
 export function SocialComposer({
@@ -123,6 +154,8 @@ export function SocialComposer({
   const showHeaderText = design.showHeaderText ?? false;
   const showBusinessName = design.showBusinessName ?? true;
   const showBusinessLogo = design.showBusinessLogo ?? false;
+  const { ink } = socialPalette(design);
+  const fontColour = design.fontColour || ink;
   const [notice, setNotice] = useState('');
   const [presets, setPresets] = useState<SocialPreset[]>([]);
   const [presetName, setPresetName] = useState('');
@@ -186,6 +219,21 @@ export function SocialComposer({
     };
   }, [schedule.logo]);
   const canvases = useRef<Partial<Record<Design['format'], HTMLCanvasElement | null>>>({});
+  const expandedDialog = useRef<HTMLDialogElement>(null);
+  const expandedCanvas = useRef<HTMLCanvasElement>(null);
+
+  function expandPreview(format: Design['format']) {
+    const source = canvases.current[format];
+    const target = expandedCanvas.current;
+    const dialog = expandedDialog.current;
+    const context = target?.getContext('2d');
+    if (!source || !target || !dialog || !context || dialog.open) return;
+    target.width = source.width;
+    target.height = source.height;
+    target.setAttribute('aria-label', source.getAttribute('aria-label') || `${format} preview`);
+    context.drawImage(source, 0, 0);
+    dialog.showModal();
+  }
   const storageKey = `opensync-social-v1:${locationId}`;
   const platformStorageKey = initialPlatform ? `${storageKey}:${initialPlatform}` : storageKey;
   const caption =
@@ -212,7 +260,7 @@ export function SocialComposer({
         !/^#[a-f\d]{6}$/i.test(value.accent) ||
         !['title', 'message', 'footer', 'caption'].every((key) => typeof value[key] === 'string') ||
         (value.headerText !== undefined && typeof value.headerText !== 'string') ||
-        ['showHeaderText', 'showBusinessName', 'showBusinessLogo'].some(
+        ['showHeaderText', 'showBusinessName', 'showBusinessLogo', 'showFrame', 'showFooter'].some(
           (key) => value[key] !== undefined && typeof value[key] !== 'boolean',
         ) ||
         (value.headerText?.length || 0) > 98 ||
@@ -232,6 +280,16 @@ export function SocialComposer({
       )
         throw new Error();
       if (value.fontColour && !/^#[a-f\d]{6}$/i.test(value.fontColour)) throw new Error();
+      if (value.font !== undefined && !Object.hasOwn(socialFonts, value.font)) throw new Error();
+      if (value.alignment !== undefined && !['left', 'center', 'right'].includes(value.alignment))
+        throw new Error();
+      for (const size of [value.titleSize, value.bodySize]) {
+        if (
+          size !== undefined &&
+          (!Number.isInteger(size) || size < socialTextSize.min || size > socialTextSize.max)
+        )
+          throw new Error();
+      }
       if (
         value.platforms &&
         (!Array.isArray(value.platforms) ||
@@ -286,14 +344,8 @@ export function SocialComposer({
       const height = format === 'story' ? 1920 : 1080;
       const ctx = canvases.current[format]?.getContext('2d');
       if (!ctx) continue;
-      const rgb = design.accent
-        .slice(1)
-        .match(/.{2}/g)!
-        .map((v) => parseInt(v, 16));
-      const dark =
-        design.theme === 'dark' ||
-        (design.theme === 'accent' && rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114 < 150);
-      ctx.fillStyle = design.theme === 'accent' ? design.accent : dark ? '#182b27' : '#faf5eb';
+      const palette = socialPalette(design);
+      ctx.fillStyle = palette.background;
       ctx.textBaseline = 'top';
       ctx.fillRect(0, 0, 1080, height);
       if (backgroundSource && backgroundImage?.source === backgroundSource) {
@@ -306,15 +358,17 @@ export function SocialComposer({
           image.width * scale,
           image.height * scale,
         );
-        ctx.fillStyle = dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
+        ctx.fillStyle = palette.dark ? 'rgba(24,43,39,.65)' : 'rgba(250,245,235,.32)';
         ctx.fillRect(0, 0, 1080, height);
       }
       // A quiet frame and generous safe space keep story content clear of app controls.
-      ctx.strokeStyle = dark ? '#52645e' : '#b5b0a5';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(48, 48, 984, height - 96);
+      if (design.showFrame !== false) {
+        ctx.strokeStyle = palette.frame;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(48, 48, 984, height - 96);
+      }
       const start = format === 'story' ? 300 : 110;
-      ctx.fillStyle = design.fontColour || (dark ? '#faf5eb' : '#152823');
+      ctx.fillStyle = design.fontColour || palette.ink;
       let headerX = 108;
       if (showBusinessLogo && schedule.logo && businessLogoImage?.source === schedule.logo) {
         const logo = businessLogoImage.image;
@@ -342,17 +396,37 @@ export function SocialComposer({
           start + (headerItems.length === 1 ? 18 : index * 42),
           headerItems.length === 1 ? 64 : 38,
           headerItems.length === 1 ? 32 : 28,
+          design,
           index === 0 && showBusinessName,
           headerX,
           972 - headerX,
         ),
       );
-      ctx.fillRect(108, start + 125, 78, 5);
-      drawText(ctx, design.title, start + 185, 230, 82, true);
-      drawText(ctx, design.message, start + 440, height - start - 660, 40);
-      ctx.globalAlpha = 0.75;
-      drawText(ctx, design.footer, height - (format === 'story' ? 300 : 145), 90, 28);
-      ctx.globalAlpha = 1;
+      const dividerX =
+        design.alignment === 'center' ? 501 : design.alignment === 'right' ? 894 : 108;
+      ctx.fillRect(dividerX, start + 125, 78, 5);
+      drawText(
+        ctx,
+        design.title,
+        start + 185,
+        230,
+        scaledSocialText(82, design.titleSize),
+        design,
+        true,
+      );
+      drawText(
+        ctx,
+        design.message,
+        start + 440,
+        height - start - 660,
+        scaledSocialText(40, design.bodySize),
+        design,
+      );
+      if (design.showFooter !== false) {
+        ctx.globalAlpha = 0.75;
+        drawText(ctx, design.footer, height - (format === 'story' ? 300 : 145), 90, 28, design);
+        ctx.globalAlpha = 1;
+      }
       if (!paid) {
         ctx.font = '600 26px Arial';
         const label = 'Opensync.ca';
@@ -392,7 +466,7 @@ export function SocialComposer({
     const id = selectedPreset || crypto.randomUUID();
     const next = [
       ...presets.filter((preset) => preset.id !== id),
-      { id, name, style: socialStyle(design) },
+      { id, name, style: socialStyle({ ...design, showFrame: design.showFrame ?? true }) },
     ];
     try {
       writeSocialPresets(locationId, next);
@@ -498,50 +572,16 @@ export function SocialComposer({
     }
   }
   return (
-    <div className={`social-workspace${compact ? ' social-workspace-compact' : ''}`}>
+    <div className={`social-workspace ${compact ? 'social-workspace-compact' : 'social-studio'}`}>
       <section className="card padded social-output">
-        <div className="section-heading">
-          <h3>
-            {platforms.join(' & ')} {formats.join(' & ')}
-          </h3>
-          <span className="pill">Preview</span>
-        </div>
-        <div className="social-preset-bar">
-          <label>
-            Style preset
-            <select
-              value={selectedPreset}
-              onChange={(event) => {
-                const preset = presets.find((item) => item.id === event.target.value);
-                setSelectedPreset(event.target.value);
-                if (!preset) return;
-                setPresetName(preset.name);
-                update(preset.style);
-              }}
-            >
-              <option value="">Current custom style</option>
-              {presets.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span className="field-label">
-              Preset name <span>(optional)</span>
-            </span>
-            <input
-              maxLength={60}
-              value={presetName}
-              placeholder="e.g. Weekly update"
-              onChange={(event) => setPresetName(event.target.value)}
-            />
-          </label>
-          <Button variant="outline" size="sm" onClick={savePreset}>
-            Save style preset
-          </Button>
-        </div>
+        {compact && (
+          <div className="section-heading">
+            <h3>
+              {platforms.join(' & ')} {formats.join(' & ')}
+            </h3>
+            <span className="pill">Preview</span>
+          </div>
+        )}
         <div className="social-setup-panel">
           <div className="social-setup-heading">
             <div>
@@ -605,22 +645,188 @@ export function SocialComposer({
                 ))}
               </div>
             </fieldset>
-
-            <div className="social-control-group social-colour-control">
-              <span className="social-control-label">Font colour</span>
-              <div className="social-colour-row">
-                <label className="social-colour-swatch">
-                  <span className="sr-only">Font colour</span>
-                  <input
-                    aria-label="Font colour"
-                    type="color"
-                    value={design.fontColour || '#152823'}
-                    onChange={(event) => update({ fontColour: event.target.value })}
-                  />
-                </label>
-                <span className="social-colour-value">
-                  {(design.fontColour || '#152823').toUpperCase()}
+          </div>
+        </div>
+        <div className="social-customization">
+          <section className="social-setup-panel">
+            <div className="social-setup-heading">
+              <h4>Appearance</h4>
+            </div>
+            <div className="social-quick-presets">
+              <h5>Quick presets</h5>
+              <div className="widget-presets" role="group" aria-label="Quick presets">
+                {quickSocialPresets.map(({ name, style }) => {
+                  const patch = { ...quickStyleDefaults, ...style };
+                  const active = Object.entries(patch).every(
+                    ([key, value]) => design[key as keyof SocialStyle] === value,
+                  );
+                  const palette = socialPalette({ ...design, ...patch });
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={active ? 'selected' : undefined}
+                      aria-pressed={active}
+                      onClick={() => {
+                        setSelectedPreset('');
+                        setPresetName('');
+                        update(patch);
+                      }}
+                    >
+                      <span
+                        className="preset-preview"
+                        style={{
+                          background: palette.background,
+                          color: palette.ink,
+                          alignItems: style.alignment === 'center' ? 'center' : 'start',
+                          boxShadow: style.showFrame
+                            ? `inset 0 0 0 3px ${palette.background}, inset 0 0 0 4px ${palette.frame}`
+                            : undefined,
+                        }}
+                        aria-hidden="true"
+                      >
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                      <strong>{name}</strong>
+                      {active && <Check size={13} aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="social-preset-bar">
+              <label>
+                Style preset
+                <select
+                  value={selectedPreset}
+                  onChange={(event) => {
+                    const preset = presets.find((item) => item.id === event.target.value);
+                    setSelectedPreset(event.target.value);
+                    if (!preset) return;
+                    setPresetName(preset.name);
+                    update({
+                      ...socialStyle(preset.style),
+                      footer: preset.style.footer ?? design.footer,
+                    });
+                  }}
+                >
+                  <option value="">Current custom style</option>
+                  {presets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="field-label">
+                  Preset name <span>(optional)</span>
                 </span>
+                <input
+                  aria-label="Preset name"
+                  maxLength={60}
+                  value={presetName}
+                  placeholder="e.g. Weekly update"
+                  onChange={(event) => setPresetName(event.target.value)}
+                />
+              </label>
+              <Button variant="outline" size="sm" onClick={savePreset}>
+                Save style preset
+              </Button>
+            </div>
+            <div className="social-style-fields">
+              <label>
+                Font
+                <select
+                  value={design.font ?? 'classic'}
+                  onChange={(event) => update({ font: event.target.value as SocialStyle['font'] })}
+                >
+                  {Object.entries(socialFonts).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Text alignment
+                <select
+                  value={design.alignment ?? 'left'}
+                  onChange={(event) =>
+                    update({ alignment: event.target.value as SocialStyle['alignment'] })
+                  }
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Centre</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+              {(
+                [
+                  ['titleSize', 'Title size'],
+                  ['bodySize', 'Body text size'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key}>
+                  {label}
+                  <span className="widget-range-control">
+                    <input
+                      type="range"
+                      aria-label={label}
+                      aria-valuetext={`${design[key] ?? socialTextSize.default}%`}
+                      min={socialTextSize.min}
+                      max={socialTextSize.max}
+                      value={design[key] ?? socialTextSize.default}
+                      onChange={(event) => update({ [key]: Number(event.target.value) })}
+                    />
+                    <span>{design[key] ?? socialTextSize.default}%</span>
+                  </span>
+                </label>
+              ))}
+              <label>
+                Base colour
+                <select
+                  value={design.theme}
+                  onChange={(event) =>
+                    update({ theme: event.target.value as SocialStyle['theme'] })
+                  }
+                >
+                  <option value="cream">Cream</option>
+                  <option value="dark">Dark</option>
+                  <option value="accent">Custom colour</option>
+                </select>
+              </label>
+              {design.theme === 'accent' && (
+                <label>
+                  Background colour
+                  <span className="widget-accent-control">
+                    <input
+                      type="color"
+                      aria-label="Background colour"
+                      value={design.accent}
+                      onChange={(event) => update({ accent: event.target.value })}
+                    />
+                    <span>{design.accent.toUpperCase()}</span>
+                  </span>
+                </label>
+              )}
+            </div>
+            <div className="social-appearance-colour">
+              <div className="social-colour-row">
+                <label>
+                  <span>Font colour</span>
+                  <span className="widget-accent-control">
+                    <input
+                      aria-label="Font colour"
+                      type="color"
+                      value={fontColour}
+                      onChange={(event) => update({ fontColour: event.target.value })}
+                    />
+                    <span>{fontColour.toUpperCase()}</span>
+                  </span>
+                </label>
                 {design.fontColour && (
                   <Button
                     variant="ghost"
@@ -632,269 +838,255 @@ export function SocialComposer({
                 )}
               </div>
             </div>
-          </div>
-        </div>
-        <fieldset className="social-background-picker">
-          <legend>Background image</legend>
-          <div className="social-background-options">
-            <button
-              type="button"
-              aria-pressed={!design.background}
-              onClick={() => update({ background: undefined })}
-            >
-              <span className="social-background-thumb" style={{ background: '#faf5eb' }} />
-              None
-            </button>
-            {socialBackgrounds.map((background) => (
+          </section>
+          <section className="social-setup-panel">
+            <div className="social-setup-heading">
+              <h4>Branding &amp; details</h4>
+            </div>
+            <div className="social-branding-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showBusinessName}
+                  onChange={(event) => update({ showBusinessName: event.target.checked })}
+                />{' '}
+                Show business name
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showBusinessLogo}
+                  disabled={!schedule.logo}
+                  onChange={(event) => update({ showBusinessLogo: event.target.checked })}
+                />{' '}
+                Show business logo
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={design.showFrame !== false}
+                  onChange={(event) => update({ showFrame: event.target.checked })}
+                />{' '}
+                Show border
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={design.showFooter !== false}
+                  onChange={(event) => update({ showFooter: event.target.checked })}
+                />{' '}
+                Show footer
+              </label>
+            </div>
+            {!schedule.logo && (
+              <small className="muted">Upload a logo in business settings to use it here.</small>
+            )}
+          </section>
+          <section className="social-setup-panel social-background-picker">
+            <div className="social-setup-heading">
+              <h4>Background image</h4>
+            </div>
+            <div className="social-background-options" role="group" aria-label="Background image">
               <button
                 type="button"
-                key={background}
-                aria-pressed={design.background === background}
-                onClick={() => update({ background })}
+                aria-pressed={!design.background}
+                onClick={() => update({ background: undefined })}
               >
-                <span
-                  className="social-background-thumb"
-                  style={{ backgroundImage: 'url(/social-backgrounds/' + background + '.svg)' }}
-                />
-                {background.charAt(0).toUpperCase() + background.slice(1)}
+                <span className="social-background-thumb" style={{ background: '#faf5eb' }} />
+                None
               </button>
-            ))}
-            {design.customImage &&
-              !savedBackgrounds.some((background) => background.image === design.customImage) && (
+              {socialBackgrounds.map((background) => (
                 <button
                   type="button"
-                  aria-pressed={design.background === 'custom'}
-                  onClick={() => update({ background: 'custom' })}
+                  key={background}
+                  aria-pressed={design.background === background}
+                  onClick={() => update({ background })}
                 >
                   <span
                     className="social-background-thumb"
-                    style={{ backgroundImage: 'url(' + design.customImage + ')' }}
+                    style={{ backgroundImage: 'url(/social-backgrounds/' + background + '.svg)' }}
                   />
-                  Your image
+                  {background.charAt(0).toUpperCase() + background.slice(1)}
                 </button>
-              )}
-            <SavedBackgroundOptions
-              images={savedBackgrounds}
-              selected={design.background === 'custom' ? design.customImage : undefined}
-              disabled={readonly}
-              onSelect={(image) => update({ background: 'custom', customImage: image })}
-              onDelete={async (image) => {
-                try {
-                  await removeBackground(image.id);
-                  if (design.customImage === image.image)
-                    update({ background: undefined, customImage: undefined });
-                  setNotice('Saved background deleted.');
-                } catch (error) {
-                  setNotice(
-                    error instanceof Error ? error.message : 'Could not delete this background.',
-                  );
+              ))}
+              {design.customImage &&
+                !savedBackgrounds.some((background) => background.image === design.customImage) && (
+                  <button
+                    type="button"
+                    aria-pressed={design.background === 'custom'}
+                    onClick={() => update({ background: 'custom' })}
+                  >
+                    <span
+                      className="social-background-thumb"
+                      style={{ backgroundImage: 'url(' + design.customImage + ')' }}
+                    />
+                    Your image
+                  </button>
+                )}
+              <SavedBackgroundOptions
+                images={savedBackgrounds}
+                selected={design.background === 'custom' ? design.customImage : undefined}
+                disabled={readonly}
+                onSelect={(image) => update({ background: 'custom', customImage: image })}
+                onDelete={async (image) => {
+                  try {
+                    await removeBackground(image.id);
+                    if (design.customImage === image.image)
+                      update({ background: undefined, customImage: undefined });
+                    setNotice('Saved background deleted.');
+                  } catch (error) {
+                    setNotice(
+                      error instanceof Error ? error.message : 'Could not delete this background.',
+                    );
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="social-background-upload"
+                disabled={
+                  !paid ||
+                  readonly ||
+                  uploading ||
+                  loadingBackgrounds ||
+                  savedBackgrounds.length >= 5
                 }
+                title={
+                  savedBackgrounds.length >= 5
+                    ? 'Delete a saved background to upload another'
+                    : undefined
+                }
+                onClick={() => backgroundUpload.current?.click()}
+              >
+                <span className="social-background-thumb">
+                  <Upload size={22} aria-hidden="true" />
+                </span>
+                <span className="social-background-upload-name">
+                  {!paid && <ProBadge />} Upload
+                </span>
+              </button>
+            </div>
+            <input
+              ref={backgroundUpload}
+              hidden
+              aria-label="Upload your own image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={!paid || readonly || uploading || savedBackgrounds.length >= 5}
+              onChange={(event) => {
+                void uploadBackground(event.target.files?.[0]);
+                event.target.value = '';
               }}
             />
-            <button
-              type="button"
-              className="social-background-upload"
-              disabled={
-                !paid || readonly || uploading || loadingBackgrounds || savedBackgrounds.length >= 5
-              }
-              title={
-                savedBackgrounds.length >= 5
-                  ? 'Delete a saved background to upload another'
-                  : undefined
-              }
-              onClick={() => backgroundUpload.current?.click()}
-            >
-              <span className="social-background-thumb">
-                <Upload size={22} aria-hidden="true" />
-              </span>
-              <span className="social-background-upload-name">
-                {!paid && <ProBadge />} Upload
-              </span>
-            </button>
-          </div>
-          <input
-            ref={backgroundUpload}
-            hidden
-            aria-label="Upload your own image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={!paid || readonly || uploading || savedBackgrounds.length >= 5}
-            onChange={(event) => {
-              void uploadBackground(event.target.files?.[0]);
-              event.target.value = '';
-            }}
-          />
-          <small className="muted">
-            {!paid ? 'Available with Pro or Business. ' : ''}JPG, PNG or WebP, up to 10 MB. Images
-            are cropped to fit and saved to this profile. {savedBackgrounds.length}/5 saved.
-          </small>
-          {(uploading || !backgroundReady) && <p role="status">Preparing background…</p>}
-        </fieldset>
-        <div className={`social-preview-grid${formats.length > 1 ? ' has-both-formats' : ''}`}>
-          {formats.map((format) => {
-            const height = format === 'story' ? 1920 : 1080;
-            return (
-              <section
-                key={format}
-                className="social-format-preview"
-                aria-label={`${format} preview`}
-              >
-                <h4>{format === 'post' ? 'Post · 1080 × 1080' : 'Story · 1080 × 1920'}</h4>
-                <div
-                  className="social-editable-preview"
-                  style={{ maxWidth: height === 1920 ? 366 : 650 }}
+            <small className="muted">
+              {!paid ? 'Available with Pro or Business. ' : ''}JPG, PNG or WebP, up to 10 MB. Images
+              are cropped to fit and saved to this profile. {savedBackgrounds.length}/5 saved.
+            </small>
+            {(uploading || !backgroundReady) && <p role="status">Preparing background…</p>}
+          </section>
+        </div>
+        <div className="social-preview-panel">
+          <div className={`social-preview-grid${formats.length > 1 ? ' has-both-formats' : ''}`}>
+            {formats.map((format) => {
+              const height = format === 'story' ? 1920 : 1080;
+              return (
+                <section
+                  key={format}
+                  className="social-format-preview"
+                  aria-label={`${format} preview`}
                 >
-                  <canvas
-                    ref={(node) => {
-                      canvases.current[format] = node;
-                    }}
-                    width={1080}
-                    height={height}
-                    className="social-artwork"
-                    role="img"
-                    aria-label={`${format} preview: ${showBusinessName ? schedule.name : ''}${showHeaderText ? ` ${design.headerText}` : ''}. ${design.title}. ${design.message}. ${design.footer}`}
-                  />
+                  <h4>{format === 'post' ? 'Post · 1080 × 1080' : 'Story · 1080 × 1920'}</h4>
                   <div
-                    className={
-                      editing === `${format}:header`
-                        ? 'social-inline-edit social-header-edit is-editing'
-                        : 'social-inline-edit social-header-edit'
-                    }
-                    style={{ top: ((format === 'story' ? 300 : 110) / height) * 100 + '%' }}
+                    className="social-editable-preview"
+                    style={{ maxWidth: height === 1920 ? 366 : 650 }}
                   >
-                    {editing === `${format}:header` ? (
-                      <div className="social-inline-field social-header-field">
-                        <fieldset>
-                          <legend>Header</legend>
-                          <label className="social-header-option">
-                            <input
-                              type="checkbox"
-                              checked={showHeaderText}
-                              onChange={(event) => update({ showHeaderText: event.target.checked })}
-                            />
-                            Text
-                          </label>
-                          {showHeaderText && (
-                            <label className="social-header-text">
-                              <span className="field-label">
-                                Header text <span>(optional)</span>
-                              </span>
-                              <input
-                                autoFocus
-                                aria-label="Header text (optional)"
-                                maxLength={98}
-                                value={design.headerText || ''}
-                                onChange={(event) => update({ headerText: event.target.value })}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Escape') setEditing(null);
-                                }}
-                              />
-                              <span className="character-counter" aria-live="polite">
-                                ({(design.headerText || '').length}/98)
-                              </span>
-                            </label>
-                          )}
-                          <label className="social-header-option">
-                            <input
-                              type="checkbox"
-                              checked={showBusinessName}
-                              onChange={(event) =>
-                                update({ showBusinessName: event.target.checked })
-                              }
-                            />
-                            Business name
-                          </label>
-                          <label className="social-header-option">
-                            <input
-                              type="checkbox"
-                              checked={showBusinessLogo}
-                              disabled={!schedule.logo}
-                              onChange={(event) =>
-                                update({ showBusinessLogo: event.target.checked })
-                              }
-                            />
-                            Business logo
-                            {!schedule.logo && <small>No logo uploaded</small>}
-                          </label>
-                        </fieldset>
-                        <button
-                          type="button"
-                          aria-label="Done editing Header"
-                          onClick={() => setEditing(null)}
-                        >
-                          <Check size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="social-edit-pen"
-                        aria-label="Edit Header"
-                        onClick={() => setEditing(`${format}:header`)}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    )}
-                  </div>
-                  {(
-                    [
-                      {
-                        key: 'title',
-                        label: 'Title',
-                        top: format === 'story' ? 485 : 295,
-                        limit: 100,
-                      },
-                      {
-                        key: 'message',
-                        label: 'Message',
-                        top: format === 'story' ? 740 : 550,
-                        limit: 700,
-                      },
-                      {
-                        key: 'footer',
-                        label: 'Footer / website',
-                        top: height - (format === 'story' ? 300 : 145),
-                        limit: 120,
-                      },
-                    ] as const
-                  ).map(({ key, label, top, limit }) => (
+                    <canvas
+                      ref={(node) => {
+                        canvases.current[format] = node;
+                      }}
+                      width={1080}
+                      height={height}
+                      className="social-artwork"
+                      role="img"
+                      aria-label={`${format} preview: ${showBusinessName ? schedule.name : ''}${showHeaderText ? ` ${design.headerText}` : ''}. ${design.title}. ${design.message}. ${design.showFooter !== false ? design.footer : ''}`}
+                    />
+                    <button
+                      type="button"
+                      className="social-edit-pen social-expand-preview"
+                      aria-label={`Expand ${format} preview`}
+                      aria-haspopup="dialog"
+                      onClick={() => expandPreview(format)}
+                    >
+                      <Maximize2 size={16} aria-hidden="true" />
+                    </button>
                     <div
                       className={
-                        editing === `${format}:${key}`
-                          ? 'social-inline-edit is-editing'
-                          : 'social-inline-edit'
+                        editing === `${format}:header`
+                          ? 'social-inline-edit social-header-edit is-editing'
+                          : 'social-inline-edit social-header-edit'
                       }
-                      key={key}
-                      style={{ top: (top / height) * 100 + '%' }}
+                      style={{ top: ((format === 'story' ? 300 : 110) / height) * 100 + '%' }}
                     >
-                      {editing === `${format}:${key}` ? (
-                        <div className="social-inline-field">
-                          <label>
-                            {key === 'message' ? (
-                              label
-                            ) : (
-                              <span className="field-label">
-                                {label} <span>(optional)</span>
-                              </span>
+                      {editing === `${format}:header` ? (
+                        <div className="social-inline-field social-header-field">
+                          <fieldset>
+                            <legend>Header</legend>
+                            <label className="social-header-option">
+                              <input
+                                type="checkbox"
+                                checked={showHeaderText}
+                                onChange={(event) =>
+                                  update({ showHeaderText: event.target.checked })
+                                }
+                              />
+                              Text
+                            </label>
+                            {showHeaderText && (
+                              <label className="social-header-text">
+                                <span className="field-label">
+                                  Header text <span>(optional)</span>
+                                </span>
+                                <input
+                                  autoFocus
+                                  aria-label="Header text (optional)"
+                                  maxLength={98}
+                                  value={design.headerText || ''}
+                                  onChange={(event) => update({ headerText: event.target.value })}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Escape') setEditing(null);
+                                  }}
+                                />
+                                <span className="character-counter" aria-live="polite">
+                                  ({(design.headerText || '').length}/98)
+                                </span>
+                              </label>
                             )}
-                            <textarea
-                              autoFocus
-                              aria-label={key === 'message' ? label : `${label} (optional)`}
-                              rows={key === 'message' ? 4 : 2}
-                              maxLength={limit}
-                              value={design[key]}
-                              onChange={(event) => update({ [key]: event.target.value })}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Escape') setEditing(null);
-                              }}
-                            />
-                            <span className="character-counter" aria-live="polite">
-                              ({design[key].length}/{limit})
-                            </span>
-                          </label>
+                            <label className="social-header-option">
+                              <input
+                                type="checkbox"
+                                checked={showBusinessName}
+                                onChange={(event) =>
+                                  update({ showBusinessName: event.target.checked })
+                                }
+                              />
+                              Business name
+                            </label>
+                            <label className="social-header-option">
+                              <input
+                                type="checkbox"
+                                checked={showBusinessLogo}
+                                disabled={!schedule.logo}
+                                onChange={(event) =>
+                                  update({ showBusinessLogo: event.target.checked })
+                                }
+                              />
+                              Business logo
+                              {!schedule.logo && <small>No logo uploaded</small>}
+                            </label>
+                          </fieldset>
                           <button
                             type="button"
-                            aria-label={'Done editing ' + label}
+                            aria-label="Done editing Header"
                             onClick={() => setEditing(null)}
                           >
                             <Check size={16} />
@@ -904,58 +1096,138 @@ export function SocialComposer({
                         <button
                           type="button"
                           className="social-edit-pen"
-                          aria-label={'Edit ' + label}
-                          onClick={() => setEditing(`${format}:${key}`)}
+                          aria-label="Edit Header"
+                          onClick={() => setEditing(`${format}:header`)}
                         >
                           <Pencil size={14} />
                         </button>
                       )}
                     </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+                    {(
+                      [
+                        {
+                          key: 'title',
+                          label: 'Title',
+                          top: format === 'story' ? 485 : 295,
+                          limit: 100,
+                        },
+                        {
+                          key: 'message',
+                          label: 'Message',
+                          top: format === 'story' ? 740 : 550,
+                          limit: 700,
+                        },
+                        {
+                          key: 'footer',
+                          label: 'Footer / website',
+                          top: height - (format === 'story' ? 300 : 145),
+                          limit: 120,
+                        },
+                      ] as const
+                    ).map(({ key, label, top, limit }) => (
+                      <div
+                        className={
+                          editing === `${format}:${key}`
+                            ? 'social-inline-edit is-editing'
+                            : 'social-inline-edit'
+                        }
+                        key={key}
+                        style={{ top: (top / height) * 100 + '%' }}
+                      >
+                        {editing === `${format}:${key}` ? (
+                          <div className="social-inline-field">
+                            <label>
+                              {key === 'message' ? (
+                                label
+                              ) : (
+                                <span className="field-label">
+                                  {label} <span>(optional)</span>
+                                </span>
+                              )}
+                              <textarea
+                                autoFocus
+                                aria-label={label}
+                                rows={key === 'message' ? 4 : 2}
+                                maxLength={limit}
+                                value={design[key]}
+                                onChange={(event) => update({ [key]: event.target.value })}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Escape') setEditing(null);
+                                }}
+                              />
+                              <span className="character-counter" aria-live="polite">
+                                ({design[key].length}/{limit})
+                              </span>
+                            </label>
+                            <button
+                              type="button"
+                              aria-label={'Done editing ' + label}
+                              onClick={() => setEditing(null)}
+                            >
+                              <Check size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="social-edit-pen"
+                            aria-label={'Edit ' + label}
+                            onClick={() => setEditing(`${format}:${key}`)}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+          {(!compact || selected) && (
+            <>
+              <div className="social-actions">
+                <Button
+                  disabled={
+                    busy ||
+                    uploading ||
+                    !backgroundReady ||
+                    !businessLogoReady ||
+                    !design.message.trim()
+                  }
+                  onClick={() => download()}
+                >
+                  <Download size={16} /> Download PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy || !design.message.trim()}
+                  onClick={() => download(true)}
+                >
+                  <Share2 size={16} /> Share image
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(caption);
+                      setNotice('Caption copied. Paste it into your post.');
+                    } catch {
+                      setNotice('Clipboard unavailable. Select and copy the caption field.');
+                    }
+                  }}
+                >
+                  <Copy size={16} /> Copy caption
+                </Button>
+              </div>
+              <p role="status" aria-live="polite">
+                {notice}
+              </p>
+            </>
+          )}
         </div>
         {(!compact || selected) && (
           <>
-            <div className="social-actions">
-              <Button
-                disabled={
-                  busy ||
-                  uploading ||
-                  !backgroundReady ||
-                  !businessLogoReady ||
-                  !design.message.trim()
-                }
-                onClick={() => download()}
-              >
-                <Download size={16} /> Download PNG
-              </Button>
-              <Button
-                variant="outline"
-                disabled={busy || !design.message.trim()}
-                onClick={() => download(true)}
-              >
-                <Share2 size={16} /> Share image
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(caption);
-                    setNotice('Caption copied. Paste it into your post.');
-                  } catch {
-                    setNotice('Clipboard unavailable. Select and copy the caption field.');
-                  }
-                }}
-              >
-                <Copy size={16} /> Copy caption
-              </Button>
-            </div>
-            <p role="status" aria-live="polite">
-              {notice}
-            </p>
             {platforms.flatMap((platform) =>
               formats.map((format) => (
                 <SocialPublishing
@@ -986,6 +1258,17 @@ export function SocialComposer({
           </>
         )}
       </section>
+      <dialog
+        ref={expandedDialog}
+        className="social-expanded-preview"
+        aria-label="Expanded artwork preview"
+        onClick={() => expandedDialog.current?.close()}
+      >
+        <button type="button" className="social-expanded-close" aria-label="Close preview">
+          <X size={22} aria-hidden="true" />
+        </button>
+        <canvas ref={expandedCanvas} role="img" />
+      </dialog>
     </div>
   );
 }

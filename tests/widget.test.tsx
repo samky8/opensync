@@ -48,8 +48,9 @@ it('places the hours credit in the footer opposite the time zone', () => {
     <Widget schedule={defaultSchedule()} type="hours" now="2026-11-02T15:00:00Z" />,
   );
   expect(html).toContain(
-    '<div class="widget-footer"><div class="widget-zone">Times in America/Toronto</div><a class="widget-credit"',
+    '<div class="widget-footer"><div class="widget-zone"><svg',
   );
+  expect(html).toContain('<span>Eastern Time (ET)</span>');
   expect(html).not.toContain(
     '<div class="widget-heading"><div class="widget-name">Your business</div><a',
   );

@@ -40,6 +40,7 @@ const widgetAppearance = z.object({
   showStatus: z.boolean(),
   highlightToday: z.boolean(),
   collapsible: z.boolean(),
+  expandedByDefault: z.boolean(),
   showDividers: z.boolean(),
   scrollText: z.boolean(),
   compact: z.boolean(),
@@ -47,20 +48,30 @@ const widgetAppearance = z.object({
   fontSize: z.union([z.literal('auto'), z.number().int().min(10).max(24)]),
   alignment: z.enum(['left', 'center']),
 });
-type WidgetAppearance = z.infer<typeof widgetAppearance>;
+export const bannerSizeControls = [
+  { key: 'verticalPadding', label: 'Height', min: 8, max: 40, unit: 'px' },
+  { key: 'widthPercent', label: 'Width', min: 50, max: 100, unit: '%' },
+] as const;
+const bannerSizeDefaults = { verticalPadding: 23, widthPercent: 100 };
+type WidgetAppearance = z.infer<typeof widgetAppearance> & typeof bannerSizeDefaults;
 export type WidgetType = 'hours' | 'banner' | 'status';
-const bannerAppearance = widgetAppearance.pick({
-  accent: true,
-  background: true,
-  borderColour: true,
-  borderWidth: true,
-  theme: true,
-  font: true,
-  fontSize: true,
-  radius: true,
-  alignment: true,
-  scrollText: true,
-});
+const bannerAppearance = widgetAppearance
+  .pick({
+    accent: true,
+    background: true,
+    borderColour: true,
+    borderWidth: true,
+    theme: true,
+    font: true,
+    fontSize: true,
+    radius: true,
+    alignment: true,
+    scrollText: true,
+  })
+  .extend({
+    verticalPadding: z.number().int().min(bannerSizeControls[0].min).max(bannerSizeControls[0].max),
+    widthPercent: z.number().int().min(bannerSizeControls[1].min).max(bannerSizeControls[1].max),
+  });
 export const scheduleSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
@@ -146,6 +157,7 @@ export const scheduleSchema = z
       showStatus: widgetAppearance.shape.showStatus.default(true),
       highlightToday: widgetAppearance.shape.highlightToday.default(true),
       collapsible: widgetAppearance.shape.collapsible.default(true),
+      expandedByDefault: widgetAppearance.shape.expandedByDefault.default(true),
       showDividers: widgetAppearance.shape.showDividers.default(true),
       scrollText: widgetAppearance.shape.scrollText.default(true),
       fontSize: widgetAppearance.shape.fontSize.default('auto'),
@@ -159,6 +171,7 @@ export const scheduleSchema = z
               showStatus: true,
               highlightToday: true,
               collapsible: true,
+              expandedByDefault: true,
               showDividers: true,
               scrollText: true,
             })
@@ -197,7 +210,7 @@ export function widgetAppearanceFor(
   widget: Schedule['widget'],
   type: WidgetType,
 ): WidgetAppearance {
-  return { ...widget, ...widget.overrides?.[type] };
+  return { ...bannerSizeDefaults, ...widget, ...widget.overrides?.[type] };
 }
 
 export function customizeWidget(
@@ -207,8 +220,9 @@ export function customizeWidget(
 ): Schedule['widget'] {
   const overrides = { ...widget.overrides };
   const settings = { ...overrides[type], ...changes };
+  const defaults = { ...bannerSizeDefaults, ...widget };
   for (const key of Object.keys(settings) as (keyof WidgetAppearance)[]) {
-    if (settings[key] === widget[key]) delete settings[key];
+    if (settings[key] === defaults[key]) delete settings[key];
   }
   if (Object.keys(settings).length) overrides[type] = settings;
   else delete overrides[type];
@@ -271,6 +285,7 @@ export const defaultSchedule = (
     showStatus: true,
     highlightToday: true,
     collapsible: true,
+    expandedByDefault: true,
     showDividers: true,
     compact: false,
     font: 'system',

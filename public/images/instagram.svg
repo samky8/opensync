@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <linearGradient id="camera" x1="0%" y1="0%" x2="30%" y2="100%">
+      <stop stop-color="#7137e8"/>
+      <stop offset=".53" stop-color="#f00083"/>
+      <stop offset="1" stop-color="#ffab18"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#camera)" stroke-width="2.2">
+    <rect x="2" y="2" width="20" height="20" rx="5.5"/>
+    <circle cx="12" cy="12" r="4.5"/>
+  </g>
+  <circle cx="17.9" cy="6.1" r="1.25" fill="#e00092"/>
+</svg>

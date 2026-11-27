@@ -30,6 +30,7 @@ describe('business-local schedules', () => {
     delete legacyWidget.showStatus;
     delete legacyWidget.highlightToday;
     delete legacyWidget.collapsible;
+    delete legacyWidget.expandedByDefault;
     delete legacyWidget.showDividers;
     const parsed = scheduleSchema.parse({ ...schedule, widget: legacyWidget });
     expect(parsed.widget.background).toBe('auto');
@@ -39,6 +40,7 @@ describe('business-local schedules', () => {
     expect(parsed.widget.showStatus).toBe(true);
     expect(parsed.widget.highlightToday).toBe(true);
     expect(parsed.widget.collapsible).toBe(true);
+    expect(parsed.widget.expandedByDefault).toBe(true);
     expect(parsed.widget.showDividers).toBe(true);
   });
   it('does not invent a closing at the edge of the lookup window', () => {
