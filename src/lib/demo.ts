@@ -1,4 +1,4 @@
-import { defaultSchedule, type Schedule } from './domain';
+import { defaultSchedule, sampleCafeLogos, type Schedule } from './domain';
 export const demoSchedule: Schedule = {
   ...defaultSchedule('Juniper & Oak'),
   category: 'Coffee shop',
@@ -31,3 +31,15 @@ export const demoSchedule: Schedule = {
     },
   ],
 };
+
+export const demoBusinessProfile: Schedule = {
+  ...demoSchedule,
+  logo: sampleCafeLogos.wordmark,
+  monogram: sampleCafeLogos.monogram,
+};
+
+export function restoreDemoBranding(schedule: Schedule): Schedule {
+  return schedule.name === demoSchedule.name && !schedule.logo
+    ? { ...schedule, logo: demoBusinessProfile.logo, monogram: demoBusinessProfile.monogram }
+    : schedule;
+}

@@ -115,6 +115,40 @@ test('Home opens a simple website message form with a publish review', async ({ 
   await expect(page.getByRole('status')).toContainText('Demo published');
 });
 
+test('a new announcement can apply and publish the saved banner preset', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  await page.getByRole('button', { name: 'Banner', exact: true }).click();
+  await page.getByRole('group', { name: 'Style presets' })
+    .getByRole('button', { name: 'Modern', exact: true }).click();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Widget changes saved to your draft.');
+
+  await page.goto('/demo?tab=announcements');
+  await page.getByRole('button', { name: 'New announcement', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const message = 'The patio is open.';
+  await dialog.getByRole('textbox', { name: 'Message' }).fill(message);
+  await dialog.getByRole('combobox', { name: 'Apply saved preset' }).selectOption('banner');
+  await expect(dialog.getByRole('textbox', { name: 'Message' })).toHaveValue(message);
+  await expect(dialog.getByLabel('Font colour')).toHaveValue('#2563eb');
+  const preview = dialog.locator('.announcement-draft-card');
+  await expect(preview).toHaveCSS('padding-top', '10px');
+  await expect(preview).toHaveCSS('border-top-right-radius', '10px');
+  await dialog.getByRole('button', { name: 'Save announcement', exact: true }).click();
+  const draft = page.locator('.announcement-banner-record').filter({ hasText: message });
+  await expect(draft.locator('.announcement-widget')).toHaveCSS('padding-top', '10px');
+  await draft.getByRole('button', { name: 'Publish', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  const live = page.locator('.announcement-section').filter({
+    has: page.getByRole('heading', { name: 'Live announcements' }),
+  });
+  await expect(live.locator('.announcement-widget')).toContainText(message);
+  await expect(live.locator('.announcement-widget')).toHaveCSS('padding-top', '10px');
+});
+
 test('tabs survive reload and follow browser Back and Forward', async ({ page }, testInfo) => {
   await page.goto('/demo');
   const navigate = async (name: string) => {
@@ -244,13 +278,42 @@ test('hours presets restore their own content and layout settings', async ({ pag
     await page.getByLabel('Show current status').uncheck();
 
     await selectPreset(preset);
-    await expect(preview.locator('.widget-logo')).toBeVisible();
-    await expect(preview.locator('.widget-name')).toBeVisible();
+    const visibleIdentity = preset === 'Dark' ? '.widget-name' : '.widget-logo';
+    const hiddenIdentity = preset === 'Dark' ? '.widget-logo' : '.widget-name';
+    await expect(preview.locator(visibleIdentity)).toBeVisible();
+    await expect(preview.locator(hiddenIdentity)).toHaveCount(0);
     await expect(preview.locator('.widget-expand')).toBeVisible();
     await expect(preview.locator('.widget-status')).toBeVisible();
     await expect(page.getByLabel('Default hours state')).toHaveValue('open');
     await expect(preview.locator('.widget-today')).toBeVisible();
   }
+});
+
+test('the Modern banner preset applies its size and corner radius', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  await page.getByRole('button', { name: 'Banner', exact: true }).click();
+  await page.getByRole('group', { name: 'Style presets' })
+    .getByRole('button', { name: 'Modern', exact: true }).click();
+  const preview = page.locator('.preview-body .announcement-widget');
+  await expect(preview).toHaveCSS('padding-top', '10px');
+  await expect(preview).toHaveCSS('border-top-right-radius', '10px');
+  await page.getByRole('button', { name: 'Layout', exact: true }).click();
+  await expect(page.getByRole('slider', { name: 'Width', exact: true })).toHaveValue('90');
+});
+
+test('status presets apply their branding defaults', async ({ page }) => {
+  await page.goto('/demo?tab=widgets');
+  await page.getByRole('button', { name: 'Status', exact: true }).click();
+  const preview = page.locator('.browser-preview .widget-type-status');
+  const presets = page.getByRole('group', { name: 'Style presets' });
+
+  await presets.getByRole('button', { name: 'Minimal', exact: true }).click();
+  await expect(preview.locator('.widget-logo')).toHaveCount(0);
+  await expect(preview.locator('.widget-name')).toBeVisible();
+
+  await presets.getByRole('button', { name: 'Modern', exact: true }).click();
+  await expect(preview.locator('.widget-logo')).toBeVisible();
+  await expect(preview.locator('.widget-name')).toHaveCount(0);
 });
 
 test('default hours state persists and visitors can override it', async ({ page }) => {

@@ -19,9 +19,11 @@ import type { Schedule } from '@/lib/domain';
 import { publishChanges, scopeLabels, type PublishScope } from '@/lib/publish-scope';
 import {
   readSocialPresets,
+  scaledSocialLogo,
   scaledSocialText,
   socialBackgrounds,
   socialCanvasFont,
+  socialLogoSource,
   socialPalette,
   socialStyle,
   type SocialPreset,
@@ -181,12 +183,15 @@ async function drawArtwork(
     .filter(Boolean)
     .join(' · ');
   let headerX = 108;
-  if (design.showBusinessLogo && schedule.logo) {
-    const logo = await loadArtworkImage(schedule.logo);
-    const size = 64;
+  const logoSource = socialLogoSource(schedule, design.businessLogoVariant);
+  if (design.showBusinessLogo && logoSource) {
+    const logo = await loadArtworkImage(logoSource);
+    const size = scaledSocialLogo(64, design.logoSize);
     const scale = Math.min(size / logo.width, size / logo.height);
-    ctx.drawImage(logo, 108, 90, logo.width * scale, logo.height * scale);
-    headerX += 88;
+    const width = logo.width * scale;
+    const height = logo.height * scale;
+    ctx.drawImage(logo, 108 + (size - width) / 2, 90 + (64 - height) / 2, width, height);
+    headerX += size + 24;
   }
   if (header) write(header, 100, 30, 90, false, headerX);
   write(design.title, 240, scaledSocialText(76, design.titleSize), 240, true);
@@ -717,7 +722,7 @@ export function PublishWizard({
                       <input
                         type="checkbox"
                         checked={designs[current.id].showBusinessLogo === true}
-                        disabled={!draft.logo}
+                        disabled={!draft.logo && !draft.monogram}
                         onChange={(event) =>
                           update(current.id, { showBusinessLogo: event.target.checked })
                         }
@@ -763,7 +768,9 @@ export function PublishWizard({
                       Font colour
                       <input
                         type="color"
-                        value={designs[current.id].fontColour || socialPalette(designs[current.id]).ink}
+                        value={
+                          designs[current.id].fontColour || socialPalette(designs[current.id]).ink
+                        }
                         onChange={(event) => update(current.id, { fontColour: event.target.value })}
                       />
                     </label>

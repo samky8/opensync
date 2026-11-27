@@ -73,22 +73,30 @@ test('sidebar groups dashboard links into Manage, Customize, and Publishing', as
     ['Customize', ['Website widgets', 'Social Studio']],
     ['Publishing', ['Connections', 'Activity']],
   ] as const) {
-    await expect(page.getByRole('navigation', { name: section, exact: true }).getByRole('button'))
-      .toHaveText([...buttons]);
+    await expect(
+      page.getByRole('navigation', { name: section, exact: true }).getByRole('button'),
+    ).toHaveText([...buttons]);
   }
   await expect(page.getByRole('button', { name: 'Activity', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restart setup', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'New update', exact: true })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Social Studio', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Social Studio', exact: true, level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Social Studio', exact: true, level: 1 }),
+  ).toBeVisible();
   if (testInfo.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('button', { name: 'Connections', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Connections', exact: true, level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Connections', exact: true, level: 1 }),
+  ).toBeVisible();
   if (testInfo.project.name === 'mobile')
     await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Brand kit', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open brand kit', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Restart setup', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Restart setup unavailable', exact: true }),
+  ).toBeDisabled();
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   Download,
   Copy,
@@ -12,6 +12,9 @@ import {
   Facebook,
   Maximize2,
   X,
+  Paintbrush,
+  LayoutGrid,
+  ListChecks,
 } from 'lucide-react';
 import { ProBadge } from './ui/pro-badge';
 import { Button } from './ui/button';
@@ -21,10 +24,13 @@ import { type Schedule } from '@/lib/domain';
 import {
   readSocialPresets,
   quickSocialPresets,
+  scaledSocialLogo,
   scaledSocialText,
   socialBackgrounds,
   socialCanvasFont,
   socialFonts,
+  socialLogoSize,
+  socialLogoSource,
   socialPalette,
   socialStyle,
   socialTextSize,
@@ -58,6 +64,12 @@ const quickStyleDefaults: Partial<SocialStyle> = {
   bodySize: undefined,
   alignment: undefined,
 };
+
+const studioSections = [
+  ['appearance', Paintbrush, 'Appearance'],
+  ['layout', LayoutGrid, 'Layout'],
+  ['content', ListChecks, 'Content'],
+] as const;
 
 // Break long words as well as paragraphs so exports never run beyond the artwork.
 function lines(ctx: CanvasRenderingContext2D, text: string, width: number) {
@@ -149,13 +161,18 @@ export function SocialComposer({
     accent: schedule.widget.accent,
   });
   const [editing, setEditing] = useState<string | null>(null);
+  const [studioSection, setStudioSection] =
+    useState<(typeof studioSections)[number][0]>('appearance');
   const platforms = design.platforms || [design.platform];
   const formats = design.formats || [design.format];
   const showHeaderText = design.showHeaderText ?? false;
   const showBusinessName = design.showBusinessName ?? true;
   const showBusinessLogo = design.showBusinessLogo ?? false;
-  const { ink } = socialPalette(design);
-  const fontColour = design.fontColour || ink;
+  const logoSource = socialLogoSource(schedule, design.businessLogoVariant);
+  const appearanceId = useId();
+  const palette = socialPalette(design);
+  const fontColour = design.fontColour || palette.ink;
+  const logoSize = design.logoSize ?? socialLogoSize.default;
   const [notice, setNotice] = useState('');
   const [presets, setPresets] = useState<SocialPreset[]>([]);
   const [presetName, setPresetName] = useState('');
@@ -185,7 +202,7 @@ export function SocialComposer({
         : '';
   const backgroundReady = !backgroundSource || backgroundImage?.source === backgroundSource;
   const businessLogoReady =
-    !showBusinessLogo || !schedule.logo || businessLogoImage?.source === schedule.logo;
+    !showBusinessLogo || !logoSource || businessLogoImage?.source === logoSource;
   useEffect(() => {
     if (!backgroundSource) return;
     let cancelled = false;
@@ -202,22 +219,22 @@ export function SocialComposer({
     };
   }, [backgroundSource]);
   useEffect(() => {
-    if (!schedule.logo) return;
+    if (!logoSource) return;
     let cancelled = false;
     const image = new window.Image();
-    if (/^https?:/i.test(schedule.logo)) image.crossOrigin = 'anonymous';
+    if (/^https?:/i.test(logoSource)) image.crossOrigin = 'anonymous';
     image.onload = () => {
-      if (!cancelled) setBusinessLogoImage({ source: schedule.logo, image });
+      if (!cancelled) setBusinessLogoImage({ source: logoSource, image });
     };
     image.onerror = () => {
       if (!cancelled)
         setNotice('Your business logo could not load. Deselect it or upload it again.');
     };
-    image.src = schedule.logo;
+    image.src = logoSource;
     return () => {
       cancelled = true;
     };
-  }, [schedule.logo]);
+  }, [logoSource]);
   const canvases = useRef<Partial<Record<Design['format'], HTMLCanvasElement | null>>>({});
   const expandedDialog = useRef<HTMLDialogElement>(null);
   const expandedCanvas = useRef<HTMLCanvasElement>(null);
@@ -290,6 +307,13 @@ export function SocialComposer({
         )
           throw new Error();
       }
+      if (
+        value.logoSize !== undefined &&
+        (!Number.isInteger(value.logoSize) ||
+          value.logoSize < socialLogoSize.min ||
+          value.logoSize > socialLogoSize.max)
+      )
+        throw new Error();
       if (
         value.platforms &&
         (!Array.isArray(value.platforms) ||
@@ -370,20 +394,20 @@ export function SocialComposer({
       const start = format === 'story' ? 300 : 110;
       ctx.fillStyle = design.fontColour || palette.ink;
       let headerX = 108;
-      if (showBusinessLogo && schedule.logo && businessLogoImage?.source === schedule.logo) {
+      if (showBusinessLogo && logoSource && businessLogoImage?.source === logoSource) {
         const logo = businessLogoImage.image;
-        const size = 78;
+        const size = scaledSocialLogo(78, design.logoSize);
         const scale = Math.min(size / logo.width, size / logo.height);
         const width = logo.width * scale;
         const logoHeight = logo.height * scale;
         ctx.drawImage(
           logo,
           108 + (size - width) / 2,
-          start + (size - logoHeight) / 2,
+          start + (78 - logoHeight) / 2,
           width,
           logoHeight,
         );
-        headerX += 108;
+        headerX += size + 30;
       }
       const headerItems = [
         showBusinessName ? schedule.name : '',
@@ -442,7 +466,7 @@ export function SocialComposer({
   }, [
     design,
     schedule.name,
-    schedule.logo,
+    logoSource,
     paid,
     backgroundImage,
     backgroundSource,
@@ -650,7 +674,7 @@ export function SocialComposer({
         <div className="social-customization">
           <section className="social-setup-panel">
             <div className="social-setup-heading">
-              <h4>Appearance</h4>
+              <h4>Preset builder</h4>
             </div>
             <div className="social-quick-presets">
               <h5>Quick presets</h5>
@@ -674,18 +698,17 @@ export function SocialComposer({
                       }}
                     >
                       <span
-                        className="preset-preview"
+                        className="social-preset-thumbnail"
                         style={{
                           background: palette.background,
                           color: palette.ink,
                           alignItems: style.alignment === 'center' ? 'center' : 'start',
-                          boxShadow: style.showFrame
-                            ? `inset 0 0 0 3px ${palette.background}, inset 0 0 0 4px ${palette.frame}`
-                            : undefined,
                         }}
                         aria-hidden="true"
                       >
-                        <i />
+                        <span className={style.font === 'sans' ? undefined : 'social-preset-serif'}>
+                          Aa
+                        </span>
                         <i />
                         <i />
                       </span>
@@ -736,153 +759,260 @@ export function SocialComposer({
                 Save style preset
               </Button>
             </div>
-            <div className="social-style-fields">
-              <label>
-                Font
-                <select
-                  value={design.font ?? 'classic'}
-                  onChange={(event) => update({ font: event.target.value as SocialStyle['font'] })}
+            <div
+              className="widget-studio-tabs social-studio-tabs"
+              role="group"
+              aria-label="Preset settings"
+            >
+              {studioSections.map(([id, Icon, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={studioSection === id ? 'active' : undefined}
+                  aria-pressed={studioSection === id}
+                  onClick={() => setStudioSection(id)}
                 >
-                  {Object.entries(socialFonts).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Text alignment
-                <select
-                  value={design.alignment ?? 'left'}
-                  onChange={(event) =>
-                    update({ alignment: event.target.value as SocialStyle['alignment'] })
-                  }
-                >
-                  <option value="left">Left</option>
-                  <option value="center">Centre</option>
-                  <option value="right">Right</option>
-                </select>
-              </label>
-              {(
-                [
-                  ['titleSize', 'Title size'],
-                  ['bodySize', 'Body text size'],
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key}>
-                  {label}
-                  <span className="widget-range-control">
-                    <input
-                      type="range"
-                      aria-label={label}
-                      aria-valuetext={`${design[key] ?? socialTextSize.default}%`}
-                      min={socialTextSize.min}
-                      max={socialTextSize.max}
-                      value={design[key] ?? socialTextSize.default}
-                      onChange={(event) => update({ [key]: Number(event.target.value) })}
-                    />
-                    <span>{design[key] ?? socialTextSize.default}%</span>
-                  </span>
-                </label>
+                  <Icon size={14} aria-hidden="true" /> {label}
+                </button>
               ))}
-              <label>
-                Base colour
-                <select
-                  value={design.theme}
-                  onChange={(event) =>
-                    update({ theme: event.target.value as SocialStyle['theme'] })
-                  }
-                >
-                  <option value="cream">Cream</option>
-                  <option value="dark">Dark</option>
-                  <option value="accent">Custom colour</option>
-                </select>
-              </label>
-              {design.theme === 'accent' && (
-                <label>
-                  Background colour
-                  <span className="widget-accent-control">
+            </div>
+            <div hidden={studioSection !== 'appearance'}>
+              <div className="social-style-fields social-typography-fields">
+                <label className="social-font-field">
+                  Font
+                  <select
+                    value={design.font ?? 'classic'}
+                    onChange={(event) =>
+                      update({ font: event.target.value as SocialStyle['font'] })
+                    }
+                  >
+                    {Object.entries(socialFonts).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {(
+                  [
+                    ['titleSize', 'Title size'],
+                    ['bodySize', 'Body text size'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key}>
+                    {label}
+                    <span className="widget-range-control">
+                      <input
+                        type="range"
+                        aria-label={label}
+                        aria-valuetext={`${design[key] ?? socialTextSize.default}%`}
+                        min={socialTextSize.min}
+                        max={socialTextSize.max}
+                        value={design[key] ?? socialTextSize.default}
+                        onChange={(event) => update({ [key]: Number(event.target.value) })}
+                      />
+                      <span>{design[key] ?? socialTextSize.default}%</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="social-style-fields social-colour-fields">
+                <div className="social-colour-field">
+                  <label htmlFor={`${appearanceId}-background`}>Background colour</label>
+                  <div className="widget-colour-control">
+                    <select
+                      id={`${appearanceId}-background`}
+                      aria-label="Background colour mode"
+                      value={design.theme}
+                      onChange={(event) =>
+                        update({ theme: event.target.value as SocialStyle['theme'] })
+                      }
+                    >
+                      <option value="cream">Cream</option>
+                      <option value="dark">Dark</option>
+                      <option value="accent">Custom</option>
+                    </select>
                     <input
                       type="color"
                       aria-label="Background colour"
-                      value={design.accent}
-                      onChange={(event) => update({ accent: event.target.value })}
+                      value={palette.background}
+                      onChange={(event) => update({ theme: 'accent', accent: event.target.value })}
                     />
-                    <span>{design.accent.toUpperCase()}</span>
-                  </span>
-                </label>
-              )}
-            </div>
-            <div className="social-appearance-colour">
-              <div className="social-colour-row">
-                <label>
-                  <span>Font colour</span>
-                  <span className="widget-accent-control">
+                  </div>
+                </div>
+                <div className="social-colour-field">
+                  <label htmlFor={`${appearanceId}-font`}>Font colour</label>
+                  <div className="widget-colour-control">
+                    <select
+                      id={`${appearanceId}-font`}
+                      aria-label="Font colour mode"
+                      value={design.fontColour ? 'custom' : 'auto'}
+                      onChange={(event) =>
+                        update({
+                          fontColour: event.target.value === 'custom' ? fontColour : undefined,
+                        })
+                      }
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="custom">Custom</option>
+                    </select>
                     <input
-                      aria-label="Font colour"
                       type="color"
+                      aria-label="Font colour"
                       value={fontColour}
                       onChange={(event) => update({ fontColour: event.target.value })}
                     />
-                    <span>{fontColour.toUpperCase()}</span>
-                  </span>
-                </label>
-                {design.fontColour && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => update({ fontColour: undefined })}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div hidden={studioSection !== 'layout'}>
+              <div className="social-style-fields">
+                <label>
+                  Text alignment
+                  <select
+                    value={design.alignment ?? 'left'}
+                    onChange={(event) =>
+                      update({ alignment: event.target.value as SocialStyle['alignment'] })
+                    }
                   >
-                    Use auto
-                  </Button>
+                    <option value="left">Left</option>
+                    <option value="center">Centre</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+              </div>
+              <div className="social-branding-options">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={design.showFrame !== false}
+                    onChange={(event) => update({ showFrame: event.target.checked })}
+                  />
+                  Show artwork border
+                </label>
+              </div>
+            </div>
+            <div hidden={studioSection !== 'content'}>
+              <div className="social-branding-options">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showBusinessName}
+                    onChange={(event) => update({ showBusinessName: event.target.checked })}
+                  />{' '}
+                  Show business name
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showBusinessLogo}
+                    disabled={!logoSource}
+                    onChange={(event) => update({ showBusinessLogo: event.target.checked })}
+                  />{' '}
+                  Show business logo
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showHeaderText}
+                    onChange={(event) => update({ showHeaderText: event.target.checked })}
+                  />
+                  Show header text
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={design.showFooter !== false}
+                    onChange={(event) => update({ showFooter: event.target.checked })}
+                  />{' '}
+                  Show footer
+                </label>
+              </div>
+              {!logoSource && (
+                <small className="muted">Upload a logo in business settings to use it here.</small>
+              )}
+              {showBusinessLogo && logoSource && (
+                <div className="social-style-fields social-logo-settings">
+                  {schedule.logo && schedule.monogram && (
+                    <label>
+                      Logo version
+                      <select
+                        value={design.businessLogoVariant ?? 'primary'}
+                        onChange={(event) =>
+                          update({
+                            businessLogoVariant:
+                              event.target.value === 'monogram' ? 'monogram' : 'primary',
+                          })
+                        }
+                      >
+                        <option value="primary">Business logo</option>
+                        <option value="monogram">Monogram</option>
+                      </select>
+                    </label>
+                  )}
+                  <label>
+                    Logo size
+                    <span className="widget-range-control">
+                      <input
+                        type="range"
+                        aria-label="Logo size"
+                        aria-valuetext={`${logoSize}%`}
+                        min={socialLogoSize.min}
+                        max={socialLogoSize.max}
+                        value={logoSize}
+                        onChange={(event) => update({ logoSize: Number(event.target.value) })}
+                      />
+                      <span>{logoSize}%</span>
+                    </span>
+                  </label>
+                </div>
+              )}
+              <div className="social-style-fields social-content-fields">
+                {showHeaderText && (
+                  <label>
+                    Artwork header
+                    <input
+                      maxLength={98}
+                      value={design.headerText ?? ''}
+                      onChange={(event) => update({ headerText: event.target.value })}
+                    />
+                  </label>
+                )}
+                <label>
+                  Artwork title
+                  <input
+                    maxLength={100}
+                    value={design.title}
+                    onChange={(event) => update({ title: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Artwork message
+                  <textarea
+                    maxLength={700}
+                    rows={4}
+                    value={design.message}
+                    onChange={(event) => update({ message: event.target.value })}
+                  />
+                </label>
+                {design.showFooter !== false && (
+                  <label>
+                    Artwork footer
+                    <input
+                      maxLength={120}
+                      value={design.footer}
+                      onChange={(event) => update({ footer: event.target.value })}
+                    />
+                  </label>
                 )}
               </div>
             </div>
           </section>
-          <section className="social-setup-panel">
-            <div className="social-setup-heading">
-              <h4>Branding &amp; details</h4>
-            </div>
-            <div className="social-branding-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showBusinessName}
-                  onChange={(event) => update({ showBusinessName: event.target.checked })}
-                />{' '}
-                Show business name
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showBusinessLogo}
-                  disabled={!schedule.logo}
-                  onChange={(event) => update({ showBusinessLogo: event.target.checked })}
-                />{' '}
-                Show business logo
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={design.showFrame !== false}
-                  onChange={(event) => update({ showFrame: event.target.checked })}
-                />{' '}
-                Show border
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={design.showFooter !== false}
-                  onChange={(event) => update({ showFooter: event.target.checked })}
-                />{' '}
-                Show footer
-              </label>
-            </div>
-            {!schedule.logo && (
-              <small className="muted">Upload a logo in business settings to use it here.</small>
-            )}
-          </section>
-          <section className="social-setup-panel social-background-picker">
+          <section
+            className="social-setup-panel social-background-picker"
+            hidden={studioSection !== 'appearance'}
+          >
             <div className="social-setup-heading">
               <h4>Background image</h4>
             </div>
@@ -892,7 +1022,10 @@ export function SocialComposer({
                 aria-pressed={!design.background}
                 onClick={() => update({ background: undefined })}
               >
-                <span className="social-background-thumb" style={{ background: '#faf5eb' }} />
+                <span
+                  className="social-background-thumb"
+                  style={{ background: palette.background }}
+                />
                 None
               </button>
               {socialBackgrounds.map((background) => (
@@ -1075,13 +1208,13 @@ export function SocialComposer({
                               <input
                                 type="checkbox"
                                 checked={showBusinessLogo}
-                                disabled={!schedule.logo}
+                                disabled={!logoSource}
                                 onChange={(event) =>
                                   update({ showBusinessLogo: event.target.checked })
                                 }
                               />
                               Business logo
-                              {!schedule.logo && <small>No logo uploaded</small>}
+                              {!logoSource && <small>No logo uploaded</small>}
                             </label>
                           </fieldset>
                           <button

@@ -30,6 +30,8 @@ import {
   formatIntervals,
   localDate,
   replaceException,
+  savedBannerPreset,
+  type BannerPreset,
   type Interval,
   type Schedule,
 } from '@/lib/domain';
@@ -37,6 +39,7 @@ import { Button } from './ui/button';
 import { ProBadge } from './ui/pro-badge';
 import { LogoUpload } from './logo-upload';
 import { RichText } from './rich-text';
+import { bannerLayoutStyle } from './widget';
 export function Periods({
   value,
   onChange,
@@ -304,6 +307,8 @@ export function BusinessFields({
     </fieldset>
   );
 }
+export const planFutureUpdateLabel = 'Plan future update';
+
 export function ExceptionForm({
   draft,
   kind,
@@ -320,7 +325,7 @@ export function ExceptionForm({
   fixedDate?: string;
 }) {
   const today = localDate(draft.timezone);
-  const future = kind === 'Plan a future change';
+  const future = kind === planFutureUpdateLabel;
   const tomorrow = Temporal.PlainDate.from(today).add({ days: 1 }).toString();
   const initialDate = fixedDate || (future ? tomorrow : today);
   const date = new Date(`${initialDate}T12:00:00Z`);
@@ -428,12 +433,14 @@ export function ExceptionForm({
 }
 export function AnnouncementForm({
   draft,
+  savedWidget,
   onSubmit,
   onCancel,
   existing,
   paid = false,
 }: {
   draft: Schedule;
+  savedWidget: Schedule['widget'];
   onSubmit: (s: Schedule) => void;
   onCancel: () => void;
   existing?: Schedule['announcements'][number];
@@ -457,9 +464,11 @@ export function AnnouncementForm({
       existing?.messagePosition || 'inline',
     ),
     [messageVisible, setMessageVisible] = useState(existing?.messageVisible !== false),
+    [bannerPreset, setBannerPreset] = useState<BannerPreset | undefined>(existing?.bannerPreset),
     [fontColour, setFontColour] = useState(existing?.fontColour || initialColours.font),
     [backgroundColour, setBackgroundColour] = useState(
-      existing?.backgroundColour || initialColours.background,
+      existing?.backgroundColour ??
+        (bannerPreset?.background === 'none' ? '' : initialColours.background),
     ),
     [borderColour, setBorderColour] = useState(existing?.borderColour || initialColours.border),
     [editing, setEditing] = useState<'title' | 'message' | null>(existing ? null : 'message');
@@ -516,10 +525,28 @@ export function AnnouncementForm({
 
   function applyQuickStyle(value: typeof type) {
     const colours = announcementStyleColours[value];
+    setBannerPreset(undefined);
     setType(value);
     setFontColour(colours.font);
     setBackgroundColour(colours.background);
     setBorderColour(colours.border);
+  }
+
+  function applySavedPreset() {
+    const preset = savedBannerPreset(savedWidget);
+    const colours = announcementStyleColours[type];
+    setBannerPreset(preset);
+    setFontColour(preset.accent ?? colours.font);
+    setBackgroundColour(
+      preset.background === 'none'
+        ? ''
+        : !preset.background || preset.background === 'auto'
+          ? colours.background
+          : preset.background,
+    );
+    setBorderColour(
+      !preset.borderColour || preset.borderColour === 'auto' ? colours.border : preset.borderColour,
+    );
   }
 
   function formatMessage(prefix: string, suffix = prefix, placeholder = 'text') {
@@ -580,8 +607,9 @@ export function AnnouncementForm({
                 messageVisible,
                 type,
                 fontColour,
-                backgroundColour,
+                backgroundColour: backgroundColour || undefined,
                 borderColour,
+                bannerPreset,
                 start:
                   existing && start === local(existing.start)
                     ? existing.start
@@ -656,6 +684,15 @@ export function AnnouncementForm({
               </select>
             </span>
           </label>
+          <label>
+            <span className="social-control-label">Apply saved preset</span>
+            <select aria-label="Apply saved preset" value="" onChange={applySavedPreset}>
+              <option value="" disabled>
+                {bannerPreset ? 'Saved style applied' : 'Choose a saved style'}
+              </option>
+              <option value="banner">Saved banner style</option>
+            </select>
+          </label>
         </div>
         <div className="announcement-colour-settings">
           {[
@@ -669,10 +706,10 @@ export function AnnouncementForm({
                 <input
                   type="color"
                   aria-label={label as string}
-                  value={value as string}
+                  value={(value as string) || '#ffffff'}
                   onChange={(event) => (setter as (next: string) => void)(event.target.value)}
                 />
-                <code>{(value as string).toUpperCase()}</code>
+                <code>{(value as string).toUpperCase() || 'Transparent'}</code>
               </span>
             </label>
           ))}
@@ -712,11 +749,13 @@ export function AnnouncementForm({
           <span className="pill">Draft</span>
         </div>
         <div
-          className={`announcement-draft-card announcement-${type.replace(' ', '-')}`}
+          className={`announcement-draft-card announcement-${type.replace(' ', '-')}${bannerPreset ? ' has-saved-style' : ''}`}
           style={
             {
+              ...(bannerPreset && bannerLayoutStyle(bannerPreset)),
+              borderLeftWidth: bannerPreset?.borderWidth,
               '--announcement-font-colour': fontColour,
-              '--announcement-background-colour': backgroundColour,
+              '--announcement-background-colour': backgroundColour || 'transparent',
               '--announcement-border-colour': borderColour,
             } as CSSProperties
           }

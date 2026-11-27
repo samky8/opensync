@@ -3,8 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AnnouncementForm } from '../src/components/editors';
 import { defaultSchedule } from '../src/lib/domain';
 
+const draft = defaultSchedule('Test business');
 const props = {
-  draft: defaultSchedule('Test business'),
+  draft,
+  savedWidget: draft.widget,
   onSubmit: () => {},
   onCancel: () => {},
 };

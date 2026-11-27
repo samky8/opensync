@@ -43,6 +43,17 @@ it('uses semantic open and closed status treatments', () => {
   expect(closed).toContain('widget-status closed-now');
   expect(closed).toContain('status-dot red');
 });
+it.each(['', '2026-11-26'])('shows a closure date once with the label %j', (label) => {
+  const schedule = defaultSchedule();
+  schedule.widget.collapsible = false;
+  schedule.exceptions = [
+    { id: 'day-off', start: '2026-11-26', end: '2026-11-26', label, intervals: [] },
+  ];
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="hours" now="2026-11-26T15:00:00Z" />,
+  );
+  expect(html).toContain('class="widget-special"><span>2026-11-26</span><span>Closed</span>');
+});
 it('places the hours credit in the footer opposite the time zone', () => {
   const html = renderToStaticMarkup(
     <Widget schedule={defaultSchedule()} type="hours" now="2026-11-02T15:00:00Z" />,

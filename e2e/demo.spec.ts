@@ -86,11 +86,23 @@ test('header icon and business name return to overview', async ({ page }, testIn
     await expect(page).toHaveURL(/tab=overview/);
   }
 });
-test('marketing and credential gates are honest', async ({ page }) => {
+test('marketing and credential gates are honest', async ({ page }, testInfo) => {
   await page.goto('/');
   await expect(
     page.getByRole('heading', { name: 'Change your hours once. Update everywhere.' }),
   ).toBeVisible();
+  if (testInfo.project.name === 'desktop') {
+    const hoursWidget = page.locator('.hero-product .widget-type-hours');
+    const hoursToggle = hoursWidget.getByRole('button', { name: 'Business hours' });
+    await expect(hoursToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(hoursWidget.locator('.widget-week')).toHaveCount(0);
+    await hoursToggle.click();
+    await expect(hoursToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(hoursWidget.locator('.widget-week')).toBeVisible();
+    await hoursToggle.click();
+    await expect(hoursToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(hoursWidget.locator('.widget-week')).toHaveCount(0);
+  }
   await page.goto('/signup');
   await expect(page.getByRole('heading', { name: 'Make yourself at home.' })).toBeVisible();
 });

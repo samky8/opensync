@@ -28,13 +28,14 @@ const fields: Record<PublishScope, (keyof Schedule)[]> = {
   special: ['exceptions'],
   announcements: ['announcements'],
   widgets: ['widget', 'widgetVisibility'],
-  settings: ['name', 'category', 'website', 'address', 'logo', 'timezone'],
+  settings: ['name', 'category', 'website', 'address', 'logo', 'monogram', 'timezone'],
   all: [
     'name',
     'category',
     'website',
     'address',
     'logo',
+    'monogram',
     'timezone',
     'weekly',
     'exceptions',
@@ -153,24 +154,12 @@ export function publishChanges(
           previousVisibility[key] ? 'Visible' : 'Hidden',
           nextVisibility[key] ? 'Visible' : 'Hidden',
         );
-    } else
-      add(
-        field,
-        field === 'logo'
-          ? published?.logo
-            ? 'Previous logo'
-            : ''
-          : String(published?.[field] ?? ''),
-        field === 'logo'
-          ? draft.logo === published?.logo
-            ? draft.logo
-              ? 'Previous logo'
-              : ''
-            : draft.logo
-              ? 'New logo'
-              : ''
-          : String(draft[field]),
-      );
+    } else if (field === 'logo' || field === 'monogram') {
+      if ((published?.[field] || '') !== (draft[field] || ''))
+        add(field, published?.[field] ? 'Previous logo' : '', draft[field] ? 'New logo' : '');
+    } else {
+      add(field, String(published?.[field] ?? ''), String(draft[field] ?? ''));
+    }
   }
   return rows;
 }

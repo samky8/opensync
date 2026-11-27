@@ -14,11 +14,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { HeroShader } from '@/components/hero-shader';
 import { RevealHeading } from '@/components/reveal-heading';
+import { HoursReviewSlideshow } from '@/components/hours-review-slideshow';
+import reviewStyles from '@/components/hours-review-slideshow.module.css';
 import { Widget } from '@/components/widget';
 import { demoSchedule } from '@/lib/demo';
 import { authConfigured, supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+
+const homeDemoSchedule = {
+  ...demoSchedule,
+  widget: {
+    ...demoSchedule.widget,
+    expandedByDefault: false,
+  },
+};
 
 async function hasSignedInUser() {
   if (!authConfigured()) return false;
@@ -60,8 +70,7 @@ export default async function Home() {
         <section className="hero">
           <HeroShader />
           <RevealHeading>
-            Change your hours once.
-            <br />
+            Change your hours once.{' '}
             <em>Update everywhere.</em>
           </RevealHeading>
           <p>
@@ -119,13 +128,61 @@ export default async function Home() {
                   </Button>
                 </div>
               </div>
-              <Widget schedule={demoSchedule} type="hours" now="2026-11-02T15:00:00.000Z" />
+              <Widget
+                schedule={homeDemoSchedule}
+                type="hours"
+                now="2026-11-02T15:00:00.000Z"
+              />
             </div>
           </div>
+        </section>
+        <section className={reviewStyles.section} aria-labelledby="hours-reviews-title">
+          <div className={reviewStyles.intro}>
+            <h2 id="hours-reviews-title">Don’t let old hours cost you stars.</h2>
+            <p>
+              An unexpected closure can hurt your rating when customers are still seeing your
+              regular hours.
+            </p>
+            <p>
+              Closing early or taking a holiday? Publish the change in OpenSync and your website’s
+              hours widget and live status badge update together.
+            </p>
+            <Button asChild>
+              <Link href="/demo">
+                Try updating your hours <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          <HoursReviewSlideshow />
         </section>
         <section className="marketing-section" id="how-it-works">
           <span className="eyebrow">LESS BUSYWORK. MORE BUSINESS.</span>
           <h2>Three small steps. One less thing to do.</h2>
+          <figure className="home-promo">
+            <video
+              aria-label="OpenSync demo: publish one hours change to multiple channels"
+              width={1280}
+              height={800}
+              poster="/images/opensync-publish-demo.webp"
+              preload="none"
+              controls
+              playsInline
+            >
+              <source src="/opensync-publish-demo.webm" type="video/webm" />
+              <source src="/opensync-publish-demo.mp4" type="video/mp4" />
+              <track
+                kind="captions"
+                src="/opensync-publish-demo.en.vtt"
+                srcLang="en"
+                label="English"
+              />
+              <Link href="/demo">Try the publishing workflow in the OpenSync demo.</Link>
+            </video>
+            <figcaption>
+              Watch one change to your business hours become a website update and posts for
+              Instagram and Facebook. Live social publishing requires eligible connected accounts.
+            </figcaption>
+          </figure>
           <div className="steps-grid">
             {[
               [

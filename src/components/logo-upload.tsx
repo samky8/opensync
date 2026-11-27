@@ -8,10 +8,12 @@ export function LogoUpload({
   value,
   onChange,
   disabled = false,
+  label = 'Business logo',
 }: {
   value: string;
   onChange: (logo: string) => void;
   disabled?: boolean;
+  label?: string;
 }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ export function LogoUpload({
     <div className="logo-upload">
       <label>
         <span className="field-label">
-          Business logo <span>(optional)</span>
+          {label} <span>(optional)</span>
         </span>
         <input
           type="file"
@@ -84,7 +86,7 @@ export function LogoUpload({
       {error && <p role="alert">{error}</p>}
       {value && (
         <div className="logo-preview">
-          <Image src={value} alt="Business logo preview" width={64} height={64} unoptimized />
+          <Image src={value} alt={`${label} preview`} width={64} height={64} unoptimized />
           <Button
             type="button"
             variant="ghost"
@@ -95,7 +97,7 @@ export function LogoUpload({
               onChange('');
             }}
           >
-            Remove logo
+            {label === 'Business logo' ? 'Remove logo' : 'Remove monogram'}
           </Button>
         </div>
       )}

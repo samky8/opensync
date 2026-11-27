@@ -16,6 +16,13 @@ import {
   History,
   Settings,
   HelpCircle,
+  HeartPulse,
+  Lightbulb,
+  Moon,
+  Sun,
+  Sunset,
+  Pause,
+  Play,
   Plus,
   Check,
   CheckCircle2,
@@ -68,7 +75,13 @@ import {
 } from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
 import type { ProTrial } from '@/lib/trial';
-import { AnnouncementForm, BusinessFields, ExceptionForm, WeeklyEditor } from './editors';
+import {
+  AnnouncementForm,
+  BusinessFields,
+  ExceptionForm,
+  WeeklyEditor,
+  planFutureUpdateLabel,
+} from './editors';
 import {
   announcementStyleColours,
   bannerSizeControls,
@@ -83,7 +96,7 @@ import {
   type Schedule,
   type Plan,
 } from '@/lib/domain';
-import { demoSchedule } from '@/lib/demo';
+import { demoBusinessProfile, demoSchedule, restoreDemoBranding } from '@/lib/demo';
 import { importGoogleHours } from '@/lib/google-import';
 type Location = {
   id: string;
@@ -151,6 +164,27 @@ const scheduleNavigation = [
   { id: 'special', label: 'One-time hours', icon: CalendarDays },
 ];
 const settingsNavigation = [{ id: 'brand', label: 'Brand kit', icon: Palette }];
+const setupDismissedKey = 'opensync-home-setup-dismissed';
+const overviewTips = [
+  {
+    title: 'Plan holiday or seasonal hours',
+    description: 'Set special hours for holidays, vacations, or one-time closures.',
+    tab: 'special',
+    icon: CalendarDays,
+  },
+  {
+    title: 'Keep your website hours in sync',
+    description: 'Add a website widget so customers can see your latest published hours.',
+    tab: 'widgets',
+    icon: Code2,
+  },
+  {
+    title: 'Share a timely update',
+    description: 'Create an announcement for news, special events, or unexpected changes.',
+    tab: 'announcements',
+    icon: Megaphone,
+  },
+];
 const navigation = [
   ...sidebarSections.flatMap((section) => section.items),
   ...scheduleNavigation,
@@ -235,6 +269,82 @@ function Modal({
     </dialog>
   );
 }
+function OverviewTips({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  const [activeTip, setActiveTip] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (paused || hovered || focused) return;
+    const timer = window.setTimeout(() => {
+      setActiveTip((current) => (current + 1) % overviewTips.length);
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [activeTip, paused, hovered, focused]);
+
+  return (
+    <section
+      className={`${styles.card} ${styles.tipsCard}`}
+      aria-label="Tips & guidance"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
+    >
+      <header className={styles.tipsHeading}>
+        <h2>
+          <Lightbulb size={19} aria-hidden="true" /> Tips &amp; guidance
+        </h2>
+        <button
+          type="button"
+          className={styles.cardIconButton}
+          aria-label={paused ? 'Resume tip rotation' : 'Pause tip rotation'}
+          onClick={() => setPaused(!paused)}
+        >
+          {paused ? <Play size={14} aria-hidden="true" /> : <Pause size={14} aria-hidden="true" />}
+        </button>
+      </header>
+      <div className={styles.tipViewport} aria-live={paused || focused ? 'polite' : 'off'}>
+        <div className={styles.tipTrack} style={{ transform: `translateX(-${activeTip * 100}%)` }}>
+          {overviewTips.map(({ title, description, tab, icon: Icon }, index) => (
+            <div
+              key={tab}
+              className={styles.tipSlide}
+              inert={index !== activeTip}
+              aria-hidden={index !== activeTip}
+            >
+              <button type="button" className={styles.tip} onClick={() => onNavigate(tab)}>
+                <span>
+                  <Icon size={20} aria-hidden="true" />
+                </span>
+                <span>
+                  <strong>{title}</strong>
+                  <small>{description}</small>
+                </span>
+                <ChevronRight size={17} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={styles.dots} role="group" aria-label="Choose a tip">
+        {overviewTips.map(({ title }, index) => (
+          <button
+            key={title}
+            type="button"
+            aria-label={`Tip ${index + 1}: ${title}`}
+            aria-pressed={index === activeTip}
+            onClick={() => setActiveTip(index)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function Dashboard({
   demo = false,
   sourceLocationId,
@@ -249,15 +359,16 @@ export function Dashboard({
   now: string;
 }) {
   const router = useRouter();
+  const connectedChannelsHeading = useRef<HTMLHeadingElement>(null);
   const [locations, setLocations] = useState<Location[]>(initialLocations),
     [selected, setSelected] = useState(initialLocations[0]?.id || ''),
     [draft, setDraft] = useState<Schedule>(
-      demo ? demoSchedule : initialLocations[0]?.draft || defaultSchedule(),
+      demo ? demoBusinessProfile : initialLocations[0]?.draft || defaultSchedule(),
     ),
     [saved, setSaved] = useState<Schedule>(
-      demo ? demoSchedule : initialLocations[0]?.draft || defaultSchedule(),
+      demo ? demoBusinessProfile : initialLocations[0]?.draft || defaultSchedule(),
     ),
-    [published, setPublished] = useState<Schedule>(demoSchedule),
+    [published, setPublished] = useState<Schedule>(demoBusinessProfile),
     [version, setVersion] = useState(initialLocations[0]?.draftVersion || 1),
     [pubVersion, setPubVersion] = useState(demo ? 1 : initialLocations[0]?.publishedVersion || 0),
     [detail, setDetail] = useState<Detail | null>(null),
@@ -268,6 +379,7 @@ export function Dashboard({
     [error, setError] = useState(''),
     [mobile, setMobile] = useState(false),
     [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [setupDismissed, setSetupDismissed] = useState(false),
     [demoTrial, setDemoTrial] = useState<ProTrial>({ status: 'available', endsAt: null }),
     [now, setNow] = useState(initialNow),
     [onboarding, setOnboarding] = useState(
@@ -379,8 +491,8 @@ export function Dashboard({
         ? ({
             ...shared,
             scrollText: defaults.scrollText,
-            verticalPadding: defaults.verticalPadding,
-            widthPercent: defaults.widthPercent,
+            verticalPadding: preset === 'modern' ? 10 : defaults.verticalPadding,
+            widthPercent: preset === 'modern' ? 90 : defaults.widthPercent,
             ...(preset === 'modern'
               ? {
                   accent: '#2563eb',
@@ -388,6 +500,7 @@ export function Dashboard({
                   background: '#f5f9ff',
                   borderColour: '#2563eb',
                   borderWidth: 3,
+                  radius: 10,
                 }
               : preset === 'minimal'
                 ? {
@@ -421,18 +534,21 @@ export function Dashboard({
             borderColour: preset === 'card' ? '#d8ccf2' : 'auto',
             borderWidth: preset === 'minimal' ? 0 : preset === 'card' ? 2 : 1,
             compact: preset === 'minimal',
-            showLogo: !minimalHours && defaults.showLogo,
-            showName: !minimalHours && defaults.showName,
             showBranding: defaults.showBranding,
             ...(widgetType === 'hours'
               ? {
+                  showLogo: preset === 'modern' || preset === 'card',
+                  showName: preset === 'dark',
                   collapsible: defaults.collapsible,
                   expandedByDefault: !minimalHours && defaults.expandedByDefault,
                   highlightToday: !minimalHours && defaults.highlightToday,
                   showStatus: defaults.showStatus,
                   showDividers: defaults.showDividers,
                 }
-              : {}),
+              : {
+                  showLogo: preset !== 'minimal' && defaults.showLogo,
+                  showName: preset !== 'modern' && defaults.showName,
+                }),
           } as Partial<typeof widgetSettings>);
     setWidgetPreset(preset);
     setDraft((current) => ({
@@ -445,7 +561,6 @@ export function Dashboard({
     widgetType === 'banner' &&
     draft.widgetVisibility?.banner !== false &&
     !status.announcement;
-  const useSampleCafeLogo = demo && draft.name === demoSchedule.name && !draft.logo;
   const previewSchedule = showSampleBanner
     ? {
         ...draft,
@@ -459,9 +574,7 @@ export function Dashboard({
           },
         ],
       }
-    : useSampleCafeLogo
-      ? { ...draft, logo: '/images/juniper-oak-wordmark.webp' }
-      : draft;
+    : draft;
   const readonly = !demo && detail?.role === 'viewer';
   const isBannerPreview = widgetType === 'banner';
   const PreviewActionIcon = isBannerPreview ? Megaphone : Clock;
@@ -521,9 +634,9 @@ export function Dashboard({
           <span>yourwebsite.com</span>
         </div>
         <div
-          className={`preview-body${widgetVisible ? '' : ' is-hidden'}${useSampleCafeLogo ? ' has-demo-wordmark' : ''}`}
+          className={`preview-body${widgetVisible ? '' : ' is-hidden'}${draft.logo === demoBusinessProfile.logo ? ' has-demo-wordmark' : ''}`}
         >
-          <Widget schedule={previewSchedule} type={widgetType} now={now} />
+          <Widget schedule={previewSchedule} type={widgetType} now={now} previewWidgetStyle />
           {!widgetVisible && <p className="muted">Hidden after publishing.</p>}
         </div>
       </div>
@@ -557,6 +670,11 @@ export function Dashboard({
     } catch {
       /* Navigation works without saved preferences. */
     }
+    try {
+      setSetupDismissed(sessionStorage.getItem(setupDismissedKey) === 'true');
+    } catch {
+      /* Setup can still be dismissed until the next reload. */
+    }
     if (!demo && !initialLocations.length)
       setDraft((value) => ({
         ...value,
@@ -571,13 +689,45 @@ export function Dashboard({
       try {
         const stored = localStorage.getItem('opensync-demo-v1');
         if (stored) {
-          const parsed = JSON.parse(stored),
-            valid = scheduleSchema.parse(parsed.draft);
+          const parsed = JSON.parse(stored);
+          let valid = scheduleSchema.parse(parsed.draft);
+          let publishedSnapshot = scheduleSchema.parse(parsed.published);
+          const isLegacyOnboardingReset =
+            parsed.version === 0 &&
+            valid.name === 'Your business' &&
+            publishedSnapshot.name === 'Your business';
+          if (isLegacyOnboardingReset) {
+            valid = structuredClone(demoBusinessProfile);
+            publishedSnapshot = structuredClone(demoBusinessProfile);
+            localStorage.setItem(
+              'opensync-demo-v1',
+              JSON.stringify({
+                draft: valid,
+                published: publishedSnapshot,
+                version: 1,
+                history: [],
+                brandingInitialized: true,
+              }),
+            );
+          }
+          if (!parsed.brandingInitialized && !isLegacyOnboardingReset) {
+            valid = restoreDemoBranding(valid);
+            publishedSnapshot = restoreDemoBranding(publishedSnapshot);
+            localStorage.setItem(
+              'opensync-demo-v1',
+              JSON.stringify({
+                ...parsed,
+                draft: valid,
+                published: publishedSnapshot,
+                brandingInitialized: true,
+              }),
+            );
+          }
           setDraft(valid);
           setSaved(valid);
-          setPublished(scheduleSchema.parse(parsed.published));
-          setPubVersion(parsed.version ?? 1);
-          setDemoHistory(parsed.history || []);
+          setPublished(publishedSnapshot);
+          setPubVersion(isLegacyOnboardingReset ? 1 : (parsed.version ?? 1));
+          setDemoHistory(isLegacyOnboardingReset ? [] : parsed.history || []);
         }
       } catch {
         localStorage.removeItem('opensync-demo-v1');
@@ -674,7 +824,7 @@ export function Dashboard({
   function persistDemo(d: Schedule, p = published, v = pubVersion, h = demoHistory) {
     localStorage.setItem(
       'opensync-demo-v1',
-      JSON.stringify({ draft: d, published: p, version: v, history: h }),
+      JSON.stringify({ draft: d, published: p, version: v, history: h, brandingInitialized: true }),
     );
   }
   async function act(fn: () => Promise<void>) {
@@ -714,6 +864,14 @@ export function Dashboard({
     return resultSave.location.draftVersion as number;
   }
   const businessSave = useRef<Promise<void> | null>(null);
+  function saveProfileLogo(field: 'logo' | 'monogram', logo: string) {
+    const updated = { ...draft, [field]: logo };
+    setDraft(updated);
+    void act(async () => {
+      await autosaveBusiness(updated);
+      notify('Business profile saved automatically.');
+    });
+  }
   async function autosaveBusiness(d = draft) {
     if (readonly) return;
     if (businessSave.current) {
@@ -817,32 +975,6 @@ export function Dashboard({
     }
     setTab(next);
     setMobile(false);
-  }
-  function startDemoOnboarding() {
-    if (!demo) return;
-    const fresh = defaultSchedule(
-      'Your business',
-      Intl.DateTimeFormat().resolvedOptions().timeZone,
-    );
-    persistDemo(fresh, fresh, 0, []);
-    setDraft(fresh);
-    setSaved(structuredClone(fresh));
-    setPublished(structuredClone(fresh));
-    setVersion(1);
-    setPubVersion(0);
-    setDemoHistory([]);
-    setDemoTrial({ status: 'available', endsAt: null });
-    setWidgetType('hours');
-    setModal('');
-    setError('');
-    setToast('');
-    const url = new URL(window.location.href);
-    url.searchParams.set('tab', 'overview');
-    window.history.pushState(null, '', url);
-    setTab('overview');
-    setMobile(false);
-    setStep(1);
-    setOnboarding(true);
   }
   async function claimTrial(): Promise<ProTrial> {
     if (demo) {
@@ -973,6 +1105,14 @@ Implementation requirements:
       );
     });
   }
+  const localHour = Number(
+    new Intl.DateTimeFormat('en', {
+      hour: 'numeric',
+      hourCycle: 'h23',
+      timeZone: saved.timezone,
+    }).format(new Date(now)),
+  );
+  const GreetingIcon = localHour < 6 || localHour >= 22 ? Moon : localHour >= 18 ? Sunset : Sun;
   const PageIcon = titleIcons[tab as keyof typeof titleIcons];
   const goPublish = (value: Schedule) => {
     setDraft(value);
@@ -1089,7 +1229,7 @@ Implementation requirements:
         </button>
         <ProfileMenu
           name={draft.name}
-          logo={useSampleCafeLogo ? '/images/juniper-oak-logo-transparent.png' : draft.logo}
+          logo={draft.monogram || draft.logo}
           locations={locations}
           selected={selected}
           paid={demo || plan === 'business'}
@@ -1574,13 +1714,20 @@ Implementation requirements:
               {tab === 'overview' && (
                 <section className={styles.panel} aria-label="Business overview">
                   <div className={styles.greeting}>
-                    <span>Welcome back,</span>
+                    <span className={styles.greetingLabel}>
+                      Welcome back, <GreetingIcon size={17} aria-hidden="true" />
+                    </span>
                     <h1>{draft.name}</h1>
-                    <p>Keep your hours, announcements, and social channels in sync — all in one place.</p>
+                    <p>
+                      Keep your hours, announcements, and social channels in sync — all in one
+                      place.
+                    </p>
                   </div>
                   <div className={styles.summaries}>
                     <section className={styles.summary}>
-                      <span className={styles.liveLabel}><i /> Live across 3 channels</span>
+                      <span className={styles.liveLabel}>
+                        <i /> Live across 3 channels
+                      </span>
                       <strong>
                         {liveStatus
                           ? liveStatus.open
@@ -1592,7 +1739,9 @@ Implementation requirements:
                       <Store className={styles.storeArt} aria-hidden="true" />
                     </section>
                     <button className={styles.summary} onClick={() => switchTab('special')}>
-                      <span className={styles.nextLabel}><CalendarDays size={15} /> Next change</span>
+                      <span className={styles.nextLabel}>
+                        <CalendarDays size={15} /> Next change
+                      </span>
                       <strong>
                         {upcoming[0]?.label ||
                           (upcoming.length ? 'Holidays & exceptions' : 'No upcoming changes')}
@@ -1626,16 +1775,17 @@ Implementation requirements:
                       >
                         <DoorOpen size={20} />
                         <span>
-                          Update today<small>Close early, open late, or close for the day</small>
+                          Update today&apos;s hours
+                          <small>Close early, open late, or close for the day</small>
                         </span>
                       </button>
                       <button
-                        onClick={() => setModal('Plan a future change')}
+                        onClick={() => setModal(planFutureUpdateLabel)}
                         disabled={quickDisabled}
                       >
                         <CalendarDays size={20} />
                         <span>
-                          Plan a future change
+                          {planFutureUpdateLabel}
                           <small>Holiday hours, vacations, or a one-time change</small>
                         </span>
                       </button>
@@ -1653,62 +1803,150 @@ Implementation requirements:
                       </button>
                     </div>
                   </section>
-                  <div className={styles.dashboardGrid}>
-                    <section className={`${styles.card} ${styles.setupCard}`}>
+                  <div
+                    className={`${styles.dashboardGrid} ${setupDismissed ? styles.setupDismissed : ''}`}
+                  >
+                    <section className={styles.card} hidden={setupDismissed}>
                       <div className={styles.cardHeading}>
                         <h2>Setup progress</h2>
-                        <strong>75% complete</strong>
+                        <div className={styles.setupHeadingActions}>
+                          <strong>75% complete</strong>
+                          <button
+                            type="button"
+                            className={styles.cardIconButton}
+                            aria-label="Dismiss setup progress for this session"
+                            onClick={() => {
+                              connectedChannelsHeading.current?.focus({ preventScroll: true });
+                              setSetupDismissed(true);
+                              try {
+                                sessionStorage.setItem(setupDismissedKey, 'true');
+                              } catch {
+                                /* The dismissal still applies until reload. */
+                              }
+                            }}
+                          >
+                            <X size={16} aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
-                      <div className={styles.progressTrack}><span /></div>
+                      <div className={styles.progressTrack}>
+                        <span />
+                      </div>
                       <div className={styles.checklist}>
                         {[
-                          ['Connect your accounts', 'Google, Facebook and Instagram are connected', 'integrations', true],
-                          ['Customize your website widgets', 'Your widgets are configured', 'widgets', true],
-                          ['Create your first announcement', 'Keep customers updated', 'announcements', true],
-                          ['Confirm your business details', 'Add logo, description and contact info', 'settings', false],
+                          [
+                            'Connect your accounts',
+                            'Google, Facebook and Instagram are connected',
+                            'integrations',
+                            true,
+                          ],
+                          [
+                            'Customize your website widgets',
+                            'Your widgets are configured',
+                            'widgets',
+                            true,
+                          ],
+                          [
+                            'Create your first announcement',
+                            'Keep customers updated',
+                            'announcements',
+                            true,
+                          ],
+                          [
+                            'Confirm your business details',
+                            'Add logo, description and contact info',
+                            'settings',
+                            false,
+                          ],
                         ].map(([label, copy, destination, complete]) => (
-                          <button key={label as string} onClick={() => switchTab(destination as string)}>
+                          <button
+                            key={label as string}
+                            onClick={() => switchTab(destination as string)}
+                          >
                             <span className={complete ? styles.checkDone : styles.checkPending}>
                               {complete && <Check size={14} />}
                             </span>
-                            <span><strong>{label}</strong><small>{copy}</small></span>
+                            <span>
+                              <strong>{label}</strong>
+                              <small>{copy}</small>
+                            </span>
                             <ChevronRight size={16} />
                           </button>
                         ))}
                       </div>
                       <div className={styles.recommendation}>
                         <Sparkles size={19} />
-                        <span><strong>Recommended next step</strong><small>Finish your business details to make your widgets and posts more professional.</small></span>
-                        <button onClick={() => switchTab('settings')}>Complete setup <ArrowRight size={14} /></button>
+                        <span>
+                          <strong>Recommended next step</strong>
+                          <small>
+                            Finish your business details to make your widgets and posts more
+                            professional.
+                          </small>
+                        </span>
+                        <button onClick={() => switchTab('settings')}>
+                          Complete setup <ArrowRight size={14} />
+                        </button>
                       </div>
                     </section>
 
                     <div className={styles.middleColumn}>
                       <section className={styles.card}>
                         <div className={styles.cardHeading}>
-                          <h2>Connected channels</h2>
+                          <h2 ref={connectedChannelsHeading} tabIndex={-1}>
+                            Connected channels
+                          </h2>
                           <button onClick={() => switchTab('integrations')}>Manage</button>
                         </div>
                         <div className={styles.channels}>
                           {[
-                            ['/images/google.svg', 'Google Business Profile', 'Hours sync + business updates'],
+                            [
+                              '/images/google.svg',
+                              'Google Business Profile',
+                              'Hours sync + business updates',
+                            ],
                             ['/images/facebook.svg', 'Facebook', draft.name],
-                            ['/images/instagram.svg', 'Instagram', `@${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}`],
+                            [
+                              '/images/instagram.svg',
+                              'Instagram',
+                              `@${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}`,
+                            ],
                           ].map(([src, label, copy]) => (
                             <div key={label}>
                               <Image src={src} alt="" width={29} height={29} />
-                              <span><strong>{label}</strong><small>{copy}</small></span>
-                              <em><CheckCircle2 size={14} /> Connected</em>
+                              <span>
+                                <strong>{label}</strong>
+                                <small>{copy}</small>
+                              </span>
+                              <em>
+                                <CheckCircle2 size={14} /> Connected
+                              </em>
                             </div>
                           ))}
                         </div>
                       </section>
                       <section className={`${styles.card} ${styles.healthCard}`}>
-                        <div><CheckCircle2 size={24} /><span><h2>System health</h2><strong>All systems running smoothly</strong></span></div>
+                        <div>
+                          <HeartPulse size={24} aria-hidden="true" />
+                          <span>
+                            <h2>System health</h2>
+                            <strong>All systems running smoothly</strong>
+                          </span>
+                        </div>
                         <div className={styles.healthMeta}>
-                          <span><CheckCircle2 size={14} /> Sync active</span>
-                          <span><CheckCircle2 size={14} /> No errors</span>
-                          <span><CheckCircle2 size={14} /> Last publish: {new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: saved.timezone }).format(new Date(now))}</span>
+                          <span>
+                            <CheckCircle2 size={14} /> Sync active
+                          </span>
+                          <span>
+                            <CheckCircle2 size={14} /> No errors
+                          </span>
+                          <span>
+                            <CheckCircle2 size={14} /> Last publish:{' '}
+                            {new Intl.DateTimeFormat('en', {
+                              month: 'short',
+                              day: 'numeric',
+                              timeZone: saved.timezone,
+                            }).format(new Date(now))}
+                          </span>
                         </div>
                       </section>
                     </div>
@@ -1716,24 +1954,21 @@ Implementation requirements:
                     <div className={styles.rightColumn}>
                       <section className={`${styles.card} ${styles.scheduleCard}`}>
                         <div className={styles.cardHeading}>
-                          <h2><CalendarDays size={18} /> This week&apos;s schedule</h2>
+                          <h2>
+                            <CalendarDays size={18} /> This week&apos;s schedule
+                          </h2>
                           <button onClick={() => switchTab('hours')}>View / Edit</button>
                         </div>
                         <div className={styles.weekList}>
                           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
-                            <div key={day}><strong>{day}</strong><span>{formatIntervals(draft.weekly[index])}</span></div>
+                            <div key={day}>
+                              <strong>{day}</strong>
+                              <span>{formatIntervals(draft.weekly[index])}</span>
+                            </div>
                           ))}
                         </div>
                       </section>
-                      <section className={`${styles.card} ${styles.tipsCard}`}>
-                        <h2><HelpCircle size={19} /> Tips &amp; guidance</h2>
-                        <button onClick={() => switchTab('special')}>
-                          <span><CalendarDays size={20} /></span>
-                          <span><strong>Plan holiday or seasonal hours</strong><small>Set special hours (e.g., holidays, vacations) and schedule them to go live automatically.</small></span>
-                          <ChevronRight size={17} />
-                        </button>
-                        <div className={styles.dots}><i /><i /><i /></div>
-                      </section>
+                      <OverviewTips onNavigate={switchTab} />
                     </div>
                   </div>
                 </section>
@@ -2690,7 +2925,13 @@ Implementation requirements:
                     </div>
                     <LogoUpload
                       value={draft.logo}
-                      onChange={(logo) => setDraft({ ...draft, logo })}
+                      onChange={(logo) => saveProfileLogo('logo', logo)}
+                      disabled={busy || readonly}
+                    />
+                    <LogoUpload
+                      label="Business monogram"
+                      value={draft.monogram || ''}
+                      onChange={(logo) => saveProfileLogo('monogram', logo)}
                       disabled={busy || readonly}
                     />
                   </section>
@@ -3187,14 +3428,13 @@ Implementation requirements:
                       key={selected}
                       draft={draft}
                       onChange={setDraft}
-                      onLogoChange={(logo) => {
-                        const updated = { ...draft, logo };
-                        setDraft(updated);
-                        void act(async () => {
-                          await autosaveBusiness(updated);
-                          notify('Business profile saved automatically.');
-                        });
-                      }}
+                      onLogoChange={(logo) => saveProfileLogo('logo', logo)}
+                      disabled={busy || readonly}
+                    />
+                    <LogoUpload
+                      label="Business monogram"
+                      value={draft.monogram || ''}
+                      onChange={(logo) => saveProfileLogo('monogram', logo)}
                       disabled={busy || readonly}
                     />
                     <p className="muted">Changes save automatically when you leave this page.</p>
@@ -3230,23 +3470,16 @@ Implementation requirements:
                     <section className="card padded restart-setup-card">
                       <h3>Restart setup</h3>
                       <p className="muted">
-                        Restarting clears this browser&apos;s demo hours, announcements, widget
-                        choices, saved publication history, and onboarding progress.
+                        Onboarding is unavailable in the demo workspace. Use Reset demo under
+                        Account settings to restore the Juniper &amp; Oak example.
                       </p>
                       <Button
                         variant="outline"
-                        disabled={busy}
-                        onClick={() => {
-                          if (
-                            confirm(
-                              'Restart setup and clear all demo changes saved in this browser?',
-                            )
-                          )
-                            startDemoOnboarding();
-                        }}
+                        disabled
+                        title="Demo accounts do not use onboarding"
                       >
                         <RotateCcw size={15} />
-                        Restart demo setup
+                        Restart setup unavailable
                       </Button>
                     </section>
                   )}
@@ -3356,7 +3589,7 @@ Implementation requirements:
                   {[
                     [
                       'How do I update today’s hours?',
-                      'Choose Update today on Home and pick what changed. Use Plan a future change for holidays and other dates. Your usual weekly hours stay the same.',
+                      `Choose Update today's hours on Home and pick what changed. Use ${planFutureUpdateLabel} for holidays and other dates. Your usual weekly hours stay the same.`,
                     ],
                     [
                       'How do I install a widget?',
@@ -3508,7 +3741,7 @@ Implementation requirements:
                 <Button type="submit">Review message</Button>
               </div>
             </form>
-          ) : ['Add special hours', 'Plan a future change', 'Different hours today'].includes(
+          ) : ['Add special hours', planFutureUpdateLabel, 'Different hours today'].includes(
               modal,
             ) || modal.startsWith('exception:') ? (
             <ExceptionForm
@@ -3522,6 +3755,7 @@ Implementation requirements:
           ) : modal === 'Post announcement' || modal.startsWith('announcement:') ? (
             <AnnouncementForm
               draft={draft}
+              savedWidget={saved.widget}
               paid={plan !== 'free'}
               existing={draft.announcements.find((a) => `announcement:${a.id}` === modal)}
               onSubmit={(value) => {

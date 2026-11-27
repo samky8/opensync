@@ -1,3 +1,5 @@
+import type { Schedule } from './domain';
+
 export const socialBackgrounds = ['botanical', 'sunset', 'waves', 'arches'] as const;
 
 export const socialFonts = {
@@ -8,6 +10,7 @@ export const socialFonts = {
 } as const;
 
 export const socialTextSize = { min: 60, max: 150, default: 100 };
+export const socialLogoSize = { min: 50, max: 150, default: 100 };
 
 export type SocialStyle = {
   background?: string;
@@ -16,6 +19,8 @@ export type SocialStyle = {
   showHeaderText?: boolean;
   showBusinessName?: boolean;
   showBusinessLogo?: boolean;
+  businessLogoVariant?: 'primary' | 'monogram';
+  logoSize?: number;
   footer?: string;
   fontColour?: string;
   font?: keyof typeof socialFonts;
@@ -28,19 +33,28 @@ export type SocialStyle = {
   accent: string;
 };
 
+export function socialLogoSource(
+  profile: Pick<Schedule, 'logo' | 'monogram'>,
+  variant: SocialStyle['businessLogoVariant'],
+) {
+  return variant === 'monogram'
+    ? profile.monogram || profile.logo
+    : profile.logo || profile.monogram;
+}
+
 export const quickSocialPresets = [
-  { name: 'Classic', style: { theme: 'cream', font: 'classic', showFrame: true } },
+  { name: 'Classic', style: { theme: 'cream', font: 'classic' } },
   {
     name: 'Modern',
-    style: { theme: 'cream', font: 'sans', showFrame: false, alignment: 'left', bodySize: 115 },
+    style: { theme: 'cream', font: 'sans', alignment: 'left', bodySize: 115 },
   },
   {
     name: 'Bold',
-    style: { theme: 'accent', font: 'sans', showFrame: false, alignment: 'center', titleSize: 140 },
+    style: { theme: 'accent', font: 'sans', alignment: 'center', titleSize: 140 },
   },
   {
     name: 'Midnight',
-    style: { theme: 'dark', font: 'serif', showFrame: true, alignment: 'center', titleSize: 115 },
+    style: { theme: 'dark', font: 'serif', alignment: 'center', titleSize: 115 },
   },
 ] satisfies { name: string; style: Partial<SocialStyle> }[];
 
@@ -77,6 +91,11 @@ export function scaledSocialText(base: number, percent?: number) {
   return Math.round((base * scale) / 100);
 }
 
+export function scaledSocialLogo(base: number, percent = socialLogoSize.default) {
+  const size = Number.isFinite(percent) ? percent : socialLogoSize.default;
+  return (base * Math.min(socialLogoSize.max, Math.max(socialLogoSize.min, size))) / 100;
+}
+
 export type SocialPreset = {
   id: string;
   name: string;
@@ -94,6 +113,8 @@ export function socialStyle<T extends SocialStyle>(design: T): SocialStyle {
     showHeaderText: design.showHeaderText,
     showBusinessName: design.showBusinessName,
     showBusinessLogo: design.showBusinessLogo,
+    businessLogoVariant: design.businessLogoVariant,
+    logoSize: design.logoSize,
     footer: design.footer,
     fontColour: design.fontColour,
     font: design.font,

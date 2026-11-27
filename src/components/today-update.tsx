@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { formatIntervals, replaceException, type Interval, type Schedule } from '@/lib/domain';
 import { Button } from './ui/button';
@@ -32,7 +32,12 @@ export function TodayUpdate({
   const [time, setTime] = useState('');
   const [id] = useState(() => crypto.randomUUID());
   const [review, setReview] = useState(false);
-  const overnight = existing.some(({ open, close }) => close < open);
+  const shortcutHelpId = useId();
+  const shortcutReason = !existing.length
+    ? 'No opening hours are scheduled for today.'
+    : existing.some(({ open, close }) => close < open)
+      ? 'Today’s hours extend past midnight.'
+      : undefined;
   const intervals =
     choice === 'Closed today'
       ? []
@@ -82,24 +87,35 @@ export function TodayUpdate({
         </div>
       </div>
       {!choice ? (
-        <div className={styles.actionGrid}>
-          {choices.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => {
-                setChoice(item);
-                if (item === 'Closed today') setReview(true);
-              }}
-              disabled={item !== 'Closed today' && (!existing.length || overnight)}
-            >
-              {item}
+        <>
+          <div className={styles.actionGrid}>
+            {choices.map((item) => {
+              const unavailable = item !== 'Closed today' && !!shortcutReason;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setChoice(item);
+                    if (item === 'Closed today') setReview(true);
+                  }}
+                  disabled={unavailable}
+                  aria-describedby={unavailable ? shortcutHelpId : undefined}
+                >
+                  {item}
+                </button>
+              );
+            })}
+            <button type="button" onClick={onCustom}>
+              Different hours today
             </button>
-          ))}
-          <button type="button" onClick={onCustom}>
-            Different hours today
-          </button>
-        </div>
+          </div>
+          {shortcutReason && (
+            <p id={shortcutHelpId} className="muted mt-3">
+              {shortcutReason} Choose “Different hours today” to set today’s hours.
+            </p>
+          )}
+        </>
       ) : review ? (
         <>
           <div className="notice subtle">

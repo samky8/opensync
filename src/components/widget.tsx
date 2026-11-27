@@ -17,6 +17,7 @@ import {
   formatIntervals,
   getStatus,
   widgetAppearanceFor,
+  type BannerPreset,
   type Schedule,
   type WidgetType,
 } from '@/lib/domain';
@@ -42,6 +43,19 @@ const widgetFontFamilies: Record<Schedule['widget']['font'], string> = {
   humanist: '"Trebuchet MS", Candara, Calibri, sans-serif',
   mono: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',
 };
+
+export function bannerLayoutStyle(appearance: BannerPreset) {
+  return {
+    '--announcement-vertical-padding':
+      appearance.verticalPadding == null ? undefined : `${appearance.verticalPadding}px`,
+    '--announcement-width':
+      appearance.widthPercent == null ? undefined : `${appearance.widthPercent}%`,
+    borderRadius: appearance.radius,
+    textAlign: appearance.alignment,
+    fontFamily: appearance.font ? widgetFontFamilies[appearance.font] : undefined,
+    fontSize: typeof appearance.fontSize === 'number' ? `${appearance.fontSize}px` : 'inherit',
+  } as CSSProperties;
+}
 
 function ScrollingAnnouncement({ children }: { children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -100,11 +114,13 @@ export function Widget({
   type = 'hours',
   now: initialNow,
   liveId,
+  previewWidgetStyle = false,
 }: {
   schedule: Schedule;
   type?: WidgetType;
   now?: string;
   liveId?: string;
+  previewWidgetStyle?: boolean;
 }) {
   const [data, setData] = useState(schedule),
     [now, setNow] = useState(initialNow || new Date().toISOString()),
@@ -142,7 +158,9 @@ export function Widget({
       exception.end >= status.date &&
       exception.intervals.length === 0,
   );
-  const w = widgetAppearanceFor(data.widget, type);
+  const bannerPreset =
+    type === 'banner' && !previewWidgetStyle ? status.announcement?.bannerPreset : undefined;
+  const w = { ...widgetAppearanceFor(data.widget, type), ...bannerPreset };
   const expandedByDefault = !w.collapsible || w.expandedByDefault !== false;
   const disclosureMatchesDefault = hoursDisclosure?.expandedByDefault === expandedByDefault;
   if (hoursDisclosure && (!w.collapsible || !disclosureMatchesDefault)) {
@@ -181,21 +199,23 @@ export function Widget({
     const announcementStyle = announcementStyles[a.type];
     const AnnouncementIcon = announcementStyle.Icon;
     const defaultColours = announcementStyleColours[a.type];
-    const bannerOverrides = data.widget.overrides?.banner;
-    const bannerBackground =
+    const bannerOverrides = bannerPreset ?? data.widget.overrides?.banner;
+    const overrideBackground =
       bannerOverrides?.background === 'none'
         ? 'transparent'
-        : bannerOverrides?.background && bannerOverrides.background !== 'auto'
-          ? bannerOverrides.background
-          : a.backgroundColour || defaultColours.background;
+        : bannerOverrides?.background === 'auto'
+          ? undefined
+          : bannerOverrides?.background;
     const bannerStyle = {
       ...style,
-      '--announcement-vertical-padding': `${w.verticalPadding}px`,
-      '--announcement-width': `${w.widthPercent}%`,
-      '--announcement-font-colour': bannerOverrides?.accent || a.fontColour || defaultColours.font,
-      '--announcement-background-colour': bannerBackground,
+      ...bannerLayoutStyle(w),
+      '--announcement-font-colour':
+        (bannerPreset ? undefined : bannerOverrides?.accent) ?? a.fontColour ?? defaultColours.font,
+      '--announcement-background-colour':
+        (bannerPreset ? a.backgroundColour : overrideBackground) ||
+        overrideBackground || a.backgroundColour || defaultColours.background,
       '--announcement-border-colour':
-        bannerOverrides?.borderColour && bannerOverrides.borderColour !== 'auto'
+        !bannerPreset && bannerOverrides?.borderColour && bannerOverrides.borderColour !== 'auto'
           ? bannerOverrides.borderColour
           : a.borderColour || defaultColours.border,
       borderLeftWidth:
@@ -300,15 +320,18 @@ export function Widget({
               {data.exceptions
                 .filter((e) => e.end >= status.date)
                 .slice(0, 3)
-                .map((e) => (
-                  <div key={e.id} className="widget-special">
-                    <span>
-                      {e.label || e.start}
-                      <small>{e.start}</small>
-                    </span>
-                    <span>{formatIntervals(e.intervals)}</span>
-                  </div>
-                ))}
+                .map((e) => {
+                  const label = e.label.trim();
+                  return (
+                    <div key={e.id} className="widget-special">
+                      <span>
+                        {label || e.start}
+                        {label && label !== e.start && <small>{e.start}</small>}
+                      </span>
+                      <span>{formatIntervals(e.intervals)}</span>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </>

@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Check, Flag, RefreshCw, UserRound } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Check,
+  Flag,
+  MapPin,
+  RefreshCw,
+  Search,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 import { Button } from './ui/button';
 
 type Account = {
@@ -192,6 +201,55 @@ export function SocialConnections({
           Instagram access is managed through the connected Facebook Page. Personal profiles are not
           supported.
         </p>
+      </section>
+      <section className="card padded social-card connection-card connection-card-coming-soon">
+        <div className="connection-card-heading">
+          <span className="connection-brand chatgpt-brand" aria-hidden="true" />
+          <h2>ChatGPT</h2>
+          <span className="connection-status-pill is-coming-soon">Coming soon</span>
+        </div>
+        <p className="muted">
+          Help customers find current business information when they search with ChatGPT.
+        </p>
+        <div className="connection-detail-row">
+          <Sparkles size={18} />
+          <span>
+            <strong>Planned connection:</strong> Keep your hours, location details, and updates
+            ready for AI-powered discovery.
+          </span>
+        </div>
+      </section>
+      <section className="card padded social-card connection-card connection-card-coming-soon">
+        <div className="connection-card-heading">
+          <span className="connection-brand bing-brand" aria-hidden="true" />
+          <h2>Microsoft Bing</h2>
+          <span className="connection-status-pill is-coming-soon">Coming soon</span>
+        </div>
+        <p className="muted">Keep your business details consistent across Bing Search and Maps.</p>
+        <div className="connection-detail-row">
+          <Search size={18} />
+          <span>
+            <strong>Planned connection:</strong> Sync your address, opening hours, and timely
+            business updates.
+          </span>
+        </div>
+      </section>
+      <section className="card padded social-card connection-card connection-card-coming-soon">
+        <div className="connection-card-heading">
+          <span className="connection-brand apple-brand" aria-hidden="true" />
+          <h2>Apple Maps</h2>
+          <span className="connection-status-pill is-coming-soon">Coming soon</span>
+        </div>
+        <p className="muted">
+          Manage how your business appears to customers across Apple Maps and Apple apps.
+        </p>
+        <div className="connection-detail-row">
+          <MapPin size={18} />
+          <span>
+            <strong>Planned connection:</strong> Publish accurate place details and hours through
+            Apple Business.
+          </span>
+        </div>
       </section>
       {error && (
         <p className="notice connection-error" role="alert">

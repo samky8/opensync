@@ -72,22 +72,29 @@ const bannerAppearance = widgetAppearance
     verticalPadding: z.number().int().min(bannerSizeControls[0].min).max(bannerSizeControls[0].max),
     widthPercent: z.number().int().min(bannerSizeControls[1].min).max(bannerSizeControls[1].max),
   });
+const bannerOverrides = bannerAppearance.partial();
+export type BannerPreset = z.infer<typeof bannerOverrides>;
+export const sampleCafeLogos = {
+  wordmark: '/images/juniper-oak-wordmark.webp',
+  monogram: '/images/juniper-oak-logo-transparent.png',
+} as const;
+const businessLogo = z.union([
+  safeUrl,
+  z.literal(sampleCafeLogos.wordmark),
+  z.literal(sampleCafeLogos.monogram),
+  z
+    .string()
+    .max(400000)
+    .regex(/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/, 'Choose a valid PNG logo'),
+]);
 export const scheduleSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
     category: z.string().max(80),
     website: safeUrl,
     address: z.string().max(300),
-    logo: z.union([
-      safeUrl,
-      z
-        .string()
-        .max(400000)
-        .regex(
-          /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/,
-          'Choose a valid PNG logo',
-        ),
-    ]),
+    logo: businessLogo,
+    monogram: businessLogo.optional(),
     timezone: z.string().refine((s) => {
       try {
         Temporal.Now.zonedDateTimeISO(s);
@@ -123,6 +130,7 @@ export const scheduleSchema = z
             fontColour: colour.optional(),
             backgroundColour: colour.optional(),
             borderColour: colour.optional(),
+            bannerPreset: bannerOverrides.optional(),
             start: z.iso.datetime(),
             end: z.union([z.iso.datetime(), z.literal('')]),
             enabled: z.boolean(),
@@ -165,7 +173,7 @@ export const scheduleSchema = z
       overrides: z
         .object({
           hours: widgetAppearance.omit({ scrollText: true }).partial().optional(),
-          banner: bannerAppearance.partial().optional(),
+          banner: bannerOverrides.optional(),
           status: widgetAppearance
             .omit({
               showStatus: true,
@@ -211,6 +219,17 @@ export function widgetAppearanceFor(
   type: WidgetType,
 ): WidgetAppearance {
   return { ...bannerSizeDefaults, ...widget, ...widget.overrides?.[type] };
+}
+
+export function savedBannerPreset(widget: Schedule['widget']): BannerPreset {
+  const overrides = widget.overrides?.banner;
+  return bannerOverrides.parse({
+    ...widgetAppearanceFor(widget, 'banner'),
+    accent: overrides?.accent,
+    background: overrides?.background ?? 'auto',
+    borderColour: overrides?.borderColour ?? 'auto',
+    borderWidth: overrides?.borderWidth ?? 3,
+  });
 }
 
 export function customizeWidget(
