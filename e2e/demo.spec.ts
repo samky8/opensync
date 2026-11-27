@@ -89,7 +89,7 @@ test('header icon and business name return to overview', async ({ page }, testIn
 test('marketing and credential gates are honest', async ({ page }, testInfo) => {
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'Change your hours once. Update everywhere.' }),
+    page.getByRole('heading', { name: 'Manage your business hours in one place.' }),
   ).toBeVisible();
   if (testInfo.project.name === 'desktop') {
     const hoursWidget = page.locator('.hero-product .widget-type-hours');

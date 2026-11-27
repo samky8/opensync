@@ -52,7 +52,7 @@ export async function googleAccess(locationId: string) {
   if (!c) throw new Error('Google connection not found');
   let token = decrypt(c.encryptedTokens);
   if (token.expires_at < Date.now() + 60000) {
-    if (!token.refresh_token) throw new Error('Google authorization expired. Reconnect Google.');
+    if (!token.refresh_token) throw new GoogleError(401);
     const renewed = await tokenExchange({
       grant_type: 'refresh_token',
       refresh_token: token.refresh_token,
@@ -136,6 +136,7 @@ export async function googleDisconnect(id: string) {
     if (!res.ok && res.status !== 400)
       throw new Error('Google token revocation failed. Try again before disconnecting.');
     await db().delete(connections).where(eq(connections.locationId, id));
+    return c;
   }
 }
 export function assertGoogle() {

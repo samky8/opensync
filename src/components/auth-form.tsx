@@ -2,9 +2,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { SignupBackdrop } from './signup-backdrop';
 import { Button } from './ui/button';
+import { trackEvent } from '@/lib/analytics';
 export function AuthForm({
   mode,
   google,
@@ -16,7 +17,10 @@ export function AuthForm({
   const router = useRouter();
   const [error, setError] = useState(''),
     [message, setMessage] = useState(''),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [email, setEmail] = useState(''),
+    [password, setPassword] = useState(''),
+    [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
     const error = new URLSearchParams(window.location.search).get('error');
     if (error) setError(error);
@@ -32,6 +36,7 @@ export function AuthForm({
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
+      if (mode === 'signup' && op === 'signup') trackEvent('sign_up', { method: 'email' });
       if (result.url) location.href = result.url;
       else if (result.message) setMessage(result.message);
       else {
@@ -93,6 +98,7 @@ export function AuthForm({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (mode === 'signup') trackEvent('sign_up_started', { method: 'email' });
               const data = new FormData(e.currentTarget);
               void send(mode, {
                 email: String(data.get('email') || ''),
@@ -101,29 +107,55 @@ export function AuthForm({
             }}
           >
             {mode !== 'update' && (
-              <label>
-                Email address
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  placeholder="you@yourbusiness.com"
-                  required
-                />
-              </label>
+              <div className="auth-field-group">
+                <label className="auth-field">
+                  <span className="auth-field-label">Email address</span>
+                  <input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    placeholder="you@yourbusiness.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    maxLength={254}
+                    required
+                  />
+                </label>
+                <div className="auth-field-meta">
+                  <span>Enter your email address</span>
+                  <span aria-live="polite">{email.length}/254</span>
+                </div>
+              </div>
             )}
             {mode !== 'reset' && (
-              <label>
-                Password
-                <input
-                  type="password"
-                  name="password"
-                  minLength={12}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  placeholder="At least 12 characters"
-                  required
-                />
-              </label>
+              <div className="auth-field-group">
+                <label className="auth-field">
+                  <span className="auth-field-label">Password</span>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                  <button
+                    className="auth-password-toggle"
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                  </button>
+                </label>
+                <div className="auth-field-meta">
+                  <span>Use at least 12 characters</span>
+                  <span aria-live="polite">{password.length}/128</span>
+                </div>
+              </div>
             )}
             {error && (
               <p className="form-error" role="alert">
@@ -153,7 +185,10 @@ export function AuthForm({
               className="full"
               variant="outline"
               disabled={busy}
-              onClick={() => send('google')}
+              onClick={() => {
+                if (mode === 'signup') trackEvent('sign_up_started', { method: 'google' });
+                void send('google');
+              }}
             >
               Continue with Google
             </Button>

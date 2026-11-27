@@ -75,6 +75,7 @@ import {
 } from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
 import { freeAccountBilling, type AccountBilling, type ProTrial } from '@/lib/trial';
+import { trackEvent } from '@/lib/analytics';
 import {
   AnnouncementForm,
   BusinessFields,
@@ -98,6 +99,10 @@ import {
 } from '@/lib/domain';
 import { demoBusinessProfile, demoSchedule, restoreDemoBranding } from '@/lib/demo';
 import { importGoogleHours } from '@/lib/google-import';
+import {
+  defaultNotificationPreferences,
+  type NotificationPreferences,
+} from '@/lib/notification-preferences';
 type Location = {
   id: string;
   organizationId: string;
@@ -126,6 +131,7 @@ type Detail = {
   history: { id: string; message: string; createdAt: string }[];
   jobs: Job[];
   notifications: { id: string; message: string; readAt: string | null }[];
+  notificationPreferences: NotificationPreferences;
   googleConfigured: boolean;
   billingConfigured: boolean;
 };
@@ -207,6 +213,7 @@ const titles: Record<string, [string, string]> = {
   account: ['Account settings', 'Manage your account and personal data.'],
   billing: ['Plans & billing', 'Manage your plan and subscription.'],
   notifications: ['Notifications', 'Updates that need your attention.'],
+  'notification-settings': ['Notification settings', 'Choose which updates you receive by email.'],
   help: ['Help', 'Find answers or contact support.'],
 };
 const titleIcons = {
@@ -224,6 +231,7 @@ const titleIcons = {
   account: UserRound,
   billing: CreditCard,
   notifications: Bell,
+  'notification-settings': Bell,
   help: HelpCircle,
 };
 async function request(path: string, body: unknown) {
@@ -433,6 +441,9 @@ export function Dashboard({
     ]),
     [activityFilter, setActivityFilter] = useState('all'),
     [destinationFilter, setDestinationFilter] = useState('all');
+  const [demoNotificationPreferences, setDemoNotificationPreferences] = useState(
+    defaultNotificationPreferences,
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved),
     widgetPlanError = /widget customization requires Pro|custom branding requires Pro/i.test(error),
     publishedSchedule = demo ? (pubVersion ? published : null) : detail?.published,
@@ -691,6 +702,22 @@ export function Dashboard({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }));
     const query = new URLSearchParams(window.location.search);
+    const checkoutPlan = query.get('plan');
+    const checkoutSession = query.get('session_id');
+    if (
+      query.get('checkout') === 'success' &&
+      checkoutSession &&
+      (checkoutPlan === 'pro' || checkoutPlan === 'business') &&
+      sessionStorage.getItem(`analytics-checkout-${checkoutSession}`) !== 'sent'
+    ) {
+      trackEvent('purchase', {
+        transaction_id: checkoutSession,
+        currency: 'CAD',
+        value: checkoutPlan === 'pro' ? 9 : 19,
+        plan: checkoutPlan,
+      });
+      sessionStorage.setItem(`analytics-checkout-${checkoutSession}`, 'sent');
+    }
     if (query.get('tab') && titles[query.get('tab')!]) setTab(query.get('tab')!);
     if (!demo && initialLocations.some((item) => item.id === query.get('location')))
       setSelected(query.get('location')!);
@@ -951,6 +978,8 @@ export function Dashboard({
       sessionStorage.removeItem(`publish-${selected}-${v}-${pubVersion}-${scope}-${includeGoogle}`);
     }
     setOnboarding(false);
+    if (scope === 'widgets' || scope === 'all')
+      trackEvent('widget_created', { source: demo ? 'demo' : 'dashboard', widget_type: 'published' });
     notify(
       demo
         ? 'Demo published. Your local widget preview is up to date.'
@@ -986,6 +1015,23 @@ export function Dashboard({
     }
     setTab(next);
     setMobile(false);
+  }
+  async function updateNotificationPreference(
+    key: keyof NotificationPreferences,
+    enabled: boolean,
+  ) {
+    const current = demo ? demoNotificationPreferences : detail?.notificationPreferences;
+    const preferences = { ...(current ?? defaultNotificationPreferences), [key]: enabled };
+    if (demo) {
+      setDemoNotificationPreferences(preferences);
+      notify('Notification preference updated for this demo');
+      return;
+    }
+    await act(async () => {
+      await request('/api/manage', { op: 'preferences', preferences });
+      setDetail((value) => (value ? { ...value, notificationPreferences: preferences } : value));
+      notify('Notification preferences saved');
+    });
   }
   async function claimTrial(): Promise<ProTrial> {
     if (demo) {
@@ -1054,6 +1100,7 @@ Implementation requirements:
     }
     await act(async () => {
       const result = await request('/api/billing', { plan: tier, portal });
+      if (!portal) trackEvent('begin_checkout', { currency: 'CAD', value: tier === 'pro' ? 9 : 19, plan: tier });
       window.location.href = result.url;
     });
   }
@@ -1294,8 +1341,10 @@ Implementation requirements:
             <button
               aria-label="Settings"
               title="Settings"
-              aria-current={tab === 'settings' ? 'page' : undefined}
-              className={tab === 'settings' ? 'active' : ''}
+              aria-current={
+                ['settings', 'notification-settings'].includes(tab) ? 'page' : undefined
+              }
+              className={['settings', 'notification-settings'].includes(tab) ? 'active' : ''}
               onClick={() => switchTab('settings')}
             >
               <Settings size={18} />
@@ -2498,6 +2547,29 @@ Implementation requirements:
                         </label>
                         <label className={plan === 'free' ? 'pro-locked' : undefined}>
                           <span className="pro-field-label">
+                            {plan === 'free' && <ProBadge />} Shadow
+                          </span>
+                          <div className="widget-range-control">
+                            <input
+                              type="range"
+                              aria-label="Shadow strength"
+                              disabled={readonly || plan === 'free'}
+                              min={0}
+                              max={4}
+                              value={widgetSettings.shadow}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ shadow: Number(event.target.value) })
+                              }
+                            />
+                            <span>
+                              {widgetSettings.shadow === 0
+                                ? 'None'
+                                : `${widgetSettings.shadow} / 4`}
+                            </span>
+                          </div>
+                        </label>
+                        <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                          <span className="pro-field-label">
                             {plan === 'free' && <ProBadge />} Typography
                           </span>
                           <select
@@ -2698,6 +2770,206 @@ Implementation requirements:
                           />
                           Show OpenSync branding
                         </label>
+                      )}
+                      {activeWidgetStudioTab === 'content' && widgetType !== 'banner' && (
+                        <fieldset className="widget-visibility widget-content-options">
+                          <legend>{plan === 'free' && <ProBadge />} Status and formatting</legend>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Closing soon indicator
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.closingSoonMinutes}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  closingSoonMinutes: Number(event.target.value) as
+                                    0 | 15 | 30 | 60,
+                                })
+                              }
+                            >
+                              <option value={0}>Off</option>
+                              {[15, 30, 60].map((minutes) => (
+                                <option key={minutes} value={minutes}>
+                                  {minutes} minutes
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Opening soon indicator
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.openingSoonMinutes}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  openingSoonMinutes: Number(event.target.value) as
+                                    0 | 15 | 30 | 60,
+                                })
+                              }
+                            >
+                              <option value={0}>Off</option>
+                              {[15, 30, 60].map((minutes) => (
+                                <option key={minutes} value={minutes}>
+                                  {minutes} minutes
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Time format
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.timeFormat}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  timeFormat: event.target.value as 'auto' | '12' | '24',
+                                })
+                              }
+                            >
+                              <option value="auto">Automatic</option>
+                              <option value="12">12-hour</option>
+                              <option value="24">24-hour</option>
+                            </select>
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Language
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.language}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  language: event.target.value as 'auto' | 'en' | 'fr',
+                                })
+                              }
+                            >
+                              <option value="auto">Automatic</option>
+                              <option value="en">English</option>
+                              <option value="fr">French</option>
+                            </select>
+                          </label>
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={widgetSettings.showNextOpening}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ showNextOpening: event.target.checked })
+                              }
+                            />
+                            Show next opening time
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Open status label
+                            <input
+                              type="text"
+                              maxLength={40}
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.openLabel}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ openLabel: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Closed status label
+                            <input
+                              type="text"
+                              maxLength={40}
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.closedLabel}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ closedLabel: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Opening soon label
+                            <input
+                              type="text"
+                              maxLength={40}
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.openingSoonLabel}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ openingSoonLabel: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Closing soon label
+                            <input
+                              type="text"
+                              maxLength={40}
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.closingSoonLabel}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ closingSoonLabel: event.target.value })
+                              }
+                            />
+                          </label>
+                        </fieldset>
+                      )}
+                      {activeWidgetStudioTab === 'content' && widgetType === 'hours' && (
+                        <fieldset className="widget-visibility widget-content-options">
+                          <legend>{plan === 'free' && <ProBadge />} Schedule display</legend>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Week starts on
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.weekStart}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  weekStart: event.target.value as 'monday' | 'sunday',
+                                })
+                              }
+                            >
+                              <option value="monday">Monday</option>
+                              <option value="sunday">Sunday</option>
+                            </select>
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Day formatting
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.dayFormat}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  dayFormat: event.target.value as Schedule['widget']['dayFormat'],
+                                })
+                              }
+                            >
+                              <option value="short">Mon</option>
+                              <option value="long">Monday</option>
+                            </select>
+                          </label>
+                          <label className={plan === 'free' ? 'pro-locked' : undefined}>
+                            Upcoming special hours
+                            <select
+                              disabled={readonly || plan === 'free'}
+                              value={widgetSettings.upcomingSpecialDays}
+                              onChange={(event) =>
+                                updateWidgetAppearance({
+                                  upcomingSpecialDays: Number(event.target.value) as 7 | 14 | 30,
+                                })
+                              }
+                            >
+                              {[7, 14, 30].map((days) => (
+                                <option key={days} value={days}>
+                                  Next {days} days
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className={`check-label ${plan === 'free' ? 'pro-locked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={widgetSettings.showTimezone}
+                              disabled={readonly || plan === 'free'}
+                              onChange={(event) =>
+                                updateWidgetAppearance({ showTimezone: event.target.checked })
+                              }
+                            />
+                            Show time zone
+                          </label>
+                        </fieldset>
                       )}
                       {activeWidgetStudioTab === 'content' && widgetType === 'hours' && (
                         <fieldset className="widget-visibility widget-content-options">
@@ -3305,21 +3577,31 @@ Implementation requirements:
                 <section className="card">
                   <div className="card-heading">
                     <h3>Notifications</h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        act(async () => {
-                          if (!demo) {
-                            await request('/api/manage', { op: 'read', id: selected });
-                            await refresh();
-                          }
-                          notify('All caught up');
-                        })
-                      }
-                    >
-                      Mark all as read
-                    </Button>
+                    <div className="notification-heading-actions">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          act(async () => {
+                            if (!demo) {
+                              await request('/api/manage', { op: 'read', id: selected });
+                              await refresh();
+                            }
+                            notify('All caught up');
+                          })
+                        }
+                      >
+                        Mark all as read
+                      </Button>
+                      <button
+                        className="icon-button"
+                        aria-label="Notification settings"
+                        title="Notification settings"
+                        onClick={() => switchTab('notification-settings')}
+                      >
+                        <Settings size={18} />
+                      </button>
+                    </div>
                   </div>
                   {detail?.notifications.length ? (
                     detail.notifications.map((n) => (
@@ -3338,6 +3620,72 @@ Implementation requirements:
                   )}
                 </section>
               )}
+              {tab === 'notification-settings' &&
+                (() => {
+                  const preferences = demo
+                    ? demoNotificationPreferences
+                    : (detail?.notificationPreferences ?? defaultNotificationPreferences);
+                  const options: {
+                    key: keyof NotificationPreferences;
+                    title: string;
+                    description: string;
+                  }[] = [
+                    {
+                      key: 'hoursDiscrepancy',
+                      title: 'Hours discrepancies',
+                      description: 'When Google and your website show different hours.',
+                    },
+                    {
+                      key: 'upcomingHoliday',
+                      title: 'Upcoming holidays',
+                      description: 'Seven days before an unconfigured holiday.',
+                    },
+                    {
+                      key: 'publishingIssue',
+                      title: 'Publishing and connection issues',
+                      description: 'When an update fails or an account disconnects.',
+                    },
+                    {
+                      key: 'weeklySummary',
+                      title: 'Weekly activity summary',
+                      description: 'A summary of changes and system health.',
+                    },
+                  ];
+                  return (
+                    <section className="card padded notification-settings-card">
+                      <div className="notification-settings-intro">
+                        <div>
+                          <h3>Notifications</h3>
+                          <p className="muted">
+                            Choose which updates you&apos;d like to receive by email.
+                          </p>
+                        </div>
+                        <Bell size={22} aria-hidden="true" />
+                      </div>
+                      <div className="notification-preference-list">
+                        {options.map((option) => (
+                          <label className="notification-preference" key={option.key}>
+                            <span>
+                              <strong>{option.title}</strong>
+                              <small>{option.description}</small>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={preferences[option.key]}
+                              disabled={busy || (!demo && !detail)}
+                              onChange={(event) =>
+                                void updateNotificationPreference(option.key, event.target.checked)
+                              }
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <p className="muted notification-email-destination">
+                        Email notifications will be sent to {demo ? 'jamie@example.com' : email}.
+                      </p>
+                    </section>
+                  );
+                })()}
               {tab === 'billing' && (
                 <>
                   <div className="notice">
@@ -3346,7 +3694,9 @@ Implementation requirements:
                       : `Your account is on the ${billingPlanLabel} plan. It covers every workspace you own.`}
                   </div>
                   {accountBilling.paymentNeedsAttention && (
-                    <p className="notice">Open the billing portal to update your payment details.</p>
+                    <p className="notice">
+                      Open the billing portal to update your payment details.
+                    </p>
                   )}
                   {!demo && !detail?.billingConfigured && !accountBilling.complimentaryBusiness && (
                     <p className="muted">Checkout is currently unavailable.</p>
@@ -3413,7 +3763,8 @@ Implementation requirements:
                           disabled={
                             p.id === 'free' ||
                             (!demo &&
-                              (!detail?.billingConfigured || accountBilling.complimentaryBusiness)) ||
+                              (!detail?.billingConfigured ||
+                                accountBilling.complimentaryBusiness)) ||
                             busy
                           }
                           onClick={() => billing(p.id)}
@@ -3483,6 +3834,17 @@ Implementation requirements:
                       </Button>
                       <Button variant="ghost" onClick={() => setModal('team')}>
                         Add a staff member
+                      </Button>
+                    </section>
+                    <section className="card padded">
+                      <h3>Notifications</h3>
+                      <p className="muted">
+                        Choose which hours, holiday, publishing, and activity updates arrive by
+                        email.
+                      </p>
+                      <Button variant="outline" onClick={() => switchTab('notification-settings')}>
+                        <Bell size={16} />
+                        Manage notifications
                       </Button>
                     </section>
                   </div>

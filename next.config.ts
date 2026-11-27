@@ -22,6 +22,14 @@ const config: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
       },
+      {
+        source: '/(dashboard|onboarding|demo|login|signup|reset-password|auth|api)/:path*',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
+      {
+        source: '/embed/:path*',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, follow' }],
+      },
     ];
   },
 };

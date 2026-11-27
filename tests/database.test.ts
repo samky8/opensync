@@ -50,6 +50,7 @@ import { POST as claimTrial } from '../src/app/api/trial/route';
 import { POST as billing } from '../src/app/api/billing/route';
 import { POST as webhook } from '../src/app/api/billing/webhook/route';
 import { accountEntitlementsFor, entitlementsFor, planFor } from '../src/lib/server';
+import { runNotificationChecks, sendOneNotificationEmail } from '../src/lib/notification-system';
 const pg = new PGlite();
 const migratedAccount = randomUUID();
 const legacyPaidWorkspace = randomUUID();
@@ -84,6 +85,7 @@ beforeAll(async () => {
   await pg.exec(migration);
   await pg.exec(await readFile('migrations/002_billing_idempotency.sql', 'utf8'));
   await pg.exec(await readFile('migrations/003_publication_constraints.sql', 'utf8'));
+  await pg.exec(await readFile('migrations/004_social_publishing.sql', 'utf8'));
   await pg.exec(await readFile('migrations/005_pro_trials.sql', 'utf8'));
   await pg.query('insert into auth.users(id) values($1)', [migratedAccount]);
   await pg.query("insert into organizations(id,name) values($1,'Paid'),($2,'Trial')", [
@@ -105,6 +107,7 @@ beforeAll(async () => {
     [legacyPaidWorkspace, legacyTrialWorkspace, migratedAccount],
   );
   await pg.exec(await readFile('migrations/007_account_billing.sql', 'utf8'));
+  await pg.exec(await readFile('migrations/008_notification_settings.sql', 'utf8'));
   await pg.query(
     'insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',
     [shared.user, 'test@example.com', '22222222-2222-4222-8222-222222222222', 'other@example.com'],
@@ -585,6 +588,42 @@ describe('real SQL application flows', () => {
     await expect(
       pg.query("update revisions set snapshot='{}' where location_id=$1", [id]),
     ).rejects.toThrow(/immutable/);
+  });
+  it('deduplicates Christmas reminders, honors opt-outs at delivery time and sends opted-in email', async () => {
+    const preferences = {
+      hoursDiscrepancy: false,
+      upcomingHoliday: true,
+      publishingIssue: false,
+      weeklySummary: false,
+    };
+    expect((await post({ op: 'preferences', preferences })).body.preferences).toEqual(preferences);
+    const detail = await manageGet(new Request(`http://localhost:3000/api/manage?id=${id}`));
+    expect((await detail.json()).notificationPreferences).toEqual(preferences);
+    const date = new Date('2026-12-18T18:00:00Z');
+    expect((await runNotificationChecks(date)).holidays).toBeGreaterThan(0);
+    expect((await runNotificationChecks(date)).holidays).toBe(0);
+    const mockEmail = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', mockEmail);
+    vi.stubEnv('RESEND_API_KEY', 'test-key');
+    vi.stubEnv('NOTIFICATION_EMAIL_FROM', 'updates@example.com');
+    try {
+      await post({ op: 'preferences', preferences: { ...preferences, upcomingHoliday: false } });
+      expect(await sendOneNotificationEmail()).toBe(false);
+      expect(mockEmail).not.toHaveBeenCalled();
+      await post({ op: 'preferences', preferences });
+      expect(await sendOneNotificationEmail()).toBe(true);
+      expect(mockEmail).toHaveBeenCalledWith(
+        'https://api.resend.com/emails',
+        expect.objectContaining({ body: expect.stringContaining('Christmas Day') }),
+      );
+      expect(
+        (await pg.query('select status from notification_deliveries where location_id=$1', [id]))
+          .rows,
+      ).toEqual([{ status: 'sent' }]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
   it('account deletion trigger removes owned public data atomically', async () => {
     await pg.query('delete from auth.users where id=$1', [shared.user]);

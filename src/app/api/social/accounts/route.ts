@@ -5,6 +5,7 @@ import { socialAccounts, socialPublications } from '@/db/schema';
 import { metaConfigured } from '@/lib/meta';
 import { apiError, checkOrigin, locationAccess } from '@/lib/server';
 import { publicPublication, publicationColumns } from '@/lib/social-publishing';
+import { queueNotification } from '@/lib/notification-system';
 export async function GET(req: Request) {
   try {
     const id = z.uuid().parse(new URL(req.url).searchParams.get('id'));
@@ -51,10 +52,23 @@ export async function DELETE(req: Request) {
     const { id, accountId } = z
       .object({ id: z.uuid(), accountId: z.uuid() })
       .parse(await req.json());
-    await locationAccess(id, true);
-    await db()
-      .delete(socialAccounts)
-      .where(and(eq(socialAccounts.locationId, id), eq(socialAccounts.id, accountId)));
+    const { location } = await locationAccess(id, true);
+    await db().transaction(async (tx) => {
+      const [account] = await tx
+        .delete(socialAccounts)
+        .where(and(eq(socialAccounts.locationId, id), eq(socialAccounts.id, accountId)))
+        .returning({ name: socialAccounts.name });
+      if (account)
+        await queueNotification(tx, {
+          organizationId: location.organizationId,
+          locationId: id,
+          kind: 'publishing_issue',
+          dedupeKey: `meta-disconnect:${accountId}`,
+          message: `${account.name} was disconnected from OpenSync.`,
+          subject: 'Social account disconnected',
+          body: `${account.name} was disconnected from OpenSync. You can reconnect it from Connections.`,
+        });
+    });
     return Response.json({ ok: true });
   } catch (error) {
     return apiError(error);

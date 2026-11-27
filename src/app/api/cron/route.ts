@@ -11,6 +11,11 @@ import {
 } from '@/lib/google';
 import { planFor } from '@/lib/server';
 import { retryDelay } from '@/lib/domain';
+import {
+  queueNotification,
+  runNotificationChecks,
+  sendOneNotificationEmail,
+} from '@/lib/notification-system';
 export const maxDuration = 60;
 export async function GET(req: Request) {
   if (
@@ -18,6 +23,18 @@ export async function GET(req: Request) {
     !validState(req.headers.get('authorization'), `Bearer ${process.env.CRON_SECRET}`)
   )
     return new Response('Unauthorized', { status: 401 });
+  if (new URL(req.url).searchParams.get('notifications') === '1') {
+    const notifications = await runNotificationChecks();
+    let emailAttempts = 0;
+    for (let batch = 0; batch < 3; batch++) {
+      const attempted = await Promise.all(
+        Array.from({ length: 5 }, () => sendOneNotificationEmail()),
+      );
+      emailAttempts += attempted.filter(Boolean).length;
+      if (!attempted.every(Boolean)) break;
+    }
+    return Response.json({ notifications, emailAttempts });
+  }
   let processed = 0;
   // A transaction-scoped location lock serializes worker calls and publication. A crashed worker rolls back for retry.
   for (let n = 0; n < 1; n++) {
@@ -73,9 +90,14 @@ export async function GET(req: Request) {
           })
           .where(eq(t.jobs.id, id));
         if (!retry)
-          await tx.insert(t.notifications).values({
+          await queueNotification(tx, {
             organizationId: loc.organizationId,
+            locationId,
+            kind: 'publishing_issue',
+            dedupeKey: `job:${id}`,
             message: `Google sync needs attention: ${message}`,
+            subject: 'OpenSync publishing needs attention',
+            body: `An update could not be published to Google. ${message}\n\nOpen Activity in OpenSync to review the failed update.`,
           });
         if (e instanceof GoogleError && e.status === 401)
           await tx

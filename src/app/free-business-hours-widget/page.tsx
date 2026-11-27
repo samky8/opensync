@@ -2,14 +2,10 @@ import type { Metadata } from 'next';
 import { Code2, Palette, RefreshCw } from 'lucide-react';
 import { IntentPage } from '@/components/intent-page';
 import { WidgetBuilder } from '@/components/marketing-tools';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Free Business Hours Widget for Any Website',
-  description: 'Add a free, customizable business hours widget to WordPress, Wix, Shopify, Squarespace, or any website. Update opening hours without editing your site.',
-  alternates: { canonical: '/free-business-hours-widget' },
-  openGraph: { title: 'Free Business Hours Widget for Your Website', description: 'A polished, live opening-hours widget you can add to any website in minutes.', url: '/free-business-hours-widget' },
-};
-export default function Page() { return <IntentPage eyebrow="FREE BUSINESS HOURS WIDGET" title={<>Website hours that stay <em>beautifully current.</em></>} description="Add a responsive opening hours widget to your website, then change the schedule without touching your site builder again." audience="Businesses looking for website widgets" demoLabel="LIVE WIDGET BUILDER" Demo={WidgetBuilder} benefits={[
+export const metadata: Metadata = pageMetadata('/free-business-hours-widget');
+export default function Page() { return <IntentPage path="/free-business-hours-widget" eyebrow="FREE BUSINESS HOURS WIDGET" title={<>Website hours that stay <em>beautifully current.</em></>} description="Add a responsive opening hours widget to your website, then change the schedule without touching your site builder again." audience="Businesses looking for website widgets" demoLabel="LIVE WIDGET BUILDER" Demo={WidgetBuilder} benefits={[
   {icon:Code2,title:'One small snippet',text:'Paste it into WordPress, Wix, Shopify, Squarespace, Webflow, or plain HTML.'},
   {icon:Palette,title:'Looks like your brand',text:'Choose colours, corners, type, alignment, and light or dark styling.'},
   {icon:RefreshCw,title:'Always up to date',text:'Publish an hours change once and every embedded widget reflects it automatically.'},

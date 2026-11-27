@@ -16,6 +16,8 @@ import {
 import { defaultSchedule, scheduleSchema, validateEntitlements } from '@/lib/domain';
 import { googleDisconnect } from '@/lib/google';
 import { publishScopes, scopedSchedule } from '@/lib/publish-scope';
+import { notificationPreferencesSchema, preferencesToMask } from '@/lib/notification-preferences';
+import { queueNotification } from '@/lib/notification-system';
 export async function GET(req: Request) {
   try {
     const id = z.uuid().parse(new URL(req.url).searchParams.get('id'));
@@ -119,14 +121,15 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
     if (op === 'preferences') {
+      const preferences = notificationPreferencesSchema.parse(body.preferences);
       await db()
         .insert(t.preferences)
-        .values({ userId: user.id, emailNotifications: body.enabled ? 1 : 0 })
+        .values({ userId: user.id, emailNotifications: preferencesToMask(preferences) })
         .onConflictDoUpdate({
           target: t.preferences.userId,
-          set: { emailNotifications: body.enabled ? 1 : 0 },
+          set: { emailNotifications: preferencesToMask(preferences) },
         });
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, preferences });
     }
     if (op === 'delete') {
       if (body.confirmation !== 'DELETE') throw new Error('Type DELETE for confirmation');
@@ -175,7 +178,17 @@ export async function POST(req: Request) {
     const { location, role } = await locationAccess(id, op !== 'read');
     const plan = await planFor(location.organizationId);
     if (op === 'disconnect') {
-      await googleDisconnect(id);
+      const connection = await googleDisconnect(id);
+      if (connection?.remoteId)
+        await queueNotification(db(), {
+          organizationId: location.organizationId,
+          locationId: id,
+          kind: 'publishing_issue',
+          dedupeKey: `google-disconnect:${id}:${connection.updatedAt.toISOString()}`,
+          message: 'Google Business Profile was disconnected.',
+          subject: 'Google Business Profile disconnected',
+          body: 'Google Business Profile was disconnected in OpenSync. You can reconnect it from Connections.',
+        });
       return Response.json({ ok: true });
     }
     if (op === 'read') {

@@ -14,7 +14,6 @@ import {
 import {
   announcementStyleColours,
   days,
-  formatIntervals,
   getStatus,
   widgetAppearanceFor,
   type BannerPreset,
@@ -43,6 +42,13 @@ const widgetFontFamilies: Record<Schedule['widget']['font'], string> = {
   humanist: '"Trebuchet MS", Candara, Calibri, sans-serif',
   mono: 'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace',
 };
+const widgetShadows = [
+  'none',
+  '0 2px 6px rgba(23, 33, 60, 0.08)',
+  '0 6px 18px rgba(23, 33, 60, 0.12)',
+  '0 12px 30px rgba(23, 33, 60, 0.16)',
+  '0 20px 50px rgba(23, 33, 60, 0.22)',
+] as const;
 
 export function bannerLayoutStyle(appearance: BannerPreset) {
   return {
@@ -124,12 +130,17 @@ export function Widget({
 }) {
   const [data, setData] = useState(schedule),
     [now, setNow] = useState(initialNow || new Date().toISOString()),
+    [automaticLocale, setAutomaticLocale] = useState('en-CA'),
     [hoursDisclosure, setHoursDisclosure] = useState<{
       expandedByDefault: boolean;
       expanded: boolean;
     } | null>(null),
     [unavailable, setUnavailable] = useState(false);
   useEffect(() => setData(schedule), [schedule]);
+  useEffect(() => {
+    const preferred = navigator.languages.find((language) => /^(en|fr)(-|$)/i.test(language));
+    setAutomaticLocale(preferred ?? 'en-CA');
+  }, []);
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date().toISOString()), 15000);
     return () => clearInterval(timer);
@@ -161,6 +172,47 @@ export function Widget({
   const bannerPreset =
     type === 'banner' && !previewWidgetStyle ? status.announcement?.bannerPreset : undefined;
   const w = { ...widgetAppearanceFor(data.widget, type), ...bannerPreset };
+  const locale = w.language === 'fr' ? 'fr-CA' : w.language === 'en' ? 'en-CA' : automaticLocale;
+  const french = locale.toLowerCase().startsWith('fr');
+  const localLabel = (custom: string, english: string, translated: string) =>
+    french && custom === english ? translated : custom.trim() || (french ? translated : english);
+  const timeOptions = widgetTimeOptions(w.timeFormat);
+  const specialHoursThrough = addUtcDays(status.date, w.upcomingSpecialDays);
+  const nextInstant = status.next ? new Date(status.next) : null;
+  const minutesUntilNext = nextInstant
+    ? Math.max(0, (nextInstant.getTime() - new Date(now).getTime()) / 60000)
+    : Number.POSITIVE_INFINITY;
+  const soon = status.open
+    ? w.closingSoonMinutes > 0 && minutesUntilNext <= w.closingSoonMinutes
+    : w.openingSoonMinutes > 0 && minutesUntilNext <= w.openingSoonMinutes;
+  const statusLabel = status.open
+    ? soon
+      ? localLabel(w.closingSoonLabel, 'Closing soon', 'Ferme bientôt')
+      : localLabel(w.openLabel, 'Open now', 'Ouvert')
+    : soon
+      ? localLabel(w.openingSoonLabel, 'Opening soon', 'Ouvre bientôt')
+      : localLabel(w.closedLabel, 'Closed now', 'Fermé');
+  const nextLabel =
+    nextInstant && (status.open || w.showNextOpening)
+      ? `${status.open ? (french ? 'Ferme' : 'Closes') : french ? 'Ouvre' : 'Opens'} ${new Intl.DateTimeFormat(
+          locale,
+          {
+            timeZone: data.timezone,
+            weekday: 'short',
+            hour: 'numeric',
+            minute: '2-digit',
+            ...timeOptions,
+          },
+        ).format(nextInstant)}`
+      : status.open
+        ? french
+          ? 'Ouvert sans fermeture prévue'
+          : 'Open with no scheduled closing'
+        : w.showNextOpening
+          ? french
+            ? 'Aucune heure d’ouverture à venir'
+            : 'No upcoming opening hours'
+          : '';
   const expandedByDefault = !w.collapsible || w.expandedByDefault !== false;
   const disclosureMatchesDefault = hoursDisclosure?.expandedByDefault === expandedByDefault;
   if (hoursDisclosure && (!w.collapsible || !disclosureMatchesDefault)) {
@@ -180,17 +232,23 @@ export function Widget({
     textAlign: w.alignment,
     fontFamily: widgetFontFamilies[w.font] || 'inherit',
     fontSize: w.fontSize === 'auto' || w.fontSize == null ? 'inherit' : `${w.fontSize}px`,
+    boxShadow: widgetShadows[w.shadow],
+    '--widget-shadow-gutter': w.shadow > 0 ? `${6 + w.shadow * 4}px` : undefined,
   } as CSSProperties;
   const credit = w.showBranding !== false && (
     <a className="widget-credit" href="/" target="_blank" rel="noopener">
-      Powered by <b>OpenSync</b>
+      {french ? 'Propulsé par' : 'Powered by'} <b>OpenSync</b>
     </a>
   );
   if (data.widgetVisibility?.[type] === false) return null;
   if (unavailable)
     return (
       <div className="widget" style={style}>
-        <p>Hours temporarily unavailable. Please contact the business.</p>
+        <p>
+          {french
+            ? 'Heures temporairement indisponibles. Veuillez contacter l’entreprise.'
+            : 'Hours temporarily unavailable. Please contact the business.'}
+        </p>
       </div>
     );
   if (type === 'banner') {
@@ -213,7 +271,9 @@ export function Widget({
         (bannerPreset ? undefined : bannerOverrides?.accent) ?? a.fontColour ?? defaultColours.font,
       '--announcement-background-colour':
         (bannerPreset ? a.backgroundColour : overrideBackground) ||
-        overrideBackground || a.backgroundColour || defaultColours.background,
+        overrideBackground ||
+        a.backgroundColour ||
+        defaultColours.background,
       '--announcement-border-colour':
         !bannerPreset && bannerOverrides?.borderColour && bannerOverrides.borderColour !== 'auto'
           ? bannerOverrides.borderColour
@@ -256,7 +316,8 @@ export function Widget({
     <section
       className={`widget widget-type-${type} ${w.theme} ${w.compact ? 'compact' : ''}`}
       style={style}
-      aria-label={`${data.name} opening hours`}
+      lang={locale}
+      aria-label={french ? `Heures d’ouverture de ${data.name}` : `${data.name} opening hours`}
     >
       {w.showLogo !== false && data.logo && (
         <Image
@@ -278,26 +339,33 @@ export function Widget({
       {(type === 'status' || w.showStatus !== false) && (
         <div className={`widget-status ${status.open ? 'open-now' : 'closed-now'}`}>
           <span className={`status-dot ${status.open ? 'green' : 'red'}`} aria-hidden="true" />
-          <strong>{status.open ? 'Open now' : 'Closed now'}</strong>
-          <span className="widget-next">{status.nextLabel}</span>
+          <strong>{statusLabel}</strong>
+          {nextLabel && <span className="widget-next">{nextLabel}</span>}
         </div>
       )}
       {type === 'hours' && (
         <>
           {activeExtendedClosure ? (
             <div className="widget-closure" role="status">
-              <strong>{activeExtendedClosure.label || 'Temporarily closed'}</strong>
+              <strong>
+                {activeExtendedClosure.label ||
+                  (french ? 'Fermé temporairement' : 'Temporarily closed')}
+              </strong>
               <span>
-                {formatClosureDate(activeExtendedClosure.start)} –{' '}
-                {formatClosureDate(activeExtendedClosure.end)}
+                {formatClosureDate(activeExtendedClosure.start, locale)} –{' '}
+                {formatClosureDate(activeExtendedClosure.end, locale)}
               </span>
-              <small>Regular hours resume after this closure.</small>
+              <small>
+                {french
+                  ? 'Les heures habituelles reprendront après cette fermeture.'
+                  : 'Regular hours resume after this closure.'}
+              </small>
             </div>
           ) : w.highlightToday !== false ? (
             <div className="widget-today">
               <Clock size={16} />
-              <span>Today</span>
-              <strong>{formatIntervals(status.today)}</strong>
+              <span>{french ? 'Aujourd’hui' : 'Today'}</span>
+              <strong>{formatWidgetIntervals(status.today, locale, w.timeFormat, french)}</strong>
             </div>
           ) : null}
           {!activeExtendedClosure && w.collapsible !== false && (
@@ -306,20 +374,24 @@ export function Widget({
               onClick={() => setHoursDisclosure({ expandedByDefault, expanded: !expanded })}
               aria-expanded={expanded}
             >
-              Business hours <ChevronDown size={16} />
+              {french ? 'Heures d’ouverture' : 'Business hours'} <ChevronDown size={16} />
             </button>
           )}
           {!activeExtendedClosure && (w.collapsible === false || expanded) && (
             <div className="widget-week">
-              {days.map((d, i) => (
-                <div key={d}>
-                  <span>{d}</span>
-                  <span>{formatIntervals(data.weekly[i])}</span>
-                </div>
-              ))}
+              {(w.weekStart === 'sunday' ? [6, 0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6]).map(
+                (i) => (
+                  <div key={days[i]}>
+                    <span>{formatWidgetDay(i, locale, w.dayFormat)}</span>
+                    <span>
+                      {formatWidgetIntervals(data.weekly[i], locale, w.timeFormat, french)}
+                    </span>
+                  </div>
+                ),
+              )}
               {data.exceptions
-                .filter((e) => e.end >= status.date)
-                .slice(0, 3)
+                .filter((e) => e.end >= status.date && e.start <= specialHoursThrough)
+                .sort((a, b) => a.start.localeCompare(b.start))
                 .map((e) => {
                   const label = e.label.trim();
                   return (
@@ -328,7 +400,9 @@ export function Widget({
                         {label || e.start}
                         {label && label !== e.start && <small>{e.start}</small>}
                       </span>
-                      <span>{formatIntervals(e.intervals)}</span>
+                      <span>
+                        {formatWidgetIntervals(e.intervals, locale, w.timeFormat, french)}
+                      </span>
                     </div>
                   );
                 })}
@@ -336,12 +410,14 @@ export function Widget({
           )}
         </>
       )}
-      {type === 'hours' && (
+      {type === 'hours' && (w.showTimezone || credit) && (
         <div className="widget-footer">
-          <div className="widget-zone">
-            <Globe size={11} strokeWidth={1.6} aria-hidden="true" />
-            <span>{formatTimeZoneName(data.timezone)}</span>
-          </div>
+          {w.showTimezone && (
+            <div className="widget-zone">
+              <Globe size={11} strokeWidth={1.6} aria-hidden="true" />
+              <span>{formatTimeZoneName(data.timezone, locale)}</span>
+            </div>
+          )}
           {credit}
         </div>
       )}
@@ -349,10 +425,10 @@ export function Widget({
   );
 }
 
-function formatTimeZoneName(timezone: string) {
+function formatTimeZoneName(timezone: string, locale = 'en-CA') {
   const referenceDate = new Date('2026-01-15T12:00:00Z');
   const name = (length: 'longGeneric' | 'shortGeneric') =>
-    new Intl.DateTimeFormat('en-CA', { timeZone: timezone, timeZoneName: length })
+    new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: length })
       .formatToParts(referenceDate)
       .find((part) => part.type === 'timeZoneName')?.value;
   const longName = name('longGeneric') || timezone.replaceAll('_', ' ');
@@ -363,8 +439,50 @@ function formatTimeZoneName(timezone: string) {
     : longName;
 }
 
-function formatClosureDate(date: string) {
-  return new Intl.DateTimeFormat('en-CA', {
+function formatWidgetDay(index: number, locale: string, format: Schedule['widget']['dayFormat']) {
+  return new Intl.DateTimeFormat(locale, { weekday: format, timeZone: 'UTC' }).format(
+    new Date(Date.UTC(2026, 10, 2 + index)),
+  );
+}
+
+function formatWidgetIntervals(
+  intervals: Schedule['weekly'][number],
+  locale: string,
+  format: 'auto' | '12' | '24',
+  french: boolean,
+) {
+  if (!intervals.length) return french ? 'Fermé' : 'Closed';
+  const formatter = new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    ...widgetTimeOptions(format),
+  });
+  return intervals
+    .map((interval) => {
+      const time = (value: string) =>
+        formatter.format(new Date(`2026-01-01T${value}:00Z`)).replace(/\s/g, ' ');
+      return `${time(interval.open)} – ${time(interval.close)}${
+        interval.close < interval.open ? (french ? ' (+1 jour)' : ' (+1 day)') : ''
+      }`;
+    })
+    .join(', ');
+}
+
+function widgetTimeOptions(format: Schedule['widget']['timeFormat']): Intl.DateTimeFormatOptions {
+  if (format === '24') return { hourCycle: 'h23' };
+  if (format === '12') return { hour12: true };
+  return {};
+}
+
+function addUtcDays(date: string, amount: number) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
+}
+
+function formatClosureDate(date: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

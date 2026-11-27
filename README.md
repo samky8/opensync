@@ -102,11 +102,17 @@ Website activation/expiry is calculated from the published revision and current 
 Google special dates are submitted when a revision is published; Google applies its own scheduled special hours. External jobs remain in PostgreSQL until processed:
 
 - `/api/cron` requires `Authorization: Bearer CRON_SECRET`.
-- Automatic Google delivery is paused: `vercel.json` currently has no cron schedule. The worker and queued jobs are retained. Restore a minute-level Vercel cron on a supported plan or an authenticated external scheduler to resume delivery.
+- Automatic Google publishing is paused. The publication worker and queued jobs are retained. The separate `/api/cron?notifications=1` schedule checks and sends notifications.
 - A run processes one job, bounded to fit the 60-second function budget. Increase worker capacity deliberately if backlog grows; monitor queue age.
 - Workers use `FOR UPDATE SKIP LOCKED` and a location lock. They skip superseded revisions, serialize publication against delivery, and retry transient errors at 30, 60, 120… seconds up to six attempts.
 - A process crash rolls back the database transaction so work remains recoverable. Repeating the same hours PATCH is idempotent. Provider-side timing after an ambiguous network failure cannot prove public ordering; inspect/reconcile the latest state if Google reports unexpected data.
 - A failed job creates an in-app notification. Reconnect if necessary, then publish the current draft again to queue the latest version. History offers refresh and destination outcomes.
+
+### Notification emails
+
+Apply migration 008 and configure `CRON_SECRET`, `RESEND_API_KEY`, and `NOTIFICATION_EMAIL_FROM` using a verified Resend sending domain. The notification schedule in `vercel.json` runs daily. For faster delivery or higher volume, use an authenticated scheduler to call `/api/cron?notifications=1` more often.
+
+Email notifications are opt-in under Settings → Notifications. Holiday reminders use a common Canadian holiday calendar at the location's local date, and the weekly activity email is generated on Mondays (UTC).
 
 ## Website installation
 
@@ -171,7 +177,7 @@ Dependency notes: production audit was clean at verification. Development-only t
    - Google OAuth redirect: `https://opensync.ca/api/google/callback`
    - Meta OAuth redirect: `https://opensync.ca/api/social/callback`
    - Stripe webhook: `https://opensync.ca/api/billing/webhook`
-5. Set a long random `CRON_SECRET` and verify authenticated minute-level invocations. Vercel sends the bearer secret to its cron endpoint.
+5. Set a long random `CRON_SECRET` and verify the notification cron endpoint. Vercel sends the bearer secret with each scheduled request.
 6. Configure provider approval, SMTP, billing products/portal, and production quotas. Leave unconfigured providers disabled.
 7. Finish legal/operator details, support operations, monitoring, backups/restore testing, data retention, and a staging acceptance pass.
 8. Verify a real public embed from another origin without being logged in. Publish a change and confirm it updates. Only then invite customers.

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -8,6 +9,7 @@ import {
   Code2,
   Globe,
   Megaphone,
+  Search,
   ShieldCheck,
   Sun,
 } from 'lucide-react';
@@ -15,12 +17,56 @@ import { Button } from '@/components/ui/button';
 import { HeroShader } from '@/components/hero-shader';
 import { RevealHeading } from '@/components/reveal-heading';
 import { HoursReviewSlideshow } from '@/components/hours-review-slideshow';
+import { HomePromoVideo } from '@/components/home-promo-video';
 import reviewStyles from '@/components/hours-review-slideshow.module.css';
 import { Widget } from '@/components/widget';
 import { demoSchedule } from '@/lib/demo';
 import { authConfigured, supabase } from '@/lib/supabase';
+import { siteUrl } from '@/lib/site-url';
+import { pageMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+const description =
+  'Manage business hours, holiday closures and announcements from one dashboard. Display live opening hours on your website and share updates on social media.';
+
+export const metadata: Metadata = pageMetadata('/');
+
+const organizationId = `${siteUrl()}#organization`;
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': organizationId,
+      name: 'OpenSync',
+      url: siteUrl(),
+      logo: siteUrl('/icon.svg'),
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${siteUrl()}#website`,
+      name: 'OpenSync',
+      url: siteUrl(),
+      publisher: { '@id': organizationId },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${siteUrl()}#app`,
+      name: 'OpenSync',
+      url: siteUrl(),
+      description,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      offers: [
+        { '@type': 'Offer', name: 'Free', price: 0, priceCurrency: 'CAD' },
+        { '@type': 'Offer', name: 'Pro', price: 9, priceCurrency: 'CAD' },
+        { '@type': 'Offer', name: 'Business', price: 19, priceCurrency: 'CAD' },
+      ],
+      publisher: { '@id': organizationId },
+    },
+  ],
+};
 
 const homeDemoSchedule = {
   ...demoSchedule,
@@ -50,6 +96,12 @@ export default async function Home() {
     : '/help';
   return (
     <div className="marketing">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, '\\u003c'),
+        }}
+      />
       <nav className="marketing-nav">
         <Link href="/" className="brand">
           <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
@@ -70,14 +122,9 @@ export default async function Home() {
         <section className="hero">
           <HeroShader />
           <RevealHeading>
-            Change your hours once.{' '}
-            <em>Update everywhere.</em>
+            Manage your business hours <em>in one place.</em>
           </RevealHeading>
-          <p>
-            Your hours, holiday closures, and little heads-ups.
-            <br />
-            One place to keep your website and customers in the know.
-          </p>
+          <p>{description}</p>
           <div className="hero-actions">
             <Button asChild>
               <Link href="/signup">
@@ -128,13 +175,31 @@ export default async function Home() {
                   </Button>
                 </div>
               </div>
-              <Widget
-                schedule={homeDemoSchedule}
-                type="hours"
-                now="2026-11-02T15:00:00.000Z"
-              />
+              <Widget schedule={homeDemoSchedule} type="hours" now="2026-11-02T15:00:00.000Z" />
             </div>
           </div>
+        </section>
+        <section className="home-checker-promo" aria-labelledby="home-checker-title">
+          <div>
+            <span className="eyebrow">FREE HOURS CHECK</span>
+            <h2 id="home-checker-title">Are customers seeing the right hours?</h2>
+          </div>
+          <form action="/hours-checker" method="get">
+            <label className="sr-only" htmlFor="home-checker-business">
+              Business name, website, or Google Maps URL
+            </label>
+            <Search size={17} aria-hidden="true" />
+            <input
+              id="home-checker-business"
+              name="business"
+              type="text"
+              placeholder="Business name, website, or Google Maps URL"
+              required
+            />
+            <Button type="submit">
+              Check my hours <ArrowRight size={15} aria-hidden="true" />
+            </Button>
+          </form>
         </section>
         <section className={reviewStyles.section} aria-labelledby="hours-reviews-title">
           <div className={reviewStyles.intro}>
@@ -157,57 +222,14 @@ export default async function Home() {
         </section>
         <section className="marketing-section" id="how-it-works">
           <span className="eyebrow">LESS BUSYWORK. MORE BUSINESS.</span>
-          <h2>Three small steps. One less thing to do.</h2>
+          <h2>See one update go everywhere.</h2>
           <figure className="home-promo">
-            <video
-              aria-label="OpenSync demo: publish one hours change to multiple channels"
-              width={1280}
-              height={800}
-              poster="/images/opensync-publish-demo.webp"
-              preload="none"
-              controls
-              playsInline
-            >
-              <source src="/opensync-publish-demo.webm" type="video/webm" />
-              <source src="/opensync-publish-demo.mp4" type="video/mp4" />
-              <track
-                kind="captions"
-                src="/opensync-publish-demo.en.vtt"
-                srcLang="en"
-                label="English"
-              />
-              <Link href="/demo">Try the publishing workflow in the OpenSync demo.</Link>
-            </video>
+            <HomePromoVideo />
             <figcaption>
               Watch one change to your business hours become a website update and posts for
               Instagram and Facebook. Live social publishing requires eligible connected accounts.
             </figcaption>
           </figure>
-          <div className="steps-grid">
-            {[
-              [
-                '01',
-                'Make yourself at home.',
-                'Add your business and regular hours. Coffee shops, salons, corner stores — there’s room for you.',
-              ],
-              [
-                '02',
-                'Connect your little corner of the web.',
-                'Add a beautiful widget to your website, then create posts and stories for your social accounts.',
-              ],
-              [
-                '03',
-                'Change once. Get on with your day.',
-                'Closing early? Taking a holiday? Publish an update and your website follows along.',
-              ],
-            ].map(([n, h, p]) => (
-              <div className="step-card" key={n}>
-                <span>{n}</span>
-                <h3>{h}</h3>
-                <p>{p}</p>
-              </div>
-            ))}
-          </div>
         </section>
         <div className="features-section" id="features">
           <section className="marketing-section">
@@ -326,12 +348,20 @@ export default async function Home() {
           <h2>A few things you might be wondering.</h2>
           {[
             [
+              'What is OpenSync?',
+              'OpenSync is a web app for managing regular business hours, holiday closures, and announcements. Publish live hours to a website widget and create updates to share on Instagram or Facebook.',
+            ],
+            [
+              'Is the OpenSync business hours widget free?',
+              'Yes. The Free plan includes one location, regular and special hours, and three website widgets: an hours display, an open or closed status badge, and an announcement banner.',
+            ],
+            [
               'Will this work on my website?',
               'Yes. Use a small script or iframe on WordPress, Wix, Squarespace, Shopify, or custom HTML. Some website plans restrict custom code; the installation guide explains your options.',
             ],
             [
               'Does it automatically update Google Maps?',
-              'Automatic Google Business Profile updates are paused for now. Website widgets and the social post and story creator work independently.',
+              'Not currently. Automatic Google Business Profile delivery is paused. Website widgets and the social post creator are active and work independently.',
             ],
             [
               'Do I need Google to use OpenSync?',
@@ -382,7 +412,12 @@ export default async function Home() {
         )}
         <nav>
           <Link href="/free-business-hours-widget">Free hours widget</Link>
+          <Link href="/google-business-profile-sync">Google Business Profile sync</Link>
+          <Link href="/hours-checker">Hours checker preview</Link>
           <Link href="/holiday-hours">Holiday hours</Link>
+          <Link href="/free-holiday-hours-generator">Holiday hours graphic generator</Link>
+          <Link href="/for-restaurants">For restaurants</Link>
+          <Link href="/for-food-trucks">For food trucks</Link>
           <Link href="/for-web-developers">Developers</Link>
           <Link href="/help">Help centre</Link>
           <Link href="/privacy">Privacy</Link>

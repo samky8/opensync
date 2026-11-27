@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { BellRing, CalendarCheck, RotateCcw } from 'lucide-react';
 import { IntentPage } from '@/components/intent-page';
 import { HolidayPlanner } from '@/components/marketing-tools';
-export const metadata: Metadata = { title:'Holiday Hours & Business Closure Management', description:'Plan holiday opening hours, early closures, and special business hours in advance. Keep your website and customers up to date from one schedule.', alternates:{canonical:'/holiday-hours'}, openGraph:{title:'Holiday Hours Without the Last-Minute Scramble',description:'Schedule closures and reduced hours once, then return to normal automatically.',url:'/holiday-hours'} };
-export default function Page(){return <IntentPage eyebrow="HOLIDAY HOURS MANAGEMENT" title={<>Special hours now. <em>Normal hours later.</em></>} description="Schedule holiday closures, reduced hours, and one-off openings ahead of time. OpenSync shows the exception on the right date and restores your regular schedule automatically." audience="Businesses managing holiday closures" demoLabel="INTERACTIVE CLOSURE PLANNER" Demo={HolidayPlanner} benefits={[
+import { pageMetadata } from '@/lib/seo';
+export const metadata: Metadata = pageMetadata('/holiday-hours');
+export default function Page(){return <IntentPage path="/holiday-hours" eyebrow="HOLIDAY HOURS MANAGEMENT" title={<>Special hours now. <em>Normal hours later.</em></>} description="Schedule holiday closures, reduced hours, and one-off openings ahead of time. OpenSync shows the exception on the right date and restores your regular schedule automatically." audience="Businesses managing holiday closures" demoLabel="INTERACTIVE CLOSURE PLANNER" Demo={HolidayPlanner} benefits={[
   {icon:CalendarCheck,title:'Plan the whole season',text:'Enter single dates or multi-day closures long before the holiday rush.'},
   {icon:BellRing,title:'Tell customers clearly',text:'Pair special hours with a website announcement and ready-to-share social graphic.'},
   {icon:RotateCcw,title:'No cleanup required',text:'Regular weekly hours resume automatically when the exception ends.'},

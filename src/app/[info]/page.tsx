@@ -1,7 +1,39 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { pageMetadata } from '@/lib/seo';
+
+const infoPages = {
+  help: {
+    title: 'Help Centre',
+    description:
+      'Learn how to publish business hours, install OpenSync website widgets, and share updates.',
+  },
+  privacy: {
+    title: 'Privacy Notice',
+    description:
+      'Learn how OpenSync handles account data, business schedules, and connected integrations.',
+  },
+  terms: {
+    title: 'Terms of Service',
+    description:
+      'Read the terms for using OpenSync, connected publishing destinations, and subscriptions.',
+  },
+};
+
 export function generateStaticParams() {
-  return ['help', 'privacy', 'terms'].map((info) => ({ info }));
+  return Object.keys(infoPages).map((info) => ({ info }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ info: string }>;
+}): Promise<Metadata> {
+  const { info } = await params;
+  if (!Object.hasOwn(infoPages, info)) notFound();
+  const page = infoPages[info as keyof typeof infoPages];
+  return pageMetadata(`/${info}`, page.title, page.description);
 }
 export default async function Page({ params }: { params: Promise<{ info: string }> }) {
   const { info } = await params;

@@ -178,6 +178,9 @@ export const notifications = pgTable('notifications', {
     .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   message: text().notNull(),
+  kind: text().notNull().default('publishing_issue'),
+  dedupeKey: text('dedupe_key'),
+  locationId: uuid('location_id').references(() => locations.id, { onDelete: 'cascade' }),
   readAt: timestamp('read_at', { withTimezone: true }),
   createdAt: created(),
 });
@@ -200,4 +203,36 @@ export const support = pgTable('support', {
 export const preferences = pgTable('preferences', {
   userId: uuid('user_id').primaryKey(),
   emailNotifications: integer('email_notifications').notNull().default(0),
+});
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    organizationId: uuid('organization_id').references(() => organizations.id, {
+      onDelete: 'cascade',
+    }),
+    locationId: uuid('location_id').references(() => locations.id, { onDelete: 'cascade' }),
+    kind: text().notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    subject: text().notNull(),
+    body: text().notNull(),
+    status: text().notNull().default('queued'),
+    attempts: integer().notNull().default(0),
+    nextAttempt: timestamp('next_attempt', { withTimezone: true }).defaultNow().notNull(),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    error: text(),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex('notification_delivery_unique').on(t.userId, t.kind, t.dedupeKey),
+    index('notification_delivery_due').on(t.status, t.nextAttempt),
+  ],
+);
+export const notificationChecks = pgTable('notification_checks', {
+  locationId: uuid('location_id')
+    .primaryKey()
+    .references(() => locations.id, { onDelete: 'cascade' }),
+  hoursCheckedAt: timestamp('hours_checked_at', { withTimezone: true }),
 });

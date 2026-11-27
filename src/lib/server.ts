@@ -6,6 +6,7 @@ import { requireUser } from './supabase';
 import { scheduleSchema, type Plan } from './domain';
 import { freeAccountBilling, type AccountBilling } from './trial';
 import { bearerToken } from './mobile-auth';
+import { preferencesFromMask } from './notification-preferences';
 export const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 export const googleConfigured = () =>
   !!(
@@ -142,7 +143,7 @@ export async function dashboardData() {
 export async function detail(id: string) {
   const { location, role, user } = await locationAccess(id);
   const account = accountEntitlementsFor(user.id);
-  const [history, destinations, connection, notes, plan, publication, accountBilling] =
+  const [history, destinations, connection, notes, plan, publication, accountBilling, preferences] =
     await Promise.all([
       db()
         .select()
@@ -175,6 +176,7 @@ export async function detail(id: string) {
         )
         .limit(1),
       account,
+      db().select().from(t.preferences).where(eq(t.preferences.userId, user.id)).limit(1),
     ]);
   return {
     location: { ...location, draft: scheduleSchema.parse(location.draft) },
@@ -184,6 +186,7 @@ export async function detail(id: string) {
     jobs: destinations,
     connection: connection[0] || null,
     notifications: notes,
+    notificationPreferences: preferencesFromMask(preferences[0]?.emailNotifications),
     plan: plan.plan,
     trial: plan.trial,
     accountBilling,

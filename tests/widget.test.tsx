@@ -58,9 +58,7 @@ it('places the hours credit in the footer opposite the time zone', () => {
   const html = renderToStaticMarkup(
     <Widget schedule={defaultSchedule()} type="hours" now="2026-11-02T15:00:00Z" />,
   );
-  expect(html).toContain(
-    '<div class="widget-footer"><div class="widget-zone"><svg',
-  );
+  expect(html).toContain('<div class="widget-footer"><div class="widget-zone"><svg');
   expect(html).toContain('<span>Eastern Time (ET)</span>');
   expect(html).not.toContain(
     '<div class="widget-heading"><div class="widget-name">Your business</div><a',
@@ -75,24 +73,27 @@ it.each(['hours', 'status'] as const)('can hide the OpenSync credit in the %s wi
   expect(html).not.toContain('widget-credit');
   expect(html).toContain('Open now');
 });
-it.each(['hours', 'status'] as const)('can hide the business logo only in the %s widget', (type) => {
-  const schedule = defaultSchedule();
-  schedule.logo = 'https://example.com/logo.png';
-  const legacyWidget = { ...schedule.widget, showLogo: undefined };
-  const saved = scheduleSchema.parse({
-    ...schedule,
-    widget: customizeWidget(schedule.widget, type, { showLogo: false }),
-  });
-  const otherType = type === 'hours' ? 'status' : 'hours';
-  const render = (data: typeof schedule, widgetType: 'hours' | 'status') =>
-    renderToStaticMarkup(<Widget schedule={data} type={widgetType} now="2026-11-02T15:00:00Z" />);
+it.each(['hours', 'status'] as const)(
+  'can hide the business logo only in the %s widget',
+  (type) => {
+    const schedule = defaultSchedule();
+    schedule.logo = 'https://example.com/logo.png';
+    const legacyWidget = { ...schedule.widget, showLogo: undefined };
+    const saved = scheduleSchema.parse({
+      ...schedule,
+      widget: customizeWidget(schedule.widget, type, { showLogo: false }),
+    });
+    const otherType = type === 'hours' ? 'status' : 'hours';
+    const render = (data: typeof schedule, widgetType: 'hours' | 'status') =>
+      renderToStaticMarkup(<Widget schedule={data} type={widgetType} now="2026-11-02T15:00:00Z" />);
 
-  expect(render(scheduleSchema.parse({ ...schedule, widget: legacyWidget }), type)).toContain(
-    'class="widget-logo"',
-  );
-  expect(render(saved, type)).not.toContain('class="widget-logo"');
-  expect(render(saved, otherType)).toContain('class="widget-logo"');
-});
+    expect(render(scheduleSchema.parse({ ...schedule, widget: legacyWidget }), type)).toContain(
+      'class="widget-logo"',
+    );
+    expect(render(saved, type)).not.toContain('class="widget-logo"');
+    expect(render(saved, otherType)).toContain('class="widget-logo"');
+  },
+);
 it('can hide optional hours content while keeping a non-collapsible week visible', () => {
   const schedule = defaultSchedule();
   schedule.widget.showStatus = false;
@@ -298,4 +299,91 @@ it('leaves automatic widget typography and font size inheritable', () => {
   );
   expect(html).toContain('font-family:inherit');
   expect(html).toContain('font-size:inherit');
+});
+
+it('uses configurable soon indicators, custom labels, and next-opening visibility', () => {
+  const schedule = defaultSchedule();
+  schedule.widget.closingSoonMinutes = 30;
+  schedule.widget.closingSoonLabel = 'Last orders';
+  let html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="status" now="2026-11-02T21:45:00Z" />,
+  );
+  expect(html).toContain('Last orders');
+
+  schedule.widget.openingSoonMinutes = 30;
+  schedule.widget.openingSoonLabel = 'Doors open shortly';
+  html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="status" now="2026-11-02T13:45:00Z" />,
+  );
+  expect(html).toContain('Doors open shortly');
+
+  schedule.widget.showNextOpening = false;
+  html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="status" now="2026-11-02T23:00:00Z" />,
+  );
+  expect(html).not.toContain('Opens Tue');
+});
+
+it('applies week start, day format, time format, and the special-hours horizon', () => {
+  const schedule = defaultSchedule();
+  schedule.widget.collapsible = false;
+  schedule.widget.weekStart = 'sunday';
+  schedule.widget.dayFormat = 'short';
+  schedule.widget.timeFormat = '24';
+  schedule.widget.upcomingSpecialDays = 7;
+  schedule.exceptions = [
+    {
+      id: 'nearby',
+      start: '2026-11-08',
+      end: '2026-11-08',
+      label: 'Nearby holiday',
+      intervals: [],
+    },
+    {
+      id: 'later',
+      start: '2026-11-20',
+      end: '2026-11-20',
+      label: 'Later holiday',
+      intervals: [],
+    },
+  ];
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html.indexOf('<span>Sun</span>')).toBeLessThan(html.indexOf('<span>Mon</span>'));
+  expect(html).toContain('09:00 – 17:00');
+  expect(html).toContain('Nearby holiday');
+  expect(html).not.toContain('Later holiday');
+});
+
+it('supports French labels and can hide the time zone', () => {
+  const schedule = defaultSchedule();
+  schedule.widget.language = 'fr';
+  schedule.widget.collapsible = false;
+  schedule.widget.showTimezone = false;
+  const html = renderToStaticMarkup(
+    <Widget schedule={schedule} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('Ouvert');
+  expect(html).toContain('Aujourd’hui');
+  expect(html).toContain('lundi');
+  expect(html).not.toContain('widget-zone');
+});
+
+it('applies an adjustable shadow and defaults new options for older saved widgets', () => {
+  const legacy = defaultSchedule();
+  const legacyWidget = { ...legacy.widget } as Partial<typeof legacy.widget>;
+  delete legacyWidget.shadow;
+  delete legacyWidget.timeFormat;
+  delete legacyWidget.showTimezone;
+  const parsed = scheduleSchema.parse({ ...legacy, widget: legacyWidget });
+  expect(parsed.widget.shadow).toBe(0);
+  expect(parsed.widget.timeFormat).toBe('auto');
+  expect(parsed.widget.showTimezone).toBe(true);
+
+  parsed.widget.shadow = 3;
+  const html = renderToStaticMarkup(
+    <Widget schedule={parsed} type="hours" now="2026-11-02T15:00:00Z" />,
+  );
+  expect(html).toContain('box-shadow:0 12px 30px rgba(23, 33, 60, 0.16)');
 });

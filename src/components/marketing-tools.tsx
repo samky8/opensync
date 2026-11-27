@@ -1,10 +1,13 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Check, Clipboard, Download, MapPin, Navigation, RefreshCw } from 'lucide-react';
 import { Widget } from '@/components/widget';
+import { Button } from '@/components/ui/button';
 import { demoSchedule } from '@/lib/demo';
 import type { Schedule } from '@/lib/domain';
+import { trackEvent } from '@/lib/analytics';
 
 export function WidgetBuilder() {
   const [accent, setAccent] = useState('#5b55c8');
@@ -26,7 +29,7 @@ export function WidgetBuilder() {
           <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>Light</button>
           <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>Dark</button>
         </div>
-        <button className="code-copy" onClick={async () => { await navigator.clipboard?.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
+        <button type="button" className="code-copy" onClick={async () => { await navigator.clipboard?.writeText(code); trackEvent('widget_created', { source: 'marketing_preview', widget_type: 'hours' }); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
           {copied ? <Check size={15} /> : <Clipboard size={15} />} {copied ? 'Copied' : 'Copy embed code'}
         </button>
       </div>
@@ -36,6 +39,35 @@ export function WidgetBuilder() {
       </div>
     </div>
   );
+}
+
+function LiveWidgetPreview({ type, now }: { type: 'hours' | 'status' | 'banner'; now: string }) {
+  return (
+    <div className="intent-tool widget-showcase">
+      <div className="tool-controls">
+        <div className="tool-label">Live OpenSync component</div>
+        <h3>{type === 'hours' ? 'Upcoming special hours' : type === 'status' ? 'Open right now' : 'Customer announcement'}</h3>
+        <p>{type === 'hours' ? 'Date-specific hours override the weekly schedule only when needed.' : type === 'status' ? 'The status and next change are calculated from the published schedule.' : 'Publish, schedule, replace, or remove the banner from OpenSync.'}</p>
+        <Button asChild><Link href="/signup">Create yours free</Link></Button>
+      </div>
+      <div className="tool-preview browser-preview">
+        <div className="browser-dots"><i /><i /><i /><span>juniperandoak.ca</span></div>
+        <div className="sample-site"><span className="sample-script">J&O</span><h3>Good coffee. Kind people.</h3><p>Plan your next visit.</p><Widget schedule={demoSchedule} type={type} now={now} /></div>
+      </div>
+    </div>
+  );
+}
+
+export function StatusWidgetPreview() {
+  return <LiveWidgetPreview type="status" now="2026-11-18T15:00:00.000Z" />;
+}
+
+export function HolidayWidgetPreview() {
+  return <LiveWidgetPreview type="hours" now="2026-12-25T15:00:00.000Z" />;
+}
+
+export function AnnouncementBannerPreview() {
+  return <LiveWidgetPreview type="banner" now="2026-11-18T15:00:00.000Z" />;
 }
 
 export function HolidayPlanner() {
@@ -90,7 +122,7 @@ export function DeveloperDemo() {
 
 export function SyncDemo() {
   const [synced, setSynced] = useState(false);
-  return <div className="intent-tool sync-tool"><div className="tool-controls"><div className="tool-label">One change, every surface</div><div className="hours-change"><span>Friday</span><del>9:00 AM–5:00 PM</del><strong>9:00 AM–2:00 PM</strong></div><button className="sync-button" onClick={() => setSynced(true)}><RefreshCw size={15} className={synced ? 'spun' : ''} />{synced ? 'Changes synced' : 'Sync new hours'}</button></div><div className="tool-preview sync-destinations">{[['G','Google Business Profile'],['⌘','Website widget'],['◎','Customer status']].map(([icon, label]) => <div className={synced ? 'synced' : ''} key={label}><span>{icon}</span><p><strong>{label}</strong><small>{synced ? 'Updated just now' : 'Ready to update'}</small></p>{synced && <Check size={16} />}</div>)}</div></div>;
+  return <div className="intent-tool sync-tool"><div className="tool-controls"><div className="tool-label">Planned publishing flow</div><div className="hours-change"><span>Friday</span><del>9:00 AM–5:00 PM</del><strong>9:00 AM–2:00 PM</strong></div><button type="button" className="sync-button" onClick={() => setSynced(true)}><RefreshCw size={15} className={synced ? 'spun' : ''} />{synced ? 'Preview complete' : 'Preview the flow'}</button></div><div className="tool-preview sync-destinations">{[['G','Google Business Profile'],['⌘','Website widget'],['◎','Customer status']].map(([icon, label]) => <div className={synced ? 'synced' : ''} key={label}><span>{icon}</span><p><strong>{label}</strong><small>{label === 'Google Business Profile' ? 'Automatic delivery paused' : synced ? 'Active now' : 'Available now'}</small></p>{synced && label !== 'Google Business Profile' && <Check size={16} />}</div>)}</div></div>;
 }
 
 export function HolidayGraphicGenerator() {
