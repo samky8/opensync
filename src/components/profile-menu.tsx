@@ -10,9 +10,8 @@ export function ProfileMenu({
   logo,
   locations,
   selected,
-  paid,
-  disabled,
   canCreate,
+  disabled,
   demo,
   onSelect,
   onCreate,
@@ -21,9 +20,8 @@ export function ProfileMenu({
   logo?: string;
   locations: { id: string; draft: { name: string } }[];
   selected: string;
-  paid: boolean;
-  disabled: boolean;
   canCreate: boolean;
+  disabled: boolean;
   demo: boolean;
   onSelect: (id: string) => void;
   onCreate: () => boolean;
@@ -82,9 +80,9 @@ export function ProfileMenu({
           ))}
         </div>
         <div className="profile-dropdown-footer">
-          {paid && canCreate && !disabled ? (
+          {canCreate && !disabled ? (
             <Link
-              href={demo ? '/signup' : `/onboarding?source=${encodeURIComponent(selected)}`}
+              href={demo ? '/signup' : '/onboarding?workspace=new'}
               onClick={(event) => {
                 if (!onCreate()) event.preventDefault();
                 else popup.current?.hidePopover();
@@ -94,11 +92,8 @@ export function ProfileMenu({
               {demo ? 'Create your workspace' : 'Create new workspace'}
             </Link>
           ) : (
-            <button
-              disabled
-              title={paid ? 'Only an owner or admin can create workspaces' : 'Requires Business'}
-            >
-              {!paid && <Crown size={16} aria-hidden="true" />}
+            <button disabled title={canCreate ? undefined : 'Requires Business on your account'}>
+              {!canCreate && <Crown size={16} aria-hidden="true" />}
               {demo ? 'Create your workspace' : 'Create new workspace'}
             </button>
           )}

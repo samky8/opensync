@@ -27,7 +27,7 @@ Fill `.env.local` before running migrations. Never commit it. The app has no fab
 
 ## What is implemented
 
-- One-click, no-card 14-day Pro trials for workspace owners. Each workspace can claim once; expiry is enforced by server entitlement checks without a scheduled job. Trials never create a Stripe subscription or automatic charge, and active paid plans take precedence. The dashboard and billing page show the claim, welcome popup and expiry date. `/demo` previews the animation without creating a real trial.
+- One-click, no-card 14-day Pro trials. Each account can claim once, and all workspaces it owns share the trial. Expiry is enforced on the server. Trials never create a Stripe subscription or automatic charge. Active paid plans take precedence. `/demo` previews the animation without creating a real trial.
 
 Before deploying the trial feature, run `npm run db:migrate` against the intended environment to apply `005_pro_trials.sql`. The trial table is server-only (RLS enabled and direct client grants revoked). Existing paid subscriptions are not modified.
 
@@ -84,10 +84,12 @@ References: [location fields](https://developers.google.com/my-business/referenc
 2. Set `STRIPE_SECRET_KEY`. Configure the Billing Portal to allow plan changes, payment updates, and cancellation for these prices.
 3. Add `https://opensync.ca/api/billing/webhook` as a webhook endpoint for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Set its `STRIPE_WEBHOOK_SECRET`.
 4. Test with Stripe test-mode keys and test cards first. Locally, use Stripe CLI forwarding to `/api/billing/webhook` and its generated signing secret.
-5. A Checkout redirect never grants access. Only a signed webhook followed by current Stripe subscription lookup updates entitlements. Active/trialing subscriptions with the recognized CAD price qualify. Past-due/cancelled subscriptions restrict premium actions while preserving existing data and export.
+5. Paid access takes effect when a signed webhook verifies the current Stripe subscription. A single account plan applies to all the workspaces it owns. Past-due and cancelled subscriptions restrict premium actions while preserving existing data and export.
 6. Confirm business/tax settings and the legal refund/cancellation policy before accepting live payments. Taxes are not automatically calculated by this implementation.
 
 The webhook serializes reconciliation per customer and deduplicates event IDs. Checkout creation is serialized and reuses a pending checkout; existing provider subscriptions go to the portal. The app uses Stripe's [raw-body signature verification](https://docs.stripe.com/webhooks/signature).
+
+Apply `007_account_billing.sql` before deploying account-level billing. Coordinate the cutover so workspace-era checkout and trial requests are settled before switching over. The migration carries over the latest trial expiry and the current subscription or checkout. It stops if an account has multiple subscriptions or checkout records that could still be billable, so they can be reconciled before switching.
 
 ## Publication, scheduling, and job recovery
 

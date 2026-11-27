@@ -62,10 +62,9 @@ beforeAll(async () => {
       organizationId,
       {},
     ]);
-  await pg.query(
-    "insert into subscriptions(organization_id,plan,status) values($1,'pro','active')",
-    [organizationId],
-  );
+  await pg.query("insert into account_billing(account_id,plan,status) values($1,'pro','active')", [
+    shared.user,
+  ]);
   shared.database = adapt(drizzle(pg));
 }, 30000);
 

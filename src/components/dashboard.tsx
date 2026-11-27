@@ -74,7 +74,7 @@ import {
   type PublishScope,
 } from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
-import type { ProTrial } from '@/lib/trial';
+import { freeAccountBilling, type AccountBilling, type ProTrial } from '@/lib/trial';
 import {
   AnnouncementForm,
   BusinessFields,
@@ -118,6 +118,7 @@ type Job = {
 type Detail = {
   location: Location;
   published: Schedule | null;
+  accountBilling: AccountBilling;
   trial: ProTrial;
   plan: Plan;
   role: string;
@@ -347,20 +348,26 @@ function OverviewTips({ onNavigate }: { onNavigate: (tab: string) => void }) {
 
 export function Dashboard({
   demo = false,
-  sourceLocationId,
+  newWorkspace = false,
   initialLocations = emptyLocations,
+  initialBilling = freeAccountBilling,
+  initiallyOwnsWorkspace = false,
   email = '',
   now: initialNow,
 }: {
   demo?: boolean;
-  sourceLocationId?: string;
+  newWorkspace?: boolean;
   initialLocations?: Location[];
+  initialBilling?: AccountBilling;
+  initiallyOwnsWorkspace?: boolean;
   email?: string;
   now: string;
 }) {
   const router = useRouter();
   const connectedChannelsHeading = useRef<HTMLHeadingElement>(null);
   const [locations, setLocations] = useState<Location[]>(initialLocations),
+    [accountBilling, setAccountBilling] = useState(initialBilling),
+    [ownsWorkspace, setOwnsWorkspace] = useState(initiallyOwnsWorkspace),
     [selected, setSelected] = useState(initialLocations[0]?.id || ''),
     [draft, setDraft] = useState<Schedule>(
       demo ? demoBusinessProfile : initialLocations[0]?.draft || defaultSchedule(),
@@ -649,12 +656,15 @@ export function Dashboard({
     </div>
   );
   const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const billingPlan = demo ? 'pro' : accountBilling.plan;
+  const billingPlanLabel = billingPlan.charAt(0).toUpperCase() + billingPlan.slice(1);
   async function refresh(resetDraft = false) {
     if (demo) return;
     const res = await fetch(`/api/manage?id=${selected}`, { cache: 'no-store' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     setDetail(data);
+    if (data.accountBilling) setAccountBilling(data.accountBilling);
     if (resetDraft) {
       setDraft(data.location.draft);
       setSaved(data.location.draft);
@@ -760,6 +770,7 @@ export function Dashboard({
           if (!r.ok) throw new Error(data.error);
           if (!cancelled) {
             setDetail(data);
+            if (data.accountBilling) setAccountBilling(data.accountBilling);
             setDraft(data.location.draft);
             setSaved(data.location.draft);
             setVersion(data.location.draftVersion);
@@ -781,19 +792,19 @@ export function Dashboard({
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (
-      demo ||
-      detail?.trial?.status !== 'active' ||
-      !detail.trial.endsAt ||
-      Date.parse(detail.trial.endsAt) > Date.parse(now)
-    )
-      return;
+    const workspaceTrial = detail?.trial;
+    const expired = (trial?: ProTrial) =>
+      trial?.status === 'active' && !!trial.endsAt && Date.parse(trial.endsAt) <= Date.parse(now);
+    if (demo || !selected || (!expired(workspaceTrial) && !expired(accountBilling.trial))) return;
     let cancelled = false;
     fetch(`/api/manage?id=${selected}`, { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) return;
         const data = await response.json();
-        if (!cancelled) setDetail(data);
+        if (!cancelled) {
+          setDetail(data);
+          if (data.accountBilling) setAccountBilling(data.accountBilling);
+        }
       })
       .catch(() => {
         /* Server-side entitlements still enforce expiry; retry on the next tick. */
@@ -801,7 +812,7 @@ export function Dashboard({
     return () => {
       cancelled = true;
     };
-  }, [demo, detail?.trial?.status, detail?.trial?.endsAt, now, selected]);
+  }, [demo, detail?.trial, accountBilling.trial, now, selected]);
   useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -985,10 +996,11 @@ export function Dashboard({
       setDemoTrial(trial);
       return trial;
     }
-    const result = await request('/api/trial', { id: selected });
+    const result = await request('/api/trial', detail?.role === 'owner' ? { id: selected } : {});
+    setAccountBilling(result);
     setDetail((current) =>
-      current?.location.id === selected
-        ? { ...current, plan: result.plan, trial: result.trial }
+      current?.location.id === selected && current.role === 'owner'
+        ? { ...current, accountBilling: result, plan: result.plan, trial: result.trial }
         : current,
     );
     return result.trial;
@@ -1041,7 +1053,7 @@ Implementation requirements:
       return;
     }
     await act(async () => {
-      const result = await request('/api/billing', { id: selected, plan: tier, portal });
+      const result = await request('/api/billing', { plan: tier, portal });
       window.location.href = result.url;
     });
   }
@@ -1232,9 +1244,8 @@ Implementation requirements:
           logo={draft.monogram || draft.logo}
           locations={locations}
           selected={selected}
-          paid={demo || plan === 'business'}
+          canCreate={demo || accountBilling.plan === 'business' || !ownsWorkspace}
           disabled={busy}
-          canCreate={demo || detail?.role === 'owner' || detail?.role === 'admin'}
           demo={demo}
           onSelect={(id) => {
             if (
@@ -1484,10 +1495,11 @@ Implementation requirements:
                             if (!demo && !selected) {
                               const created = await request('/api/manage', {
                                 op: 'create',
-                                sourceLocationId,
+                                newWorkspace,
                                 name: draft.name,
                                 timezone: draft.timezone,
                               });
+                              setOwnsWorkspace(true);
                               const data = await request('/api/manage', {
                                 op: 'save',
                                 id: created.location.id,
@@ -1701,11 +1713,10 @@ Implementation requirements:
                   )}
                 </div>
               )}
-              {tab === 'billing' && (demo || detail?.trial) && (
+              {tab === 'billing' && (
                 <ProTrialCard
-                  key={selected || 'demo'}
-                  trial={demo ? demoTrial : detail!.trial}
-                  canClaim={demo || detail?.role === 'owner'}
+                  trial={demo ? demoTrial : accountBilling.trial}
+                  canClaim
                   demo={demo}
                   onClaim={claimTrial}
                   onPlans={() => switchTab('billing')}
@@ -3332,10 +3343,14 @@ Implementation requirements:
                   <div className="notice">
                     {demo
                       ? 'Demo billing is disabled. Prices shown in Canadian dollars.'
-                      : detail?.billingConfigured
-                        ? `Your organization is on the ${planLabel} plan. Changes take effect after Stripe confirms your subscription.`
-                        : 'Billing setup required. Stripe credentials and CAD price IDs must be configured before checkout is available.'}
+                      : `Your account is on the ${billingPlanLabel} plan. It covers every workspace you own.`}
                   </div>
+                  {accountBilling.paymentNeedsAttention && (
+                    <p className="notice">Open the billing portal to update your payment details.</p>
+                  )}
+                  {!demo && !detail?.billingConfigured && !accountBilling.complimentaryBusiness && (
+                    <p className="muted">Checkout is currently unavailable.</p>
+                  )}
                   <div className="pricing-grid">
                     {[
                       {
@@ -3371,7 +3386,7 @@ Implementation requirements:
                           'Everything in Pro',
                           'Multiple locations',
                           'Staff roles & access',
-                          'Shared organization billing',
+                          'One plan for all your workspaces',
                         ],
                       },
                     ].map((p) => (
@@ -3396,21 +3411,26 @@ Implementation requirements:
                         <Button
                           variant={p.id === 'pro' ? 'default' : 'outline'}
                           disabled={
-                            p.id === 'free' || (!demo && !detail?.billingConfigured) || busy
+                            p.id === 'free' ||
+                            (!demo &&
+                              (!detail?.billingConfigured || accountBilling.complimentaryBusiness)) ||
+                            busy
                           }
                           onClick={() => billing(p.id)}
                         >
-                          {p.id === 'pro' && detail?.trial?.status === 'active'
-                            ? 'Keep Pro after trial'
-                            : plan === p.id
-                              ? 'Manage plan'
-                              : `Choose ${p.name}`}
+                          {p.id === 'business' && accountBilling.complimentaryBusiness
+                            ? 'Included with your account'
+                            : p.id === 'pro' && accountBilling.trial.status === 'active'
+                              ? 'Keep Pro after trial'
+                              : billingPlan === p.id
+                                ? 'Manage plan'
+                                : `Choose ${p.name}`}
                         </Button>
                       </div>
                     ))}
                   </div>
-                  {!demo && detail?.billingConfigured && (
-                    <Button variant="outline" onClick={() => billing(plan, true)}>
+                  {!demo && detail?.billingConfigured && accountBilling.hasBillingCustomer && (
+                    <Button variant="outline" onClick={() => billing(billingPlan, true)}>
                       <CreditCard size={16} />
                       Open billing portal
                     </Button>
@@ -3515,7 +3535,7 @@ Implementation requirements:
                       </span>
                       <div>
                         <h3>Plans & billing</h3>
-                        <p className="muted">You&apos;re on the {planLabel} plan.</p>
+                        <p className="muted">Your account is on the {billingPlanLabel} plan.</p>
                       </div>
                     </div>
                     <p className="muted">
@@ -3805,7 +3825,7 @@ Implementation requirements:
                 const data = new FormData(e.currentTarget);
                 void act(async () => {
                   if (demo) {
-                    notify('Multiple real locations are available on Pro.');
+                    notify('Multiple real locations are available on Business.');
                     setModal('');
                     return;
                   }
@@ -3813,7 +3833,7 @@ Implementation requirements:
                     op: 'create',
                     name: data.get('name'),
                     timezone: data.get('timezone'),
-                    sourceLocationId: selected,
+                    targetLocationId: selected,
                   });
                   setLocations([...locations, result.location]);
                   setSelected(result.location.id);

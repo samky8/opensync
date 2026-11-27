@@ -4,7 +4,7 @@ import { db } from '@/db';
 import * as t from '@/db/schema';
 import { requireUser } from './supabase';
 import { scheduleSchema, type Plan } from './domain';
-import type { ProTrial } from './trial';
+import { freeAccountBilling, type AccountBilling } from './trial';
 import { bearerToken } from './mobile-auth';
 export const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 export const googleConfigured = () =>
@@ -47,25 +47,71 @@ export async function planFor(
 export async function entitlementsFor(
   org: string,
   executor: Pick<ReturnType<typeof db>, 'select'> = db(),
-): Promise<{ plan: Plan; trial: ProTrial }> {
+): Promise<AccountBilling> {
+  const owner = await billingOwnerForWorkspace(org, executor);
+  return owner ? accountEntitlementsFor(owner, executor) : freeAccountBilling;
+}
+
+export async function billingOwnerForWorkspace(
+  org: string,
+  executor: Pick<ReturnType<typeof db>, 'select'> = db(),
+) {
+  const [owner] = await executor
+    .select({ id: t.memberships.userId })
+    .from(t.memberships)
+    .where(and(eq(t.memberships.organizationId, org), eq(t.memberships.role, 'owner')));
+  return owner?.id;
+}
+
+export async function accountOwnsWorkspace(accountId: string) {
+  const [workspace] = await db()
+    .select({ id: t.memberships.organizationId })
+    .from(t.memberships)
+    .where(and(eq(t.memberships.userId, accountId), eq(t.memberships.role, 'owner')))
+    .limit(1);
+  return !!workspace;
+}
+
+export async function accountEntitlementsFor(
+  accountId: string,
+  executor: Pick<ReturnType<typeof db>, 'select'> = db(),
+): Promise<AccountBilling> {
   if (process.env.NODE_ENV !== 'production' && process.env.DEV_PAID_FEATURES === 'true')
-    return { plan: 'business', trial: { status: 'unavailable', endsAt: null } };
+    return {
+      ...freeAccountBilling,
+      plan: 'business',
+      trial: { status: 'unavailable', endsAt: null },
+    };
   const [s] = await executor
     .select()
-    .from(t.subscriptions)
-    .where(eq(t.subscriptions.organizationId, org));
-  if (s && ['active', 'trialing'].includes(s.status) && ['pro', 'business'].includes(s.plan))
-    return { plan: s.plan as Plan, trial: { status: 'unavailable', endsAt: null } };
+    .from(t.accountBilling)
+    .where(eq(t.accountBilling.accountId, accountId));
+  const billing = {
+    hasBillingCustomer: !!s?.customerId,
+    complimentaryBusiness: !!s?.complimentaryBusiness,
+    paymentNeedsAttention: s?.status === 'past_due',
+  };
+  const paidPlan =
+    s && ['active', 'trialing'].includes(s.status) && (s.plan === 'pro' || s.plan === 'business')
+      ? s.plan
+      : null;
+  const premium = billing.complimentaryBusiness ? 'business' : paidPlan;
+  if (premium) return { ...billing, plan: premium, trial: { status: 'unavailable', endsAt: null } };
   const [trial] = await executor
-    .select({ endsAt: t.proTrials.endsAt, active: sql<boolean>`${t.proTrials.endsAt} > now()` })
-    .from(t.proTrials)
-    .where(eq(t.proTrials.organizationId, org));
+    .select({
+      endsAt: t.accountProTrials.endsAt,
+      active: sql<boolean>`${t.accountProTrials.endsAt} > now()`,
+    })
+    .from(t.accountProTrials)
+    .where(eq(t.accountProTrials.accountId, accountId));
   if (trial)
     return {
+      ...billing,
       plan: trial.active ? 'pro' : 'free',
       trial: { status: trial.active ? 'active' : 'expired', endsAt: trial.endsAt.toISOString() },
     };
   return {
+    ...billing,
     plan: 'free',
     trial: { status: s?.subscriptionId ? 'unavailable' : 'available', endsAt: null },
   };
@@ -85,6 +131,8 @@ export async function dashboardData() {
     .orderBy(t.locations.createdAt);
   return {
     email: user.email,
+    accountBilling: await accountEntitlementsFor(user.id),
+    ownsWorkspace: rows.some(({ role }) => role === 'owner'),
     locations: rows.map((x) => ({
       ...x.location,
       draft: scheduleSchema.parse(x.location.draft),
@@ -92,39 +140,42 @@ export async function dashboardData() {
   };
 }
 export async function detail(id: string) {
-  const { location, role } = await locationAccess(id);
-  const [history, destinations, connection, notes, plan, publication] = await Promise.all([
-    db()
-      .select()
-      .from(t.activity)
-      .where(eq(t.activity.locationId, id))
-      .orderBy(desc(t.activity.createdAt))
-      .limit(30),
-    db()
-      .select()
-      .from(t.jobs)
-      .where(eq(t.jobs.locationId, id))
-      .orderBy(desc(t.jobs.createdAt))
-      .limit(30),
-    db()
-      .select({ status: t.connections.status, remoteId: t.connections.remoteId })
-      .from(t.connections)
-      .where(eq(t.connections.locationId, id)),
-    db()
-      .select()
-      .from(t.notifications)
-      .where(eq(t.notifications.organizationId, location.organizationId))
-      .orderBy(desc(t.notifications.createdAt))
-      .limit(20),
-    entitlementsFor(location.organizationId),
-    db()
-      .select({ snapshot: t.revisions.snapshot })
-      .from(t.revisions)
-      .where(
-        and(eq(t.revisions.locationId, id), eq(t.revisions.version, location.publishedVersion)),
-      )
-      .limit(1),
-  ]);
+  const { location, role, user } = await locationAccess(id);
+  const account = accountEntitlementsFor(user.id);
+  const [history, destinations, connection, notes, plan, publication, accountBilling] =
+    await Promise.all([
+      db()
+        .select()
+        .from(t.activity)
+        .where(eq(t.activity.locationId, id))
+        .orderBy(desc(t.activity.createdAt))
+        .limit(30),
+      db()
+        .select()
+        .from(t.jobs)
+        .where(eq(t.jobs.locationId, id))
+        .orderBy(desc(t.jobs.createdAt))
+        .limit(30),
+      db()
+        .select({ status: t.connections.status, remoteId: t.connections.remoteId })
+        .from(t.connections)
+        .where(eq(t.connections.locationId, id)),
+      db()
+        .select()
+        .from(t.notifications)
+        .where(eq(t.notifications.organizationId, location.organizationId))
+        .orderBy(desc(t.notifications.createdAt))
+        .limit(20),
+      role === 'owner' ? account : entitlementsFor(location.organizationId),
+      db()
+        .select({ snapshot: t.revisions.snapshot })
+        .from(t.revisions)
+        .where(
+          and(eq(t.revisions.locationId, id), eq(t.revisions.version, location.publishedVersion)),
+        )
+        .limit(1),
+      account,
+    ]);
   return {
     location: { ...location, draft: scheduleSchema.parse(location.draft) },
     published: publication[0] ? scheduleSchema.parse(publication[0].snapshot) : null,
@@ -135,6 +186,7 @@ export async function detail(id: string) {
     notifications: notes,
     plan: plan.plan,
     trial: plan.trial,
+    accountBilling,
     googleConfigured: googleConfigured(),
     billingConfigured: billingConfigured(),
   };

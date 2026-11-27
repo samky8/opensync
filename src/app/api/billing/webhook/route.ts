@@ -1,6 +1,6 @@
 import { stripe, pricePlan } from '@/lib/stripe';
 import { db } from '@/db';
-import { subscriptions, notifications } from '@/db/schema';
+import { accountBilling } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type Stripe from 'stripe';
 export async function POST(req: Request) {
@@ -22,12 +22,12 @@ export async function POST(req: Request) {
       typeof incoming.customer === 'string' ? incoming.customer : incoming.customer.id;
     await db().transaction(async (tx) => {
       await tx.execute(
-        sql`select organization_id from subscriptions where customer_id=${customer} for update`,
+        sql`select account_id from account_billing where customer_id=${customer} for update`,
       );
       const [row] = await tx
         .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.customerId, customer));
+        .from(accountBilling)
+        .where(eq(accountBilling.customerId, customer));
       if (!row) return;
       const prior = await tx.execute(
         sql`select event_id from webhook_events where event_id=${event.id}`,
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       const price = active.items.data[0]?.price;
       const plan = price ? pricePlan(price) : 'free';
       await tx
-        .update(subscriptions)
+        .update(accountBilling)
         .set({
           subscriptionId: ['canceled', 'incomplete_expired'].includes(active.status)
             ? null
@@ -51,15 +51,9 @@ export async function POST(req: Request) {
           status: active.status,
           updatedAt: new Date(),
         })
-        .where(eq(subscriptions.organizationId, row.organizationId));
-      if (active.status === 'past_due')
-        await tx.insert(notifications).values({
-          organizationId: row.organizationId,
-          message:
-            'Your subscription payment needs attention. Open the billing portal to update payment details.',
-        });
+        .where(eq(accountBilling.accountId, row.accountId));
       await tx.execute(
-        sql`insert into webhook_events(event_id,organization_id) values(${event.id},${row.organizationId}) on conflict do nothing`,
+        sql`insert into webhook_events(event_id,account_id) values(${event.id},${row.accountId}) on conflict do nothing`,
       );
     });
   }

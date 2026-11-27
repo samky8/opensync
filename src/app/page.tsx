@@ -292,7 +292,7 @@ export default async function Home() {
                   'Everything in Pro',
                   'Multiple locations',
                   'Multiple staff accounts',
-                  'Shared organization billing',
+                  'One plan for all your workspaces',
                 ],
               },
             ].map((p) => (

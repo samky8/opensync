@@ -1,16 +1,28 @@
 import { redirect } from 'next/navigation';
 import { Dashboard } from '@/components/dashboard';
-import { detail } from '@/lib/server';
+import { accountEntitlementsFor, accountOwnsWorkspace } from '@/lib/server';
+import { requireUser } from '@/lib/supabase';
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string }>;
+  searchParams: Promise<{ workspace?: string; source?: string }>;
 }) {
-  const { source } = await searchParams;
-  if (!source) redirect('/dashboard');
-  const profile = await detail(source);
-  if (profile.plan !== 'business' || !['owner', 'admin'].includes(profile.role))
-    redirect('/dashboard');
-  return <Dashboard sourceLocationId={source} now={new Date().toISOString()} />;
+  const { workspace, source } = await searchParams;
+  if (workspace !== 'new' && !source) redirect('/dashboard');
+  const user = await requireUser().catch(() => redirect('/login'));
+  const [billing, ownsWorkspace] = await Promise.all([
+    accountEntitlementsFor(user.id),
+    accountOwnsWorkspace(user.id),
+  ]);
+  if (ownsWorkspace && billing.plan !== 'business') redirect('/dashboard?tab=billing');
+  return (
+    <Dashboard
+      newWorkspace
+      initialBilling={billing}
+      initiallyOwnsWorkspace={ownsWorkspace}
+      email={user.email}
+      now={new Date().toISOString()}
+    />
+  );
 }

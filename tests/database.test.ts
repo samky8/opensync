@@ -8,11 +8,24 @@ const shared = vi.hoisted(() => ({
   user: '11111111-1111-4111-8111-111111111111',
   googleCalls: [] as { path: string; body: string }[],
   googleFailure: 0,
+  billingPortal: vi.fn(),
+  subscriptionList: vi.fn(),
 }));
 vi.mock('../src/db', () => ({ db: () => shared.database }));
 vi.mock('../src/lib/supabase', () => ({
   requireUser: async () => ({ id: shared.user, email: 'test@example.com' }),
 }));
+vi.mock('../src/lib/stripe', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/stripe')>();
+  return {
+    ...actual,
+    stripe: () => ({
+      billingPortal: { sessions: { create: shared.billingPortal } },
+      subscriptions: { list: shared.subscriptionList },
+      webhooks: { constructEvent: (payload: string) => JSON.parse(payload) },
+    }),
+  };
+});
 vi.mock('../src/lib/google', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/lib/google')>();
   return {
@@ -34,8 +47,13 @@ import { GET as publicGet } from '../src/app/api/public/[id]/route';
 import { GET as cron } from '../src/app/api/cron/route';
 import { defaultSchedule, resetWidgetToDefaults } from '../src/lib/domain';
 import { POST as claimTrial } from '../src/app/api/trial/route';
-import { entitlementsFor, planFor } from '../src/lib/server';
+import { POST as billing } from '../src/app/api/billing/route';
+import { POST as webhook } from '../src/app/api/billing/webhook/route';
+import { accountEntitlementsFor, entitlementsFor, planFor } from '../src/lib/server';
 const pg = new PGlite();
+const migratedAccount = randomUUID();
+const legacyPaidWorkspace = randomUUID();
+const legacyTrialWorkspace = randomUUID();
 // postgres-js returns rows directly while PGlite wraps them; all SQL and query builders still execute against PostgreSQL.
 function adapt(value: object): object {
   return new Proxy(value, {
@@ -67,6 +85,26 @@ beforeAll(async () => {
   await pg.exec(await readFile('migrations/002_billing_idempotency.sql', 'utf8'));
   await pg.exec(await readFile('migrations/003_publication_constraints.sql', 'utf8'));
   await pg.exec(await readFile('migrations/005_pro_trials.sql', 'utf8'));
+  await pg.query('insert into auth.users(id) values($1)', [migratedAccount]);
+  await pg.query("insert into organizations(id,name) values($1,'Paid'),($2,'Trial')", [
+    legacyPaidWorkspace,
+    legacyTrialWorkspace,
+  ]);
+  await pg.query(
+    "insert into memberships(organization_id,user_id,role) values($1,$3,'owner'),($2,$3,'owner')",
+    [legacyPaidWorkspace, legacyTrialWorkspace, migratedAccount],
+  );
+  await pg.query(
+    "insert into subscriptions(organization_id,customer_id,subscription_id,plan,status) values($1,'cus_migrated','sub_migrated','business','active')",
+    [legacyPaidWorkspace],
+  );
+  await pg.query(
+    `insert into pro_trials(organization_id,claimed_by,started_at,ends_at)
+     values($1,$3,now()-interval '1 day',now()+interval '13 days'),
+           ($2,$3,now(),now()+interval '14 days')`,
+    [legacyPaidWorkspace, legacyTrialWorkspace, migratedAccount],
+  );
+  await pg.exec(await readFile('migrations/007_account_billing.sql', 'utf8'));
   await pg.query(
     'insert into auth.users(id,email,email_confirmed_at) values($1,$2,now()),($3,$4,now())',
     [shared.user, 'test@example.com', '22222222-2222-4222-8222-222222222222', 'other@example.com'],
@@ -86,17 +124,105 @@ const post = async (body: unknown) => {
 };
 let id = '',
   version = 1;
-async function trialRequest(origin = 'http://localhost:3000') {
+async function trialRequest(origin = 'http://localhost:3000', locationId = id) {
   const response = await claimTrial(
     new Request('http://localhost:3000/api/trial', {
       method: 'POST',
       headers: { origin, 'content-type': 'application/json' },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: locationId }),
     }),
   );
   return { status: response.status, body: await response.json() };
 }
 describe('real SQL application flows', () => {
+  it('migrates a Stripe subscription and the latest trial across workspaces', async () => {
+    expect(await planFor(legacyPaidWorkspace)).toBe('business');
+    expect(await planFor(legacyTrialWorkspace)).toBe('business');
+    expect(
+      (
+        await pg.query(
+          'select customer_id,subscription_id from account_billing where account_id=$1',
+          [migratedAccount],
+        )
+      ).rows,
+    ).toEqual([{ customer_id: 'cus_migrated', subscription_id: 'sub_migrated' }]);
+    expect(
+      (
+        await pg.query(
+          `select t.ends_at = (select max(ends_at) from pro_trials where claimed_by=$1) as original_expiry
+         from account_pro_trials t where account_id=$1`,
+          [migratedAccount],
+        )
+      ).rows,
+    ).toEqual([{ original_expiry: true }]);
+  });
+  it('uses only the signed-in account for the portal and reconciles its shared plan through webhooks', async () => {
+    const originalUser = shared.user;
+    const request = () =>
+      billing(
+        new Request('http://localhost:3000/api/billing', {
+          method: 'POST',
+          headers: { origin: 'http://localhost:3000' },
+          body: JSON.stringify({
+            portal: true,
+            id: legacyPaidWorkspace,
+            accountId: migratedAccount,
+          }),
+        }),
+      );
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_example');
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_test_example');
+    vi.stubEnv('STRIPE_PRO_PRICE_ID', 'price_pro');
+    vi.stubEnv('STRIPE_BUSINESS_PRICE_ID', 'price_business');
+    try {
+      expect((await request()).status).toBe(400);
+      expect(shared.billingPortal).not.toHaveBeenCalled();
+      shared.user = migratedAccount;
+      shared.billingPortal.mockResolvedValueOnce({ url: 'https://example.com/portal' });
+      expect(await (await request()).json()).toEqual({ url: 'https://example.com/portal' });
+      expect(shared.billingPortal).toHaveBeenCalledWith(
+        expect.objectContaining({ customer: 'cus_migrated' }),
+      );
+
+      const subscription = {
+        id: 'sub_migrated',
+        customer: 'cus_migrated',
+        status: 'active',
+        items: {
+          data: [
+            {
+              price: {
+                id: 'price_pro',
+                currency: 'cad',
+                unit_amount: 900,
+                recurring: { interval: 'month', interval_count: 1 },
+              },
+            },
+          ],
+        },
+      };
+      shared.subscriptionList.mockResolvedValueOnce({ data: [subscription] });
+      const event = () =>
+        webhook(
+          new Request('http://localhost:3000/api/billing/webhook', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: 'evt_migration_test',
+              type: 'customer.subscription.updated',
+              data: { object: subscription },
+            }),
+          }),
+        );
+      expect((await event()).status).toBe(200);
+      expect((await event()).status).toBe(200);
+      expect(shared.subscriptionList).toHaveBeenCalledTimes(1);
+      expect(await planFor(legacyPaidWorkspace)).toBe('pro');
+      expect(await planFor(legacyTrialWorkspace)).toBe('pro');
+    } finally {
+      shared.user = originalUser;
+      vi.unstubAllEnvs();
+    }
+  });
   it('creates an isolated organization and clean business', async () => {
     const result = await post({ op: 'create', name: 'Test Café', timezone: 'America/Toronto' });
     expect(result.status).toBe(200);
@@ -155,6 +281,10 @@ describe('real SQL application flows', () => {
     try {
       expect((await pg.query('select * from locations')).rows).toEqual([]);
       await expect(pg.query('select * from connections')).rejects.toThrow(/permission denied/);
+      await expect(pg.query('select * from account_billing')).rejects.toThrow(/permission denied/);
+      await expect(pg.query('select * from account_pro_trials')).rejects.toThrow(
+        /permission denied/,
+      );
     } finally {
       await pg.exec('reset role');
     }
@@ -169,7 +299,7 @@ describe('real SQL application flows', () => {
       /requires Business/,
     );
   });
-  it('creates a separate workspace owned by the same signed-in account', async () => {
+  it('shares account Business across new workspaces and enforces the combined profile limit', async () => {
     const originalOrganization = (
       await pg.query<{ organization_id: string }>(
         'select organization_id from locations where id=$1',
@@ -177,13 +307,13 @@ describe('real SQL application flows', () => {
       )
     ).rows[0].organization_id;
     await pg.query(
-      "insert into subscriptions(organization_id,plan,status) values($1,'business','active')",
-      [originalOrganization],
+      'insert into account_billing(account_id,complimentary_business) values($1,true)',
+      [shared.user],
     );
     try {
       const result = await post({
         op: 'create',
-        sourceLocationId: id,
+        newWorkspace: true,
         name: 'Second business',
         timezone: 'America/Toronto',
       });
@@ -200,8 +330,83 @@ describe('real SQL application flows', () => {
       expect(workspace.organization_id).not.toBe(originalOrganization);
       expect(workspace.user_id).toBe(shared.user);
       expect(workspace.role).toBe('owner');
+      expect(await planFor(workspace.organization_id)).toBe('business');
+      const added = await post({
+        op: 'create',
+        targetLocationId: result.body.location.id,
+        name: 'Second business location',
+        timezone: 'America/Toronto',
+      });
+      expect(added.status).toBe(200);
+      expect(added.body.location.organizationId).toBe(workspace.organization_id);
+      const third = await post({
+        op: 'create',
+        newWorkspace: true,
+        name: 'Third business',
+        timezone: 'UTC',
+      });
+      expect(third.status).toBe(200);
+      expect(third.body.location.organizationId).not.toBe(workspace.organization_id);
+      expect(await planFor(third.body.location.organizationId)).toBe('business');
+      vi.stubEnv('BUSINESS_LOCATION_LIMIT', '4');
+      expect(
+        (
+          await post({
+            op: 'create',
+            newWorkspace: true,
+            name: 'Over the limit',
+            timezone: 'UTC',
+          })
+        ).body.error,
+      ).toMatch(/Account profile limit/);
     } finally {
-      await pg.query('delete from subscriptions where organization_id=$1', [originalOrganization]);
+      vi.unstubAllEnvs();
+      await pg.query('delete from account_billing where account_id=$1', [shared.user]);
+    }
+  });
+  it('uses the workspace owner’s plan for staff without changing their own account plan', async () => {
+    const owner = shared.user;
+    const staff = '22222222-2222-4222-8222-222222222222';
+    const org = (
+      await pg.query<{ organization_id: string }>(
+        'select organization_id from locations where id=$1',
+        [id],
+      )
+    ).rows[0].organization_id;
+    await pg.query(
+      'insert into account_billing(account_id,complimentary_business) values($1,true)',
+      [owner],
+    );
+    await pg.query("insert into memberships(organization_id,user_id,role) values($1,$2,'admin')", [
+      org,
+      staff,
+    ]);
+    shared.user = staff;
+    try {
+      const managed = await manageGet(new Request(`http://localhost:3000/api/manage?id=${id}`));
+      expect(await managed.json()).toMatchObject({
+        plan: 'business',
+        accountBilling: { plan: 'free' },
+      });
+      const own = await post({ op: 'create', name: 'Staff’s own business', timezone: 'UTC' });
+      expect(own.status).toBe(200);
+      expect(own.body.location.organizationId).not.toBe(org);
+      expect(await planFor(own.body.location.organizationId)).toBe('free');
+      const second = await post({
+        op: 'create',
+        sourceLocationId: id,
+        name: 'Extra',
+        timezone: 'UTC',
+      });
+      expect(second.body.error).toMatch(/requires Business on your account/);
+      await pg.query('delete from organizations where id=$1', [own.body.location.organizationId]);
+    } finally {
+      shared.user = owner;
+      await pg.query('delete from memberships where organization_id=$1 and user_id=$2', [
+        org,
+        staff,
+      ]);
+      await pg.query('delete from account_billing where account_id=$1', [owner]);
     }
   });
   it('rejects cross-origin writes', async () => {
@@ -230,10 +435,8 @@ describe('real SQL application flows', () => {
         [organization, shared.user],
       );
       expect((await trialRequest()).status).toBe(403);
-      await pg.exec('set role authenticated');
-      await expect(pg.query('select * from pro_trials')).rejects.toThrow(/permission denied/);
+      expect((await accountEntitlementsFor(shared.user)).trial.status).toBe('available');
     } finally {
-      await pg.exec('reset role');
       await pg.query('delete from memberships where organization_id=$1 and user_id=$2', [
         organization,
         shared.user,
@@ -249,14 +452,24 @@ describe('real SQL application flows', () => {
       )
     ).rows[0].organization_id;
     expect((await entitlementsFor(organization)).trial.status).toBe('available');
-    const results = await Promise.all([trialRequest(), trialRequest()]);
+    const [other] = (
+      await pg.query<{ id: string; organization_id: string }>(
+        'select id,organization_id from locations where organization_id<>$1 limit 1',
+        [organization],
+      )
+    ).rows;
+    const results = await Promise.all([
+      trialRequest(),
+      trialRequest('http://localhost:3000', other.id),
+    ]);
     expect(results.map((r) => r.status)).toEqual([200, 200]);
     expect(results[0].body.trial.endsAt).toBe(results[1].body.trial.endsAt);
     expect(await planFor(organization)).toBe('pro');
+    expect(await planFor(other.organization_id)).toBe('pro');
     const trial = (
       await pg.query<{ hours: number; count: number }>(
-        'select extract(epoch from (ends_at-started_at))/3600 as hours, count(*) over()::int as count from pro_trials where organization_id=$1',
-        [organization],
+        'select extract(epoch from (ends_at-started_at))/3600 as hours, count(*) over()::int as count from account_pro_trials where account_id=$1',
+        [shared.user],
       )
     ).rows[0];
     expect(Number(trial.hours)).toBe(336);
@@ -275,8 +488,8 @@ describe('real SQL application flows', () => {
       )
     ).rows[0].organization_id;
     await pg.query(
-      "update pro_trials set started_at=started_at-interval '15 days', ends_at=ends_at-interval '15 days' where organization_id=$1",
-      [organization],
+      "update account_pro_trials set started_at=started_at-interval '15 days', ends_at=ends_at-interval '15 days' where account_id=$1",
+      [shared.user],
     );
     expect(await planFor(organization)).toBe('free');
     expect((await entitlementsFor(organization)).trial.status).toBe('expired');
@@ -291,28 +504,22 @@ describe('real SQL application flows', () => {
     expect(publication.status).toBe(200);
     expect(publication.body.revision.snapshot.widget).toEqual(defaultSchedule().widget);
     await pg.query(
-      "insert into subscriptions(organization_id,plan,status) values($1,'business','active')",
-      [organization],
+      "insert into account_billing(account_id,plan,status) values($1,'business','active')",
+      [shared.user],
     );
     try {
       expect(await planFor(organization)).toBe('business');
       expect((await entitlementsFor(organization)).trial.status).toBe('unavailable');
       expect((await trialRequest()).status).toBe(400);
     } finally {
-      await pg.query('delete from subscriptions where organization_id=$1', [organization]);
+      await pg.query('delete from account_billing where account_id=$1', [shared.user]);
     }
   });
   it('durable worker skips older revisions and sends only authorized Google fields', async () => {
     process.env.CRON_SECRET = 'test-cron-secret';
-    const organization = (
-      await pg.query<{ organization_id: string }>(
-        'select organization_id from locations where id=$1',
-        [id],
-      )
-    ).rows[0].organization_id;
     await pg.query(
-      "insert into subscriptions(organization_id,plan,status) values($1,'pro','active')",
-      [organization],
+      "insert into account_billing(account_id,plan,status) values($1,'pro','active')",
+      [shared.user],
     );
     await pg.query(
       "insert into connections(location_id,encrypted_tokens,remote_id,status) values($1,'test-only','locations/123','connected')",
@@ -383,5 +590,16 @@ describe('real SQL application flows', () => {
     await pg.query('delete from auth.users where id=$1', [shared.user]);
     expect((await pg.query('select * from locations')).rows).toHaveLength(0);
     expect((await pg.query('select * from revisions')).rows).toHaveLength(0);
+    expect(
+      (await pg.query('select account_id from account_billing where account_id=$1', [shared.user]))
+        .rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await pg.query('select account_id from account_pro_trials where account_id=$1', [
+          shared.user,
+        ])
+      ).rows,
+    ).toHaveLength(0);
   });
 });

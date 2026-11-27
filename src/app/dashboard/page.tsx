@@ -15,6 +15,8 @@ export default async function Page() {
   return (
     <Dashboard
       initialLocations={data.locations}
+      initialBilling={data.accountBilling}
+      initiallyOwnsWorkspace={data.ownsWorkspace}
       email={data.email}
       now={new Date().toISOString()}
     />

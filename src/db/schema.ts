@@ -5,6 +5,7 @@ import {
   timestamp,
   jsonb,
   integer,
+  boolean,
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
@@ -147,22 +148,18 @@ export const connections = pgTable('connections', {
   status: text().notNull().default('select_location'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
-export const subscriptions = pgTable('subscriptions', {
-  organizationId: uuid('organization_id')
-    .primaryKey()
-    .references(() => organizations.id, { onDelete: 'cascade' }),
+export const accountBilling = pgTable('account_billing', {
+  accountId: uuid('account_id').primaryKey(),
   customerId: text('customer_id').unique(),
   subscriptionId: text('subscription_id'),
   checkoutSessionId: text('checkout_session_id'),
   plan: text().notNull().default('free'),
   status: text().notNull().default('inactive'),
+  complimentaryBusiness: boolean('complimentary_business').notNull().default(false),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
-export const proTrials = pgTable('pro_trials', {
-  organizationId: uuid('organization_id')
-    .primaryKey()
-    .references(() => organizations.id, { onDelete: 'cascade' }),
-  claimedBy: uuid('claimed_by').notNull(),
+export const accountProTrials = pgTable('account_pro_trials', {
+  accountId: uuid('account_id').primaryKey(),
   startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
   endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
 });

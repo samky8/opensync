@@ -1,59 +1,78 @@
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { subscriptions } from '@/db/schema';
+import { accountBilling } from '@/db/schema';
 import { stripe, pricePlan } from '@/lib/stripe';
-import { apiError, appUrl, billingConfigured, checkOrigin, locationAccess } from '@/lib/server';
+import { apiError, appUrl, billingConfigured, checkOrigin } from '@/lib/server';
+import { requireUser } from '@/lib/supabase';
 export async function POST(req: Request) {
   try {
     checkOrigin(req);
     if (!billingConfigured()) throw new Error('Stripe billing setup required');
-    const body = await req.json();
-    const { location, role, user } = await locationAccess(z.uuid().parse(body.id));
-    if (role !== 'owner') throw new Error('Only the owner can manage billing');
-    const org = location.organizationId;
+    const user = await requireUser();
+    const body = z
+      .object({ portal: z.boolean().optional(), plan: z.string().optional() })
+      .parse(await req.json());
+    const accountId = user.id;
     const client = stripe();
-    const sub = await db().transaction(async (tx) => {
-      await tx.execute(sql`select id from organizations where id=${org} for update`);
-      const [existing] = await tx
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.organizationId, org));
-      if (existing?.customerId) return existing;
-      const customer = await client.customers.create(
-        { email: user.email, metadata: { organizationId: org } },
-        { idempotencyKey: `organization-${org}` },
-      );
-      const [created] = await tx
-        .insert(subscriptions)
-        .values({ organizationId: org, customerId: customer.id })
-        .onConflictDoUpdate({
-          target: subscriptions.organizationId,
-          set: { customerId: customer.id },
-        })
-        .returning();
-      return created;
-    });
-    if (body.portal || sub.subscriptionId) {
+    const billingUrl = `${appUrl()}/dashboard?tab=billing`;
+    if (body.portal) {
+      const [existing] = await db()
+        .select({ customerId: accountBilling.customerId })
+        .from(accountBilling)
+        .where(eq(accountBilling.accountId, accountId));
+      if (!existing?.customerId) throw new Error('No billing profile for this account yet');
       const session = await client.billingPortal.sessions.create({
-        customer: sub.customerId!,
-        return_url: `${appUrl()}/dashboard?tab=billing`,
+        customer: existing.customerId,
+        return_url: billingUrl,
       });
       return Response.json({ url: session.url });
     }
     const plan = z.enum(['pro', 'business']).parse(body.plan);
+    const sub = await db().transaction(async (tx) => {
+      await tx.insert(accountBilling).values({ accountId }).onConflictDoNothing();
+      await tx.execute(
+        sql`select account_id from account_billing where account_id=${accountId} for update`,
+      );
+      const [existing] = await tx
+        .select()
+        .from(accountBilling)
+        .where(eq(accountBilling.accountId, accountId));
+      if (existing.complimentaryBusiness && !existing.subscriptionId)
+        throw new Error('Business is already included with your account');
+      if (existing?.customerId) return existing;
+      const customer = await client.customers.create(
+        { email: user.email, metadata: { accountId } },
+        { idempotencyKey: `account-${accountId}` },
+      );
+      const [created] = await tx
+        .update(accountBilling)
+        .set({ customerId: customer.id })
+        .where(eq(accountBilling.accountId, accountId))
+        .returning();
+      return created;
+    });
+    if (sub.subscriptionId) {
+      const session = await client.billingPortal.sessions.create({
+        customer: sub.customerId!,
+        return_url: billingUrl,
+      });
+      return Response.json({ url: session.url });
+    }
     const priceId =
       plan === 'pro' ? process.env.STRIPE_PRO_PRICE_ID! : process.env.STRIPE_BUSINESS_PRICE_ID!;
     if (pricePlan(await client.prices.retrieve(priceId)) !== plan)
       throw new Error('Stripe price setup required: use CAD monthly prices of $9 or $19');
     const session = await db().transaction(async (tx) => {
       await tx.execute(
-        sql`select organization_id from subscriptions where organization_id=${org} for update`,
+        sql`select account_id from account_billing where account_id=${accountId} for update`,
       );
       const [current] = await tx
         .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.organizationId, org));
+        .from(accountBilling)
+        .where(eq(accountBilling.accountId, accountId));
+      if (current.complimentaryBusiness)
+        throw new Error('Business is already included with your account');
       const existing = await client.subscriptions.list({
         customer: sub.customerId!,
         status: 'all',
@@ -62,7 +81,7 @@ export async function POST(req: Request) {
       if (existing.data.some((s) => !['canceled', 'incomplete_expired'].includes(s.status)))
         return client.billingPortal.sessions.create({
           customer: sub.customerId!,
-          return_url: `${appUrl()}/dashboard?tab=billing`,
+          return_url: billingUrl,
         });
       if (current.checkoutSessionId) {
         const pending = await client.checkout.sessions.retrieve(current.checkoutSessionId);
@@ -79,18 +98,20 @@ export async function POST(req: Request) {
               quantity: 1,
             },
           ],
-          success_url: `${appUrl()}/dashboard?tab=billing`,
-          cancel_url: `${appUrl()}/dashboard?tab=billing`,
-          subscription_data: { metadata: { organizationId: org } },
+          success_url: billingUrl,
+          cancel_url: billingUrl,
+          subscription_data: { metadata: { accountId } },
           allow_promotion_codes: true,
           metadata: { plan },
         },
-        { idempotencyKey: `checkout-${org}-${plan}-${current.checkoutSessionId || 'first'}` },
+        {
+          idempotencyKey: `account-checkout-${accountId}-${plan}-${current.checkoutSessionId || 'first'}`,
+        },
       );
       await tx
-        .update(subscriptions)
+        .update(accountBilling)
         .set({ checkoutSessionId: checkout.id })
-        .where(eq(subscriptions.organizationId, org));
+        .where(eq(accountBilling.accountId, accountId));
       return checkout;
     });
     return Response.json({ url: session.url });

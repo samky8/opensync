@@ -28,7 +28,9 @@ This implementation holds a transaction across a bounded external request. It is
 
 ## Billing
 
-Only recognized CAD monthly prices and active/trialing provider subscriptions grant paid actions. Webhooks validate the unmodified request body, serialize by customer, fetch current Stripe state, and deduplicate event IDs. Checkout redirects are informational. Pending sessions are reused, and active provider subscriptions are directed to the portal even if a webhook has not yet arrived.
+An account owns one billing record and one Pro trial. Each workspace inherits its owner's entitlements, including for invited staff. Extra workspaces require Business on the creating account. The Business location limit is shared across all its owned workspaces. Staff roles still govern access within each workspace.
+
+Recognized active/trialing Stripe subscriptions, active account trials, and server-managed complimentary Business access grant premium features. Webhooks validate the unmodified request body, serialize by customer, fetch current Stripe state, and deduplicate event IDs. Pending checkout sessions are reused, and active provider subscriptions are directed to the portal even if a webhook has not yet arrived.
 
 Changes after downgrade retain existing data. New premium scheduling/branding actions and Google jobs require entitlement. Existing published timed announcements continue to expire correctly; expiration must not strand a banner just because billing changed.
 

@@ -1,9 +1,18 @@
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import * as t from '@/db/schema';
 import { requireUser } from '@/lib/supabase';
-import { apiError, checkOrigin, detail, locationAccess, planFor, rateLimit } from '@/lib/server';
+import {
+  accountEntitlementsFor,
+  apiError,
+  billingOwnerForWorkspace,
+  checkOrigin,
+  detail,
+  locationAccess,
+  planFor,
+  rateLimit,
+} from '@/lib/server';
 import { defaultSchedule, scheduleSchema, validateEntitlements } from '@/lib/domain';
 import { googleDisconnect } from '@/lib/google';
 import { publishScopes, scopedSchedule } from '@/lib/publish-scope';
@@ -39,48 +48,46 @@ export async function POST(req: Request) {
       const name = z.string().trim().min(1).max(100).parse(body.name);
       const timezone = z.string().parse(body.timezone);
       const draft = scheduleSchema.parse(defaultSchedule(name, timezone));
-      const source = body.sourceLocationId
-        ? await locationAccess(z.uuid().parse(body.sourceLocationId), true)
-        : null;
+      // Older dashboard versions supplied a source location to signal a new workspace.
+      if (body.sourceLocationId != null) z.uuid().parse(body.sourceLocationId);
+      const newWorkspace = body.newWorkspace === true || body.sourceLocationId != null;
+      const target =
+        body.targetLocationId != null
+          ? await locationAccess(z.uuid().parse(body.targetLocationId), true)
+          : null;
+      if (target && newWorkspace) throw new Error('Select one destination for the new profile');
+      if (target && !['owner', 'admin'].includes(target.role))
+        throw new Error('Only an owner or admin can add locations');
+      const accountId = target
+        ? await billingOwnerForWorkspace(target.location.organizationId)
+        : user.id;
+      if (!accountId) throw new Error('Workspace billing owner not found');
       const location = await db().transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${user.id}))`);
-        const [member] = await tx
-          .select()
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${accountId}))`);
+        const [owned] = await tx
+          .select({ id: t.memberships.organizationId })
           .from(t.memberships)
-          .where(
-            and(
-              eq(t.memberships.userId, user.id),
-              source ? eq(t.memberships.organizationId, source.location.organizationId) : undefined,
-            ),
-          );
-        if (source && !member) throw new Error('Location not found or access denied');
-        let org: string;
-        if (source && member) {
-          const sourceOrg = member.organizationId;
-          await tx.execute(sql`select id from organizations where id=${sourceOrg} for update`);
-          if (!['owner', 'admin'].includes(member.role))
-            throw new Error('Only an owner or admin can create workspaces');
-          if ((await planFor(sourceOrg, tx)) !== 'business')
-            throw new Error('Creating another workspace requires Business');
-          const [workspace] = await tx.insert(t.organizations).values({ name }).returning();
-          org = workspace.id;
-          await tx
-            .insert(t.memberships)
-            .values({ organizationId: org, userId: user.id, role: 'owner' });
-        } else if (member) {
-          org = member.organizationId;
-          await tx.execute(sql`select id from organizations where id=${org} for update`);
-          if (!['owner', 'admin'].includes(member.role))
-            throw new Error('Only an owner or admin can add locations');
-          if ((await planFor(org, tx)) !== 'business')
-            throw new Error('Adding multiple profiles requires Business');
-          const count = await tx
-            .select()
+          .innerJoin(t.organizations, eq(t.memberships.organizationId, t.organizations.id))
+          .where(and(eq(t.memberships.userId, accountId), eq(t.memberships.role, 'owner')))
+          .orderBy(asc(t.organizations.createdAt), asc(t.organizations.id))
+          .limit(1);
+        if (owned || target) {
+          if ((await accountEntitlementsFor(accountId, tx)).plan !== 'business')
+            throw new Error(
+              newWorkspace
+                ? 'Creating another workspace requires Business on your account'
+                : 'Adding multiple profiles requires Business',
+            );
+          const [count] = await tx
+            .select({ total: sql<number>`count(*)::int` })
             .from(t.locations)
-            .where(eq(t.locations.organizationId, org));
-          if (count.length >= Number(process.env.BUSINESS_LOCATION_LIMIT || 10))
-            throw new Error('Profile limit reached');
-        } else {
+            .innerJoin(t.memberships, eq(t.memberships.organizationId, t.locations.organizationId))
+            .where(and(eq(t.memberships.userId, accountId), eq(t.memberships.role, 'owner')));
+          if (count.total >= Number(process.env.BUSINESS_LOCATION_LIMIT || 10))
+            throw new Error('Account profile limit reached');
+        }
+        let org = target?.location.organizationId ?? (newWorkspace ? undefined : owned?.id);
+        if (!org) {
           const [o] = await tx.insert(t.organizations).values({ name }).returning();
           org = o.id;
           await tx
@@ -129,27 +136,26 @@ export async function POST(req: Request) {
         .select()
         .from(t.memberships)
         .where(and(eq(t.memberships.userId, user.id), eq(t.memberships.role, 'owner')));
+      const [sub] = await db()
+        .select()
+        .from(t.accountBilling)
+        .where(eq(t.accountBilling.accountId, user.id));
+      if (sub && ['active', 'trialing', 'past_due'].includes(sub.status)) {
+        if (body.cancelSubscriptions !== true)
+          throw new Error(
+            'Please cancel your subscription in the billing portal before deleting your account',
+          );
+        if (!sub.subscriptionId) throw new Error('Subscription cancellation setup required');
+        const { stripe } = await import('@/lib/stripe');
+        const provider = stripe();
+        const current = await provider.subscriptions.retrieve(sub.subscriptionId);
+        if (current.status !== 'canceled') await provider.subscriptions.cancel(sub.subscriptionId);
+        await db()
+          .update(t.accountBilling)
+          .set({ status: 'canceled', plan: 'free' })
+          .where(eq(t.accountBilling.accountId, user.id));
+      }
       for (const m of owned) {
-        const [sub] = await db()
-          .select()
-          .from(t.subscriptions)
-          .where(eq(t.subscriptions.organizationId, m.organizationId));
-        if (sub && ['active', 'trialing', 'past_due'].includes(sub.status)) {
-          if (body.cancelSubscriptions !== true)
-            throw new Error(
-              'Please cancel your subscription in the billing portal before deleting your account',
-            );
-          if (!sub.subscriptionId) throw new Error('Subscription cancellation setup required');
-          const { stripe } = await import('@/lib/stripe');
-          const provider = stripe();
-          const current = await provider.subscriptions.retrieve(sub.subscriptionId);
-          if (current.status !== 'canceled')
-            await provider.subscriptions.cancel(sub.subscriptionId);
-          await db()
-            .update(t.subscriptions)
-            .set({ status: 'canceled', plan: 'free' })
-            .where(eq(t.subscriptions.organizationId, m.organizationId));
-        }
         const locs = await db()
           .select()
           .from(t.locations)
