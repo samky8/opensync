@@ -133,9 +133,9 @@ export const publicPages: PublicPage[] = [
   },
   {
     path: '/hours-checker',
-    title: 'Business Hours Checker – Feature Preview',
+    title: 'Free Business Hours Checker',
     description:
-      'Preview a proposed OpenSync tool for comparing business hours across Google Maps and a website. Example results are clearly identified.',
+      'Scan the opening hours published on a business website and compare them with Google Maps when available.',
     priority: 0.5,
     changeFrequency: 'monthly',
   },

@@ -12,6 +12,7 @@ import {
   Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { checkBusinessHours, type CheckFinding } from '@/lib/hours-checker';
 import { pageMetadata } from '@/lib/seo';
 import { siteUrl } from '@/lib/site-url';
 
@@ -22,27 +23,20 @@ const breadcrumbData = {
   '@type': 'BreadcrumbList',
   itemListElement: [
     { '@type': 'ListItem', position: 1, name: 'OpenSync', item: siteUrl('/') },
-    { '@type': 'ListItem', position: 2, name: 'Business hours checker preview', item: siteUrl('/hours-checker') },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: 'Business hours checker',
+      item: siteUrl('/hours-checker'),
+    },
   ],
 };
 
-function businessLabel(value: string | string[] | undefined) {
-  const rawValue = Array.isArray(value) ? value[0] : value;
-  const cleaned = rawValue?.trim().slice(0, 120);
-
-  if (!cleaned) return 'Juniper & Oak';
-  if (/^https?:\/\//i.test(cleaned) || cleaned.includes('google.com/maps')) {
-    try {
-      return new URL(cleaned.startsWith('http') ? cleaned : `https://${cleaned}`).hostname.replace(
-        /^www\./,
-        '',
-      );
-    } catch {
-      return cleaned;
-    }
-  }
-
-  return cleaned;
+function FindingIcon({ source }: { source: CheckFinding['source'] }) {
+  if (source === 'google') return <MapPin size={20} aria-hidden="true" />;
+  if (source === 'website') return <Globe2 size={20} aria-hidden="true" />;
+  if (source === 'hours') return <CalendarDays size={20} aria-hidden="true" />;
+  return <Clock3 size={20} aria-hidden="true" />;
 }
 
 export default async function HoursCheckerPage({
@@ -52,11 +46,16 @@ export default async function HoursCheckerPage({
 }) {
   const params = await searchParams;
   const submittedValue = Array.isArray(params.business) ? params.business[0] : params.business;
-  const business = businessLabel(params.business);
+  const result = submittedValue?.trim() ? await checkBusinessHours(submittedValue) : undefined;
 
   return (
     <div className="checker-page">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbData).replace(/</g, '\\u003c') }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbData).replace(/</g, '\\u003c'),
+        }}
+      />
       <header className="checker-header">
         <Link href="/" className="brand">
           <span className="brand-mark">o</span>OpenSync<span className="brand-dot">.</span>
@@ -79,18 +78,22 @@ export default async function HoursCheckerPage({
               <i /> FREE BUSINESS HOURS CHECKER
             </span>
             <h1>Are your customers seeing the right hours?</h1>
-            <p>Check your business hours across the web for free.</p>
+            <p>
+              Scan the hours published on your website and compare them with Google when available.
+            </p>
 
-            <form action="/hours-checker" method="get" className="checker-form">
-              <label htmlFor="checker-business">Enter your business name or website</label>
+            <form action="/hours-checker#results" method="get" className="checker-form">
+              <label htmlFor="checker-business">Enter your business website</label>
               <div>
                 <Search size={18} aria-hidden="true" />
                 <input
                   id="checker-business"
                   name="business"
                   type="text"
+                  inputMode="url"
+                  autoComplete="url"
                   defaultValue={submittedValue ?? ''}
-                  placeholder="e.g. Juniper & Oak or yourbusiness.com"
+                  placeholder="e.g. yourbusiness.com"
                   required
                 />
                 <Button type="submit">
@@ -116,67 +119,64 @@ export default async function HoursCheckerPage({
           </div>
         </section>
 
-        <section className="checker-results" aria-labelledby="example-results-title">
-          <div className="checker-results-heading">
-            <div>
-              <span>EXAMPLE SCAN RESULTS</span>
-              <h2 id="example-results-title">{business}</h2>
+        {result ? (
+          <section
+            id="results"
+            className="checker-results"
+            aria-labelledby="checker-results-title"
+            aria-live="polite"
+          >
+            <div className="checker-results-heading">
+              <div>
+                <span>LIVE SCAN RESULTS</span>
+                <h2 id="checker-results-title">{result.name}</h2>
+              </div>
+              <span className="checker-example-badge">Checked now</span>
             </div>
-            <span className="checker-example-badge">Illustrative preview</span>
-          </div>
 
-          <div className="checker-report">
-            <article>
-              <span className="checker-result-icon checker-result-good">
-                <MapPin size={20} aria-hidden="true" />
-              </span>
-              <div>
-                <span>Google Maps</span>
-                <strong>Hours found</strong>
-              </div>
-              <span className="checker-status checker-status-good">Found</span>
-            </article>
-            <article>
-              <span className="checker-result-icon checker-result-warn">
-                <Globe2 size={20} aria-hidden="true" />
-              </span>
-              <div>
-                <span>Business website</span>
-                <strong>2 discrepancies</strong>
-              </div>
-              <span className="checker-status checker-status-warn">Review</span>
-            </article>
-            <article>
-              <span className="checker-result-icon">
-                <CalendarDays size={20} aria-hidden="true" />
-              </span>
-              <div>
-                <span>Holiday hours</span>
-                <strong>Not specified</strong>
-              </div>
-              <span className="checker-status">Missing</span>
-            </article>
-            <article>
-              <span className="checker-result-icon">
-                <Clock3 size={20} aria-hidden="true" />
-              </span>
-              <div>
-                <span>Website open/closed status</span>
-                <strong>Not found</strong>
-              </div>
-              <span className="checker-status">Missing</span>
-            </article>
-          </div>
+            <div className="checker-report">
+              {result.findings.map((finding) => (
+                <article key={`${finding.source}-${finding.label}`}>
+                  <span
+                    className={`checker-result-icon${
+                      finding.tone === 'good'
+                        ? ' checker-result-good'
+                        : finding.tone === 'warn'
+                          ? ' checker-result-warn'
+                          : ''
+                    }`}
+                  >
+                    <FindingIcon source={finding.source} />
+                  </span>
+                  <div>
+                    <span>{finding.label}</span>
+                    <strong>{finding.detail}</strong>
+                  </div>
+                  <span
+                    className={`checker-status${
+                      finding.tone === 'good'
+                        ? ' checker-status-good'
+                        : finding.tone === 'warn'
+                          ? ' checker-status-warn'
+                          : ''
+                    }`}
+                  >
+                    {finding.status}
+                  </span>
+                </article>
+              ))}
+            </div>
 
-          <aside className="checker-disclaimer">
-            <AlertCircle size={18} aria-hidden="true" />
-            <p>
-              <strong>Proposed feature concept — not a functioning scanner.</strong> Results shown
-              here are examples and have not been verified against Google Maps or a business
-              website.
-            </p>
-          </aside>
-        </section>
+            <aside className="checker-disclaimer">
+              <AlertCircle size={18} aria-hidden="true" />
+              <p>
+                <strong>These results come from a live scan.</strong> The checker reads the public
+                home page and structured data without executing third-party scripts. Hours loaded
+                only after interaction or shown on another page may need a manual review.
+              </p>
+            </aside>
+          </section>
+        ) : null}
 
         <section className="checker-cta">
           <div>

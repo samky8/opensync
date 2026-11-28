@@ -184,16 +184,18 @@ export default async function Home() {
             <span className="eyebrow">FREE HOURS CHECK</span>
             <h2 id="home-checker-title">Are customers seeing the right hours?</h2>
           </div>
-          <form action="/hours-checker" method="get">
+          <form action="/hours-checker#results" method="get">
             <label className="sr-only" htmlFor="home-checker-business">
-              Business name, website, or Google Maps URL
+              Business website URL
             </label>
             <Search size={17} aria-hidden="true" />
             <input
               id="home-checker-business"
               name="business"
               type="text"
-              placeholder="Business name, website, or Google Maps URL"
+              inputMode="url"
+              autoComplete="url"
+              placeholder="yourbusiness.com"
               required
             />
             <Button type="submit">
