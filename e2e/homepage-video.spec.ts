@@ -20,7 +20,5 @@ test('homepage presents a tappable demo without the old setup steps', async ({
   }
 
   await expect(playButton).toBeHidden();
-  await expect
-    .poll(() => page.locator('.home-promo-video video').evaluate((video) => !video.paused))
-    .toBe(true);
+  await expect(page.locator('.home-promo-video video')).toHaveJSProperty('paused', false);
 });

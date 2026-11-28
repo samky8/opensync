@@ -205,7 +205,14 @@ test('saved drafts stay visibly unpublished after reload until published', async
   await expect(publishButton).toBeDisabled();
   await page.getByLabel('Business name', { exact: true }).fill('Saved draft business');
   await expect(publishButton).toBeEnabled();
-  await expect(page.locator('.draft-notice')).toContainText('Unsaved changes');
+  const pendingButton = page.getByRole('button', { name: 'Pending changes', exact: true });
+  await expect(pendingButton).toBeVisible();
+  await pendingButton.click();
+  await expect(page.getByRole('dialog')).toContainText(
+    'These edits are not saved or published yet.',
+  );
+  await expect(page.getByRole('dialog').getByText('Saved draft business')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
   await publishButton.click();
   const dialog = page.getByRole('dialog');
@@ -214,13 +221,17 @@ test('saved drafts stay visibly unpublished after reload until published', async
   await expect(dialog.getByRole('button', { name: 'Save draft', exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.locator('.draft-notice')).toContainText('Saved draft');
+  await pendingButton.click();
+  await expect(page.getByRole('dialog')).toContainText(
+    'This saved draft has not been published yet.',
+  );
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload();
   await expect(page.getByLabel('Business name', { exact: true })).toHaveValue(
     'Saved draft business',
   );
   await expect(publishButton).toBeEnabled();
-  await expect(page.locator('.draft-notice')).toContainText('not published');
+  await expect(pendingButton).toBeVisible();
   const publishedName = () =>
     page.evaluate(() => JSON.parse(localStorage.getItem('opensync-demo-v1')!).published.name);
   expect(await publishedName()).not.toBe('Saved draft business');
@@ -229,12 +240,12 @@ test('saved drafts stay visibly unpublished after reload until published', async
   await dialog.getByRole('button', { name: 'Next', exact: true }).click();
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.locator('.draft-notice')).toHaveCount(0);
+  await expect(pendingButton).toHaveCount(0);
   await page.goto('/demo?tab=widgets');
   expect(await publishedName()).toBe('Saved draft business');
   await expect(page.getByText('View last published demo', { exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('.draft-notice')).toHaveCount(0);
+  await expect(pendingButton).toHaveCount(0);
 });
 
 test('website instructions open from Connections and stay separate from widget settings', async ({

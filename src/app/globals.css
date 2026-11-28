@@ -865,6 +865,21 @@ button:not(.btn) {
   min-height: 38px;
   font-size: 11px;
 }
+.heading-actions > .pending-changes-button {
+  min-height: 38px;
+  border-color: #e8d5b8;
+  color: #70512c;
+  background: #fffaf2;
+  font-size: 11px;
+}
+.pending-changes-button:hover:not(:disabled) {
+  border-color: #d7b984;
+  background: #fff6e7;
+}
+.pending-changes-button .status-dot {
+  width: 6px;
+  height: 6px;
+}
 .card {
   background: #fff;
   border: 1px solid var(--border);
@@ -2603,6 +2618,69 @@ button:not(.btn) {
   gap: 10px;
   margin-top: 26px;
 }
+.pending-changes-dialog .modal-heading {
+  margin-bottom: 22px;
+}
+.pending-changes-dialog .modal-heading .muted {
+  margin-bottom: 0;
+}
+.pending-changes-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(52vh, 440px);
+  overflow: auto;
+  padding-right: 4px;
+}
+.pending-change {
+  padding: 14px;
+  border: 1px solid #e8e9ef;
+  border-radius: 10px;
+  background: #fbfbfd;
+}
+.pending-change > strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #303441;
+}
+.pending-change-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.pending-change-values > svg {
+  color: #9b9eaa;
+}
+.pending-change-values span {
+  display: block;
+  margin-bottom: 4px;
+  color: #888b96;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pending-change-values p {
+  margin: 0;
+  color: #5e626d;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.pending-change-values > div:last-child p {
+  color: #3f356e;
+  font-weight: 600;
+}
+.pending-changes-empty {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed #dfe1e8;
+  border-radius: 10px;
+  color: #747783;
+  text-align: center;
+  font-size: 12px;
+}
 .publish-summary {
   border: 1px solid #e9ebf1;
   border-radius: 8px;
@@ -4325,6 +4403,13 @@ button:not(.btn) {
   .modal-actions .btn {
     flex: 1;
     min-height: 44px;
+  }
+  .pending-change-values {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .pending-change-values > svg {
+    display: none;
   }
   .period input {
     width: 110px;

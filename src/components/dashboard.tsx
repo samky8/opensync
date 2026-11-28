@@ -452,6 +452,7 @@ export function Dashboard({
       (!publishedSchedule ||
         JSON.stringify(scheduleSchema.parse(saved)) !==
           JSON.stringify(scheduleSchema.parse(publishedSchedule))),
+    pendingChanges = publishChanges(draft, publishedSchedule, 'all'),
     hoursHaveChanges = publishChanges(draft, publishedSchedule, 'hours').length > 0,
     plan = demo ? 'pro' : detail?.plan || 'free';
   let status;
@@ -1708,6 +1709,16 @@ Implementation requirements:
                 {['hours', 'special', 'widgets', 'brand', 'settings'].includes(tab) ||
                 (tab === 'overview' && (dirty || unpublished)) ? (
                   <div className="heading-actions">
+                    {(dirty || unpublished) && (
+                      <Button
+                        className="pending-changes-button"
+                        variant="outline"
+                        onClick={() => setModal('pending-changes')}
+                      >
+                        <span className="status-dot orange" aria-hidden="true" />
+                        Pending changes
+                      </Button>
+                    )}
                     {tab === 'widgets' ? (
                       <Button
                         disabled={busy || readonly || !dirty}
@@ -1738,30 +1749,6 @@ Implementation requirements:
                   </div>
                 ) : null}
               </div>
-              {(dirty || unpublished) && (
-                <div
-                  className={`draft-notice ${tab === 'integrations' ? 'connections-draft-notice' : ''}`}
-                >
-                  <span className="status-dot orange" />
-                  <strong>
-                    {dirty
-                      ? 'Unsaved changes'
-                      : pubVersion
-                        ? 'Saved draft · not published'
-                        : 'Not published yet'}
-                  </strong>
-                  <span>
-                    {pubVersion
-                      ? 'Publish to update your website widgets.'
-                      : 'Publish your hours to activate your widgets.'}
-                  </span>
-                  {tab === 'integrations' && (
-                    <Button variant="outline" size="sm" onClick={() => openPublish()}>
-                      <Send size={14} /> Publish draft
-                    </Button>
-                  )}
-                </div>
-              )}
               {tab === 'billing' && (
                 <ProTrialCard
                   trial={demo ? demoTrial : accountBilling.trial}
@@ -4180,6 +4167,55 @@ Implementation requirements:
               error={error}
               onResetWidget={widgetPlanError ? resetWidget : undefined}
             />
+          ) : modal === 'pending-changes' ? (
+            <section className="pending-changes-dialog" aria-labelledby="pending-changes-title">
+              <div className="modal-heading">
+                <div className="modal-icon" aria-hidden="true">
+                  <ListChecks size={21} />
+                </div>
+                <div>
+                  <h2 id="pending-changes-title">Pending changes</h2>
+                  <p className="muted">
+                    {dirty
+                      ? 'These edits are not saved or published yet.'
+                      : pubVersion
+                        ? 'This saved draft has not been published yet.'
+                        : 'These details have not been published yet.'}
+                  </p>
+                </div>
+              </div>
+              <div className="pending-changes-list">
+                {pendingChanges.length ? (
+                  pendingChanges.map((change, index) => (
+                    <article className="pending-change" key={`${change.label}-${index}`}>
+                      <strong>{change.label}</strong>
+                      <div className="pending-change-values">
+                        <div>
+                          <span>Currently published</span>
+                          <p>{change.before || 'Nothing'}</p>
+                        </div>
+                        <ArrowRight size={16} aria-hidden="true" />
+                        <div>
+                          <span>Pending</span>
+                          <p>{change.after || 'Removed'}</p>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="pending-changes-empty">No content changes to show.</p>
+                )}
+              </div>
+              <div className="modal-actions">
+                <Button variant="outline" onClick={() => setModal('')}>
+                  Close
+                </Button>
+                <Button disabled={busy || readonly} onClick={() => openPublish('all')}>
+                  <Send size={16} />
+                  Review &amp; publish
+                </Button>
+              </div>
+            </section>
           ) : modal === 'location' ? (
             <form
               onSubmit={(e) => {
