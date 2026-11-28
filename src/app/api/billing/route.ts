@@ -98,7 +98,7 @@ export async function POST(req: Request) {
               quantity: 1,
             },
           ],
-          success_url: `${billingUrl}&checkout=success&plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
+          success_url: billingUrl,
           cancel_url: billingUrl,
           subscription_data: { metadata: { accountId } },
           allow_promotion_codes: true,

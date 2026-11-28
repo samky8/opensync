@@ -528,7 +528,9 @@ describe('real SQL application flows', () => {
       "insert into connections(location_id,encrypted_tokens,remote_id,status) values($1,'test-only','locations/123','connected')",
       [id],
     );
-    await post({ op: 'publish', id, version, key: randomUUID() });
+    expect((await post({ op: 'publish', id, version, key: randomUUID() })).status).toBe(200);
+    expect((await pg.query("select id from jobs where destination='google'")).rows).toEqual([]);
+    await post({ op: 'publish', id, version, key: randomUUID(), google: true });
     const saved = await post({
       op: 'save',
       id,
@@ -536,7 +538,7 @@ describe('real SQL application flows', () => {
       draft: defaultSchedule('Newest revision'),
     });
     version = saved.body.location.draftVersion;
-    await post({ op: 'publish', id, version, key: randomUUID() });
+    await post({ op: 'publish', id, version, key: randomUUID(), google: true });
     const invoke = () =>
       cron(
         new Request('http://localhost:3000/api/cron', {
@@ -559,7 +561,7 @@ describe('real SQL application flows', () => {
   });
   it('durably backs off transient provider failures, then recovers', async () => {
     shared.googleFailure = 429;
-    await post({ op: 'publish', id, version, key: randomUUID() });
+    await post({ op: 'publish', id, version, key: randomUUID(), google: true });
     const invoke = () =>
       cron(
         new Request('http://localhost:3000/api/cron', {
@@ -622,6 +624,54 @@ describe('real SQL application flows', () => {
       ).toEqual([{ status: 'sent' }]);
     } finally {
       vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+  it('cleans up expired privacy data while retaining active state and publication history', async () => {
+    const expiredPublication = randomUUID();
+    const activePublication = randomUUID();
+    await pg.exec(`
+      insert into rate_limits(key, bucket) values
+        ('auth:test@example.com', now()),
+        ('auth-v2:expired', now() - interval '2 days'),
+        ('auth-v2:active', now());
+    `);
+    await pg.query(
+      `insert into social_oauth(state_hash, location_id, user_id, expires_at) values
+        ('expired', $1, $2, now() - interval '1 minute'),
+        ('active', $1, $2, now() + interval '1 minute')`,
+      [id, shared.user],
+    );
+    await pg.query(
+      `insert into social_publications
+        (id, location_id, account_name, platform, format, caption, payload_hash, image, media_key,
+         media_expires_at, status) values
+        ($1, $3, 'Test Page', 'Facebook', 'post', 'Caption', 'hash', 'jpeg', 'expired-image',
+         now() - interval '1 minute', 'published'),
+        ($2, $3, 'Test Page', 'Facebook', 'post', 'Caption', 'hash', 'jpeg', 'active-image',
+         now() + interval '1 hour', 'ready')`,
+      [expiredPublication, activePublication, id],
+    );
+    vi.stubEnv('CRON_SECRET', 'cleanup-test');
+    vi.stubEnv('RESEND_API_KEY', '');
+    try {
+      const url = 'http://localhost:3000/api/cron?notifications=1';
+      expect((await cron(new Request(url))).status).toBe(401);
+      const authorized = new Request(url, { headers: { authorization: 'Bearer cleanup-test' } });
+      expect((await cron(authorized)).status).toBe(200);
+      expect((await pg.query("select key from rate_limits where key like 'auth%'")).rows).toEqual([
+        { key: 'auth-v2:active' },
+      ]);
+      expect((await pg.query('select state_hash from social_oauth')).rows).toEqual([
+        { state_hash: 'active' },
+      ]);
+      expect(
+        (await pg.query('select image, status from social_publications order by media_key')).rows,
+      ).toEqual([
+        { image: 'jpeg', status: 'ready' },
+        { image: null, status: 'published' },
+      ]);
+    } finally {
       vi.unstubAllEnvs();
     }
   });

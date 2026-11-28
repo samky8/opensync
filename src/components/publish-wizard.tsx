@@ -255,7 +255,7 @@ export function PublishWizard({
 }) {
   const [step, setStep] = useState(0);
   const [website, setWebsite] = useState(true);
-  const [includeGoogle, setIncludeGoogle] = useState(google);
+  const [includeGoogle, setIncludeGoogle] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [canPublish, setCanPublish] = useState(false);

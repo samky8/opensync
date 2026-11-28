@@ -296,7 +296,7 @@ export async function POST(req: Request) {
         .from(t.connections)
         .where(eq(t.connections.locationId, id));
       const queueGoogle =
-        body.google !== false &&
+        body.google === true &&
         ['hours', 'special', 'all'].includes(scope) &&
         connection?.remoteId &&
         connection.status === 'connected' &&

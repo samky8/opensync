@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import { supabase, authConfigured } from '@/lib/supabase';
 import { appUrl, checkOrigin, apiError, rateLimit } from '@/lib/server';
@@ -31,7 +32,11 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
     const email = z.email().parse(body.email);
-    await rateLimit(`auth:${email.toLowerCase()}`, 10);
+    const rateLimitSecret = process.env.RATE_LIMIT_SECRET || process.env.DATABASE_URL!;
+    const emailKey = createHmac('sha256', rateLimitSecret)
+      .update(`auth-email:${email.toLowerCase()}`)
+      .digest('hex');
+    await rateLimit(`auth-v2:${emailKey}`, 10);
     if (op === 'reset') {
       const { error } = await client.auth.resetPasswordForEmail(email, {
         redirectTo: `${appUrl()}/auth/callback?next=/reset-password`,

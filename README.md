@@ -1,5 +1,18 @@
 # OpenSync
 
+## Web analytics
+
+The public website offers optional Google Analytics via a cookie banner. The app sends manual
+pageviews with query strings and referrers omitted. Embedded widgets, signed-in routes,
+authentication pages, and the hours checker are outside the analytics scope. The banner stores
+the choice in the browser, and Cookie settings lets visitors change it.
+
+The build defaults to the existing OpenSync GA4 stream. Set `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID`
+to use a different stream, or set it to an empty value to disable analytics. Before deploying
+with analytics enabled, turn off Enhanced Measurement in the GA4 web data stream to prevent
+Google's automatic history events from overriding the app's pageview controls. See
+[Google's manual pageview guidance](https://developers.google.com/analytics/devguides/collection/ga4/views#disable_page_changes_based_on_browser_history_events).
+
 **One update. Everywhere your customers look.**
 
 A Next.js application for independent businesses to manage regular hours, exceptions, announcements, and public website widgets. Real accounts use Supabase Auth and PostgreSQL. The separate `/demo` workspace persists example changes only in the visitor's browser and never contacts Google or Stripe.
@@ -37,7 +50,7 @@ Before deploying the trial feature, run `npm run db:migrate` against the intende
 - Editable announcements with optional links, enable/disable, business-local activation times, expiry, and website previews.
 - Draft saving with optimistic concurrency; explicit review; immutable, versioned, idempotent publication.
 - Public hours, status, and announcement widgets; responsive script/iframe snippets; multi-widget loading; safe text rendering; periodic refresh; automatic script-embed resizing and collapse of expired banners.
-- Google OAuth state checks, encrypted tokens, refresh, account/location pagination, location selection, import confirmation, hours-only update masks, durable destination jobs, bounded retry/backoff, and honest accepted/failed results.
+- Google OAuth state checks, encrypted tokens, refresh, account/location pagination, live hours comparison, hours-only update masks, durable destination jobs, and bounded retry/backoff.
 - Stripe Checkout, Billing Portal, raw-body webhook signatures, event deduplication, current subscription reconciliation, CAD price validation, checkout reuse, and server-side plan enforcement.
 - History, in-app failure/subscription notifications, business settings, export, basic staff access grants, Instagram/Facebook post and story creation with PNG export, captions, browser-local drafts, and native sharing where supported, and saved support requests.
 - Responsive marketing/help pages, explicit legal templates, metadata, sitemap, social image, PWA manifest/icons, and a network-only offline fallback that never caches private business pages.
@@ -71,10 +84,16 @@ Website features do not depend on Google.
 3. Create a Web OAuth client with redirect URI `https://opensync.ca/api/google/callback` (and `http://localhost:3000/api/google/callback` for development).
 4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_BUSINESS_PROFILE_APPROVED=true`, and a 32-byte encryption key encoded as 64 hex characters in `TOKEN_ENCRYPTION_KEY`. Generate a unique random key locally; store it in a secret manager. Do not rotate it without a token migration or reconnect plan.
 5. Enable Pro or Business through a verified Stripe subscription. For **development only**, `DEV_PAID_FEATURES=true` unlocks paid actions. This override is explicitly ignored in production.
-6. Connect in Integrations, select a location, compare the imported hours, and explicitly confirm import if desired. Import changes the draft only. Review before publishing.
+6. Connect in Integrations and choose a location. Compare live Google hours with your OpenSync schedule for reference. Select Google explicitly when reviewing a web publication to include it.
 7. Configure the job runner described below. Publish and inspect History.
 
-Only `regularHours,specialHours` are patched. OpenSync never changes `openInfo`, permanently/temporarily closed status, address, category, or unrelated profile fields. Announcements are website-only. Unsupported imports must be reviewed manually; this release does not model 24-hour/full-week intervals. Google processing is reported as **accepted**, never as verified public Search/Maps visibility.
+Only `regularHours,specialHours` are patched. OpenSync never changes `openInfo`, permanently/temporarily closed status, address, category, or unrelated profile fields. Announcements are website-only. Google processing is reported as **accepted**. This does not establish public Search or Maps visibility.
+
+Before enabling Business Profile in production, review any historical Google imports and queued
+updates from the earlier implementation. Imported hours were mixed with manual entries in drafts
+and revisions, so the repository cannot safely identify all affected schedules automatically.
+Use confirmed source records to resolve historical imports. Configure the deployed `/privacy` URL
+in the Google OAuth client and set `PRIVACY_EMAIL` to a monitored public address for data requests.
 
 References: [location fields](https://developers.google.com/my-business/reference/businessinformation/rest/v1/locations), [updating location data](https://developers.google.com/my-business/content/location-data), [Supabase SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client).
 

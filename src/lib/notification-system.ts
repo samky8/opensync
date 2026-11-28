@@ -267,12 +267,9 @@ async function checkOneHoursDiscrepancy(now: Date) {
         return 0;
       });
     }
-    console.error(
-      JSON.stringify({
-        event: 'notification_hours_check_failed',
-        message: error instanceof Error ? error.message : 'unknown',
-      }),
-    );
+    console.error('notification_hours_check_failed', {
+      providerStatus: error instanceof GoogleError ? error.status : undefined,
+    });
     return 0;
   }
 }

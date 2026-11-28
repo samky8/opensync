@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { and, eq, gt } from 'drizzle-orm';
 import { db } from '@/db';
 import { socialOauth, socialAccounts } from '@/db/schema';
-import { assertMeta, exchangeMeta, metaPages, stateHash } from '@/lib/meta';
+import { assertMeta, exchangeMeta, MetaError, metaPages, stateHash } from '@/lib/meta';
 import { encrypt, validState } from '@/lib/google';
 import { appUrl, locationAccess } from '@/lib/server';
 import { requireUser } from '@/lib/supabase';
@@ -38,13 +38,8 @@ export async function GET(req: Request) {
       .returning();
     if (!pending) throw new Error('Invalid Meta authorization');
     await locationAccess(pending.locationId, true);
-    console.info('[Meta OAuth] Starting token exchange');
-const token = await exchangeMeta(code);
-
-console.info('[Meta OAuth] Token exchange succeeded');
-const pages = await metaPages(token.access_token);
-
-console.info('[Meta OAuth] Eligible Pages:', pages.length);
+    const token = await exchangeMeta(code);
+    const pages = await metaPages(token.access_token);
     if (!pages.length) throw new Error('No eligible Meta Pages');
     await db().transaction(async (tx) => {
       for (const page of pages) {
@@ -68,8 +63,10 @@ console.info('[Meta OAuth] Eligible Pages:', pages.length);
       }
     });
     return NextResponse.redirect(`${appUrl()}/dashboard?tab=social&location=${pending.locationId}`);
-    } catch (error) {
-    console.error('[Meta OAuth callback failed]', error);
+  } catch (error) {
+    console.error('[Meta OAuth callback failed]', {
+      providerCode: error instanceof MetaError ? error.code : undefined,
+    });
     return NextResponse.redirect(
       `${appUrl()}/dashboard?tab=social&error=${encodeURIComponent('Meta connection failed. Grant Page and Instagram publishing permissions and select a Page you can create content for. Try connecting again.')}`,
     );

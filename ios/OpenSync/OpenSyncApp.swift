@@ -124,7 +124,7 @@ struct OverviewView: View {
             NavigationStack {
                 List {
                     Text("Publish the saved draft?").font(.title2.bold())
-                    Text("Website widgets update immediately. Eligible connected Google profiles are queued. Unpublished edits in an open editor must be saved first.")
+                    Text("Website widgets update immediately. Use the web dashboard to publish to Google when available. Save edits from any open editor before publishing.")
                     if let schedule = model.detail?.location.draft {
                         Text(schedule.name).font(.headline)
                         Text(schedule.timezone)

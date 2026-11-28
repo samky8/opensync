@@ -38,6 +38,7 @@ export async function generateMetadata({
 export default async function Page({ params }: { params: Promise<{ info: string }> }) {
   const { info } = await params;
   if (!['help', 'privacy', 'terms'].includes(info)) notFound();
+  const privacyEmail = process.env.PRIVACY_EMAIL?.trim() || process.env.SUPPORT_EMAIL?.trim();
   return (
     <main className="document-page" id="main-content">
       <Link href="/" className="brand">
@@ -96,37 +97,80 @@ export default async function Page({ params }: { params: Promise<{ info: string 
       ) : info === 'privacy' ? (
         <>
           <h1>Privacy notice</h1>
-          <div className="notice">
-            Deployment template. The service operator must add their legal identity, contact
-            address, retention schedule, and applicable jurisdiction before opening registration to
-            the public.
-          </div>
+          <p>
+            This notice explains how OpenSync handles information on its website, in its iOS app,
+            in website widgets, and through connected services.
+          </p>
           <h2>Information we use</h2>
           <p>
             OpenSync stores your account email, organization membership, business profile,
             schedules, announcements, saved custom social backgrounds, publication history, support
-            requests, and subscription status. Public widgets expose only the business information
-            in your published schedule. Integration tokens are encrypted on the server.
+            requests, account preferences, and subscription status. We use this information to run
+            the service, manage access, publish updates you request, and respond to support requests.
+            Authorized workspace members can access workspace data according to their role.
+            Published schedules are public and may contain future or inactive announcements that
+            the widget does not currently display.
           </p>
           <h2>Service providers</h2>
           <p>
-            Supabase provides authentication and database hosting. Stripe processes subscription
-            payments; OpenSync does not store card numbers. Google receives authorized
-            business-hours changes when you connect a profile. Hosting providers process request
-            metadata for operation and abuse prevention.
+            Vercel hosts the web service and processes request metadata. Supabase provides
+            authentication and database hosting. Stripe processes subscription payments and
+            receives your account email and billing identifiers. OpenSync does not store full card
+            details. When notification email is enabled, Resend receives your email address and the
+            notification content for delivery.
           </p>
           <p>
             For direct social publishing, Meta receives the image and caption you approve. OpenSync
-            stores encrypted Page tokens, connected account identifiers, and publication results.
-            Upload links expire after 24 hours; expired image data is purged when another social
-            publication is created.
+            stores encrypted Page tokens, connected Facebook and Instagram identifiers and names,
+            and publication history. Upload links expire after 24 hours. Expired image payloads
+            are cleared by scheduled maintenance or when another social publication is created.
           </p>
-          <h2>Your choices</h2>
+          <h2>Google user data</h2>
           <p>
-            Export business data from Settings. Disconnect Google to revoke its token. Delete your
-            account to remove owned organizations and publications after cancelling active
-            subscriptions. Regulatory and payment records held by providers may have separate
-            retention requirements.
+            If Google sign-in is available and you choose it, OpenSync uses your Google account
+            identifier, email, and basic profile information made available through Supabase Auth
+            to sign you in and associate your account.
+            Google Business Profile is a separate optional connection. It requests the
+            <code> business.manage</code> permission to find Business Profile accounts and
+            locations you manage, show location names and hours, compare hours, and send regular
+            or special hours updates when an authorized workspace user selects Google and confirms
+            publication. OpenSync does not use this connection to access Gmail, Drive, or Contacts.
+          </p>
+          <p>
+            OpenSync stores encrypted Business Profile access and refresh tokens and the linked
+            location identifier to maintain the connection. Google hours are retrieved for live
+            comparison without a persistent response cache or a draft import. Google's{' '}
+            <a href="https://developers.google.com/my-business/content/policies">
+              Business Profile API policies
+            </a>{' '}
+            limit permitted temporary caching to 30 calendar days. Historical schedules created
+            using the former import feature may still contain Google-derived hours in drafts or
+            publication history.
+          </p>
+          <p>
+            OpenSync uses Google user data to provide these features. It does not sell that data
+            or send it to Google Analytics, advertising systems, or AI training systems. For
+            Google API data use and transfer, see the{' '}
+            <a href="https://developers.google.com/terms/api-services-user-data-policy">
+              Google API Services User Data Policy
+            </a>, including its Limited Use requirements.
+          </p>
+          <p>
+            To remove Business Profile access, use Disconnect under Connections or remove OpenSync
+            in <a href="https://myaccount.google.com/connections">your Google Account connections</a>.
+            Disconnect in OpenSync requests revocation at Google and removes the stored connection
+            credentials and linked location identifier. Contact us for help with disassociation or
+            historical Google-derived data. Disconnect cannot undo updates already sent to Google.
+          </p>
+          <h2 id="data-deletion">Access and deletion</h2>
+          <p>
+            You can export business schedules and revision history from Settings. Web account
+            deletion requires prior cancellation of an active subscription. In the iOS app, Settings
+            offers to cancel your active web subscription as part of deletion. Account deletion
+            removes the sign-in account, owned workspaces, and associated records from the live
+            database. Records in workspaces owned by others may remain. Provider-held payment
+            records, backups, and content already published to external platforms follow separate
+            retention and removal processes.
           </p>
           <p>
             Delete saved backgrounds individually in Social posts. Disconnect a Meta account there
@@ -135,16 +179,32 @@ export default async function Page({ params }: { params: Promise<{ info: string 
             them in Instagram or Facebook. Account deletion removes locally stored social tokens,
             uploads, and history for owned businesses.
           </p>
-          <h2>Cookies and demo storage</h2>
+          <h2>Analytics, cookies, and widgets</h2>
           <p>
-            Essential cookies maintain secure sessions and OAuth authorization state. The clearly
-            labeled demo saves example changes in your browser’s local storage; Reset demo clears
-            them. No advertising trackers are included.
+            Essential cookies support sign-in and connection security. Browser storage also saves
+            your cookie choice, demo edits, social drafts and presets, and interface preferences.
+            The iOS app saves its sign-in session in the device Keychain.
+          </p>
+          <p>
+            If you accept analytics cookies, Google Analytics receives public pageview, browser,
+            and device information and may store an identifier in a cookie. We use this to
+            understand how people use the public website. OpenSync's pageview events omit URL query
+            strings and referrers. You can decline or withdraw consent using Cookie settings at the
+            bottom of this page. Read more about how Google handles this data in{' '}
+            <a href="https://policies.google.com/technologies/partner-sites">
+              Google's explanation of data from sites that use its services
+            </a>.
+          </p>
+          <p>
+            Embedded widgets do not load Google Analytics. Widget requests reach OpenSync's host,
+            which receives request metadata such as IP addresses. OpenSync uses a hashed IP
+            address to limit excessive widget requests.
           </p>
           <h2>Contact</h2>
           <p>
-            Use the signed-in support form for data requests. The operator must provide a public
-            privacy contact before launch.
+            For access, correction, deletion, or other privacy requests,{' '}
+            {privacyEmail && <>email <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a> or </>}
+            <Link href="/dashboard?tab=help">use the signed-in support form</Link>.
           </p>
         </>
       ) : (

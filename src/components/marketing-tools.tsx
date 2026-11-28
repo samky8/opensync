@@ -7,7 +7,6 @@ import { Widget } from '@/components/widget';
 import { Button } from '@/components/ui/button';
 import { demoSchedule } from '@/lib/demo';
 import type { Schedule } from '@/lib/domain';
-import { trackEvent } from '@/lib/analytics';
 
 export function WidgetBuilder() {
   const [accent, setAccent] = useState('#5b55c8');
@@ -29,7 +28,7 @@ export function WidgetBuilder() {
           <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>Light</button>
           <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>Dark</button>
         </div>
-        <button type="button" className="code-copy" onClick={async () => { await navigator.clipboard?.writeText(code); trackEvent('widget_created', { source: 'marketing_preview', widget_type: 'hours' }); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
+        <button type="button" className="code-copy" onClick={async () => { await navigator.clipboard?.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
           {copied ? <Check size={15} /> : <Clipboard size={15} />} {copied ? 'Copied' : 'Copy embed code'}
         </button>
       </div>

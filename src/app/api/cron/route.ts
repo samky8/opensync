@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import * as t from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, lte, sql } from 'drizzle-orm';
 import {
   googleAccess,
   googleFetch,
@@ -33,6 +33,22 @@ export async function GET(req: Request) {
       emailAttempts += attempted.filter(Boolean).length;
       if (!attempted.every(Boolean)) break;
     }
+    const now = new Date();
+    const database = db();
+    await database.transaction(async (tx) => {
+      // Remove legacy plaintext email keys and expired rate-limit buckets.
+      await tx.execute(sql`
+        delete from rate_limits
+        where key like 'auth:%' or bucket < now() - interval '1 day'
+      `);
+      await tx.delete(t.socialOauth).where(lte(t.socialOauth.expiresAt, now));
+      await tx
+        .update(t.socialPublications)
+        .set({ image: null })
+        .where(
+          and(isNotNull(t.socialPublications.image), lte(t.socialPublications.mediaExpiresAt, now)),
+        );
+    });
     return Response.json({ notifications, emailAttempts });
   }
   let processed = 0;

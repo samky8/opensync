@@ -107,11 +107,11 @@ final class AppModel: ObservableObject {
             // Keep the same key after a timeout so retrying does not create duplicate revisions.
             let key = publishKey ?? UUID().uuidString
             publishKey = key
-            _ = try await client().raw("/api/manage", body: ["op": "publish", "id": detail.location.id, "version": detail.location.draftVersion, "key": key])
+            _ = try await client().raw("/api/manage", body: ["op": "publish", "id": detail.location.id, "version": detail.location.draftVersion, "key": key, "google": false])
             try await reload()
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        message = isDemo ? "Demo published. No live channels were changed." : "Published to your website. Connected Google updates are queued; check delivery status below."
+        message = isDemo ? "Demo published. No live channels were changed." : "Published to your website."
     }
     func support(_ text: String) async throws {
         if !isDemo { _ = try await client().raw("/api/manage", body: ["op": "support", "message": text]) }

@@ -75,7 +75,6 @@ import {
 } from '@/lib/publish-scope';
 import { ProTrialCard } from './pro-trial';
 import { freeAccountBilling, type AccountBilling, type ProTrial } from '@/lib/trial';
-import { trackEvent } from '@/lib/analytics';
 import {
   AnnouncementForm,
   BusinessFields,
@@ -98,7 +97,6 @@ import {
   type Plan,
 } from '@/lib/domain';
 import { demoBusinessProfile, demoSchedule, restoreDemoBranding } from '@/lib/demo';
-import { importGoogleHours } from '@/lib/google-import';
 import {
   defaultNotificationPreferences,
   type NotificationPreferences,
@@ -408,6 +406,7 @@ export function Dashboard({
     ),
     [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop'),
     [origin, setOrigin] = useState(''),
+    [googleDiscoveryLocation, setGoogleDiscoveryLocation] = useState(''),
     [googleLocations, setGoogleLocations] = useState<
       {
         name: string;
@@ -703,22 +702,6 @@ export function Dashboard({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }));
     const query = new URLSearchParams(window.location.search);
-    const checkoutPlan = query.get('plan');
-    const checkoutSession = query.get('session_id');
-    if (
-      query.get('checkout') === 'success' &&
-      checkoutSession &&
-      (checkoutPlan === 'pro' || checkoutPlan === 'business') &&
-      sessionStorage.getItem(`analytics-checkout-${checkoutSession}`) !== 'sent'
-    ) {
-      trackEvent('purchase', {
-        transaction_id: checkoutSession,
-        currency: 'CAD',
-        value: checkoutPlan === 'pro' ? 9 : 19,
-        plan: checkoutPlan,
-      });
-      sessionStorage.setItem(`analytics-checkout-${checkoutSession}`, 'sent');
-    }
     if (query.get('tab') && titles[query.get('tab')!]) setTab(query.get('tab')!);
     if (!demo && initialLocations.some((item) => item.id === query.get('location')))
       setSelected(query.get('location')!);
@@ -979,8 +962,6 @@ export function Dashboard({
       sessionStorage.removeItem(`publish-${selected}-${v}-${pubVersion}-${scope}-${includeGoogle}`);
     }
     setOnboarding(false);
-    if (scope === 'widgets' || scope === 'all')
-      trackEvent('widget_created', { source: demo ? 'demo' : 'dashboard', widget_type: 'published' });
     notify(
       demo
         ? 'Demo published. Your local widget preview is up to date.'
@@ -1101,7 +1082,6 @@ Implementation requirements:
     }
     await act(async () => {
       const result = await request('/api/billing', { plan: tier, portal });
-      if (!portal) trackEvent('begin_checkout', { currency: 'CAD', value: tier === 'pro' ? 9 : 19, plan: tier });
       window.location.href = result.url;
     });
   }
@@ -1128,7 +1108,8 @@ Implementation requirements:
     plan !== 'free';
   const quickNeedsReview =
     !!todayUpdate &&
-    (!publishedSchedule ||
+    (googleHours ||
+      !publishedSchedule ||
       todayUpdate.schedule.timezone !== publishedSchedule.timezone ||
       publishChanges(todayUpdate.schedule, publishedSchedule, 'hours').length > 0 ||
       publishChanges(todayUpdate.schedule, publishedSchedule, 'special').length > 0);
@@ -1156,7 +1137,7 @@ Implementation requirements:
       return;
     }
     void act(async () => {
-      await publish(googleHours, value, 'special');
+      await publish(false, value, 'special');
       setModal('');
       notify(
         demo
@@ -3293,6 +3274,8 @@ Implementation requirements:
                                 const r = await fetch(`/api/google/locations?id=${selected}`);
                                 const data = await r.json();
                                 if (!r.ok) throw new Error(data.error);
+                                setGoogleDiscoveryLocation(selected);
+                                setRemote('');
                                 setGoogleLocations(data.locations);
                               })
                             }
@@ -3306,6 +3289,9 @@ Implementation requirements:
                               if (confirm('Disconnect Google and revoke this authorization?'))
                                 void act(async () => {
                                   await request('/api/manage', { op: 'disconnect', id: selected });
+                                  setGoogleLocations([]);
+                                  setGoogleDiscoveryLocation('');
+                                  setRemote('');
                                   await refresh();
                                   notify('Google disconnected');
                                 });
@@ -3315,7 +3301,7 @@ Implementation requirements:
                           </Button>
                         </>
                       )}
-                      {googleLocations.length > 0 && (
+                      {googleDiscoveryLocation === selected && googleLocations.length > 0 && (
                         <div className="google-selection">
                           <label>
                             Google business location
@@ -3355,37 +3341,9 @@ Implementation requirements:
                               )}
                             </pre>
                             <p>
-                              Local hours are shown in Business hours. Import replaces the local
-                              weekly schedule and special hours in your draft only.
+                              Compare these hours with your OpenSync schedule in Business hours.
+                              Google hours are shown for reference and are never added to your draft.
                             </p>
-                            <Button
-                              variant="outline"
-                              disabled={plan === 'free'}
-                              onClick={() => {
-                                const g = googleLocations.find((l) => l.name === remote);
-                                if (
-                                  !g ||
-                                  !confirm(
-                                    'Replace your draft weekly and special hours with the hours from this Google location?',
-                                  )
-                                )
-                                  return;
-                                let next: Schedule;
-                                try {
-                                  next = importGoogleHours(g, draft);
-                                } catch {
-                                  setError(
-                                    'Google hours cannot be represented safely. Review and enter them manually.',
-                                  );
-                                  return;
-                                }
-                                setDraft(next);
-                                switchTab('hours');
-                                notify('Imported to draft. Review and publish when ready.');
-                              }}
-                            >
-                              Confirm import to draft
-                            </Button>
                           </details>
                         </div>
                       )}
@@ -4055,7 +4013,7 @@ Implementation requirements:
                 demo
                   ? 'Updates your demo preview.'
                   : googleHours
-                    ? 'Updates your website widgets and sends the hours to Google for syncing.'
+                    ? 'Review the update and choose whether to include Google before publishing.'
                     : 'Updates your website widgets.'
               }
               needsReview={quickNeedsReview}

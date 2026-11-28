@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from 'next';
-import { GoogleAnalytics } from '@next/third-parties/google';
 import './globals.css';
 import { Pwa } from '@/components/pwa';
+import { AnalyticsConsent } from '@/components/analytics-consent';
 import { siteUrl } from '@/lib/site-url';
-import { SOCIAL_IMAGE } from '@/lib/seo';
+import { publicPages, SOCIAL_IMAGE } from '@/lib/seo';
 
-const GOOGLE_ANALYTICS_ID = process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || 'G-YEWELHFR22';
+const measurementId = process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID ?? 'G-YEWELHFR22';
+const analyticsPaths = publicPages
+  .map(({ path }) => path)
+  .filter((path) => path !== '/hours-checker');
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
@@ -39,7 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         {children}
         <Pwa />
-        <GoogleAnalytics gaId={GOOGLE_ANALYTICS_ID} />
+        {/^G-[A-Z0-9]+$/.test(measurementId) && (
+          <AnalyticsConsent measurementId={measurementId} publicPaths={analyticsPaths} />
+        )}
       </body>
     </html>
   );

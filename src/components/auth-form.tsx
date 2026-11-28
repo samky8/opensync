@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { SignupBackdrop } from './signup-backdrop';
 import { Button } from './ui/button';
-import { trackEvent } from '@/lib/analytics';
 export function AuthForm({
   mode,
   google,
@@ -36,7 +35,6 @@ export function AuthForm({
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
-      if (mode === 'signup' && op === 'signup') trackEvent('sign_up', { method: 'email' });
       if (result.url) location.href = result.url;
       else if (result.message) setMessage(result.message);
       else {
@@ -98,7 +96,6 @@ export function AuthForm({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (mode === 'signup') trackEvent('sign_up_started', { method: 'email' });
               const data = new FormData(e.currentTarget);
               void send(mode, {
                 email: String(data.get('email') || ''),
@@ -185,10 +182,7 @@ export function AuthForm({
               className="full"
               variant="outline"
               disabled={busy}
-              onClick={() => {
-                if (mode === 'signup') trackEvent('sign_up_started', { method: 'google' });
-                void send('google');
-              }}
+              onClick={() => void send('google')}
             >
               Continue with Google
             </Button>

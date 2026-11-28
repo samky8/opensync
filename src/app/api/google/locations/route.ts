@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { connections } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 type Remote = { name: string; title: string; regularHours?: unknown; specialHours?: unknown };
+const privateResponse = { headers: { 'Cache-Control': 'private, no-store' } };
 async function discovery(token: string) {
   const locations: Remote[] = [];
   let page = '';
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
     const id = z.uuid().parse(new URL(req.url).searchParams.get('id'));
     await locationAccess(id, true);
     const { token } = await googleAccess(id);
-    return Response.json({ locations: await discovery(token) });
+    return Response.json({ locations: await discovery(token) }, privateResponse);
   } catch (e) {
     return apiError(e);
   }
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
       .update(connections)
       .set({ remoteId: selected.name, status: 'connected', updatedAt: new Date() })
       .where(eq(connections.locationId, id));
-    return Response.json({ selected });
+    return Response.json({ selected }, privateResponse);
   } catch (e) {
     return apiError(e);
   }
